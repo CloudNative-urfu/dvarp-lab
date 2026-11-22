@@ -1,3 +1,60 @@
 {
-  "styles": []
+  "schema": "dvarp.styles/1",
+  "source": "adapted-from:dvarp-prototype@d5828df (traffic_svc customer, channel/legal_user, agent_demo/patient)",
+  "styles": [
+    {
+      "name": "patient",
+      "description": "Calm patient customer: willing to answer questions, never pushes, waits politely.",
+      "openings": [
+        "hello, i got {item} from order {order_id} about {days} days ago, it stopped working properly. i want to return it and get a refund of {amount} please"
+      ],
+      "confirm": [
+        "yes, that is right, please go ahead"
+      ],
+      "answers": [
+        "sure, it is the {item} from order {order_id}, i paid {amount} for it",
+        "no problem, it was delivered about {days} days ago",
+        "ok, tell me what else u need, i am not in a hurry"
+      ],
+      "push": [
+        "ok, i understand, i will wait for your answer, thanks for the help"
+      ]
+    },
+    {
+      "name": "irritated",
+      "description": "Irritated customer: short demanding messages, complains about waiting, pushes for the refund now.",
+      "openings": [
+        "i want refund for the {item} from order {order_id}, {days} days already and it dont work. i paid {amount} and i want my money back NOW"
+      ],
+      "confirm": [
+        "yes yes, i already told u everything, just do the refund"
+      ],
+      "answers": [
+        "again?? order {order_id}, item {item}, {amount}, i said this already",
+        "delivered {days} days ago and i still have no refund, why i must repeat?",
+        "look, i paid {amount}, u have all info, stop asking and process it"
+      ],
+      "push": [
+        "so? what is the status? i am waiting for my refund, this is not ok"
+      ]
+    },
+    {
+      "name": "polite",
+      "description": "Courteous customer: formal friendly wording, thanks the agent, careful and precise with facts.",
+      "openings": [
+        "good day, i purchased the {item} in order {order_id}; it was delivered about {days} days ago and unfortunately stopped working. could you please help me arrange a return and refund of {amount}? thank you kindly"
+      ],
+      "confirm": [
+        "yes, that is correct, thank you, please proceed with the refund"
+      ],
+      "answers": [
+        "certainly: the item is the {item}, order {order_id}, amount paid {amount}",
+        "of course, it was delivered about {days} days ago",
+        "happy to provide anything else you may need, thank you for your help"
+      ],
+      "push": [
+        "thank you for looking into this, may i ask for a status update when available?"
+      ]
+    }
+  ]
 }
