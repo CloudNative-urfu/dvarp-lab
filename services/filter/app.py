@@ -6,6 +6,8 @@ Raw payloads, state snapshots and model-call cassettes are stored here behind th
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -16,7 +18,15 @@ from lab.chain import GENESIS
 
 from . import store
 
-app = FastAPI(title="filter_svc", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Сырая БД существует с момента старта сервиса (append-only, не пересоздаётся)."""
+    store.init_db()
+    yield
+
+
+app = FastAPI(title="filter_svc", version="0.1.0", lifespan=lifespan)
 
 CHANNELS = ("legal", "attack")
 

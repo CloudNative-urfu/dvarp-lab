@@ -99,7 +99,15 @@ def _runtime_dir() -> Path:
 
 
 def _new_journal() -> EventLog:
-    STATE.journal_seq += 1
+    """Новый файл на каждую ячейку; номер возобновляется после существующих журналов
+    (рестарты dev-стека добавляют журналы, а не требуют --fresh). Коллизия имени с
+    непустым файлом — fail-closed (EventLogError), молчаливой перезаписи не бывает."""
+    existing = [
+        int(f.stem.split("-")[1])
+        for f in _runtime_dir().glob("journal-*.jsonl")
+        if f.stem.split("-")[1].isdigit()
+    ]
+    STATE.journal_seq = max(existing, default=0) + 1
     sink = _runtime_dir() / f"journal-{STATE.journal_seq}.jsonl"
     return EventLog(f"shop-{STATE.journal_seq}", sink=sink)
 

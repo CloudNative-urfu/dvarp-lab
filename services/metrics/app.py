@@ -80,7 +80,18 @@ class ComputeIn(BaseModel):
     include_probe: bool = False
 
 
+def _raw_missing() -> bool:
+    """True, если SQLite-файл сырой БД ещё не создан (деградация: «нет прогонов»)."""
+    url = raw_db_url()
+    if not url.startswith("sqlite:///") or ":memory:" in url:
+        return False
+    path = url.removeprefix("sqlite:///").split("?")[0]
+    return not Path(path).exists()
+
+
 def _read_episodes(include_probe: bool = False) -> list[extract.Episode]:
+    if _raw_missing():
+        return []
     with Session(_raw_engine()) as session:
         return extract.episodes_of(session, include_probe=include_probe)
 
@@ -152,6 +163,9 @@ def compute(
     The filter selects which configs are computed; the reference config is still looked
     up in the full raw data, so L* survives a config-filtered /compute.
     """
+    if _raw_missing():
+        init_metrics_db()
+        return 0
     all_eps = _read_episodes(include_probe=include_probe)
     groups_all = extract.group(all_eps)
     eps = all_eps
@@ -200,6 +214,12 @@ def compute_endpoint(body: ComputeIn) -> dict:
 @app.get("/metrics/{config_name}")
 def metrics(config_name: str) -> dict:
     init_metrics_db()
+    if _raw_missing():
+        return {
+            "config_name": config_name,
+            "results": [],
+            "note": "нет прогонов — сырая БД ещё не создана",
+        }
     with Session(metrics_engine()) as session:
         rows = (
             session.query(MetricRow)
