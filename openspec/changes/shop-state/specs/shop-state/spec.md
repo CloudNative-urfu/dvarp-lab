@@ -38,3 +38,20 @@
 #### Scenario: Trajectory fingerprint stable
 - **WHEN** эпизод повторён с тем же сидом
 - **THEN** отпечаток траектории совпадает: волатильные измерения исключены
+
+## ADDED Requirements
+
+### Requirement: Shop domain DB
+Состояние СС SHALL храниться в SQLAlchemy-модели (`services/shop/db.py`):
+записи о возвратах, заказы, particulars клиентов, права исполнителя,
+решения; dev/тесты — SQLite, прогоны — PostgreSQL (`lab.db`). Генерация
+начальных данных SHALL быть детерминирована от сида; каталог товаров —
+фиксированный CSV и от сида не зависит (инвариант 8b).
+
+#### Scenario: Seed determinism
+- **WHEN** БД сброшена с тем же сидом
+- **THEN** particulars клиентов, раскладка заказов и кейс совпадают
+
+#### Scenario: Write failure is fail-closed
+- **WHEN** запись в БД не удаётся (например, со стороны оценщика)
+- **THEN** операция падает с ошибкой, состояние не повреждается (FR-1.8)

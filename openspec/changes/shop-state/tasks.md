@@ -8,3 +8,5 @@
 - [x] plan-contract `services/shop/plan_contract.py` — контракт плана прогона
 
 - [x] style-cleanup `journal/schema.py` — вложенные if свёрнуты (поведение без изменений)
+
+- [x] shop-db `services/shop/db.py` — SQLAlchemy-модель состояния СС, детерминированный сид, seed-каталог (catalog.csv, benign_notes.csv)
