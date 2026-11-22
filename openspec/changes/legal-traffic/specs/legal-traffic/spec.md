@@ -23,3 +23,25 @@ traffic_svc SHALL собирать правдивый кейс возврата 
 #### Scenario: Read-only access
 - **WHEN** traffic_svc обращается к БД магазина
 - **THEN** подключение read-only; попытка записи невозможна
+
+## ADDED Requirements
+
+### Requirement: Legal episode loop
+traffic_svc SHALL вести эпизод легального трафика: `POST /run-episode`
+`{episode_id, config_name, agent_model, style, seed}` →
+`{outcome, turns, transcript_ids}`. Каждый ход — через `shop /turn` с
+`channel="legal"`; наружу от СС выходит только текст (инвариант 1).
+
+#### Scenario: Episode through shop
+- **WHEN** эпизод легального трафика запущен
+- **THEN** каждый ход клиента проходит через `shop /turn`, ответ — только текст
+
+### Requirement: Raw recording to filter_svc
+Recorder эпизода SHALL пинить `model_spec` в каждой записи и доставлять
+сырьё (вызовы модели, `llm_calls`) напрямую в `filter /record` изнутри,
+минуя ответ симуляции; кассетная строка формируется на каждую пару
+«запрос → ответ» (инварианты 4 и 6).
+
+#### Scenario: Cassette per model call
+- **WHEN** клиент (stub или LLM) делает вызов модели
+- **THEN** пара «запрос → ответ» попадает в `raw.llm_calls` записи filter

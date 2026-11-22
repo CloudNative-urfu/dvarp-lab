@@ -4,3 +4,7 @@
 - [x] style-module `services/traffic/style.py` — выбор стиля по имени, параметры тона
 - [x] case-module `services/traffic/case.py` — правдивый кейс возврата из БД магазина (read-only, детерминирован от сида)
 - [x] tests `tests/test_traffic.py` — стили и кейс
+
+- [x] episode-loop `services/traffic/episode.py` — цикл эпизода: ходы через shop /turn, ответ только текст
+- [x] record `services/traffic/record.py` — Recorder: пин model_spec, сырьё (llm_calls) в filter /record, кассеты
+- [x] app `services/traffic/app.py` — эндпоинт /run-episode
