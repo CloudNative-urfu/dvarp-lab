@@ -67,3 +67,14 @@ launcher'а. Изменение эндпоинта или формата SHALL �
 #### Scenario: Contract documented
 - **WHEN** читатель сверяет код сервиса с `docs/api.md`
 - **THEN** пути, тела запросов/ответов и порты совпадают
+
+## ADDED Requirements
+
+### Requirement: Lint scope
+ruff SHALL линтовать весь код репозитория, кроме замороженных характеристик
+(`frozen/`) и ссылочного клона прототипа (`local-sources/`); правило
+задаётся в `pyproject.toml`.
+
+#### Scenario: Frozen excluded
+- **WHEN** `ruff check` запущен на репозитории
+- **THEN** файлы `frozen/` и `local-sources/` не проверяются, остальной код чист

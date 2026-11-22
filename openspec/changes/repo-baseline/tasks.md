@@ -8,3 +8,5 @@
 - [x] pre-commit `.pre-commit-config.yaml`: ruff из nixpkgs + `openspec validate --all`
 
 - [x] api-docs `docs/api.md` — контракты эндпоинтов сервисов
+
+- [x] ruff-scope ruff исключает `frozen/` и `local-sources/` (`pyproject.toml`)
