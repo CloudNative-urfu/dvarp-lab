@@ -96,7 +96,7 @@ class EpisodeKit:
         self._own = workdir is None
         self.dir = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="lab-policy-"))
         self.mgr = EpisodeStateManager(self.dir / "shop", seed=seed)
-        acc = self.mgr.spec.accounts
+        acc = self.mgr.spec["accounts"]
         self.legal = sorted(c for c, a in acc.items() if a["role"] == "legal")
         self._n = 0
 
@@ -105,7 +105,7 @@ class EpisodeKit:
             shutil.rmtree(self.dir, ignore_errors=True)
 
     def order(self, customer: str, arch: str) -> str:
-        return self.mgr.spec.accounts[customer]["orders"][arch]
+        return self.mgr.spec["accounts"][customer]["orders"][arch]
 
     def episode(
         self,

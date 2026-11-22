@@ -105,7 +105,7 @@ class Episode:
         )
 
     def item(self, arch: str, idx: int = 0) -> dict[str, Any]:
-        oid = self.shop.mgr.spec.accounts[self.truth.actor_id]["orders"][arch]
+        oid = self.shop.mgr.spec["accounts"][self.truth.actor_id]["orders"][arch]
         conn = connect(self.db, readonly=True)
         try:
             rows = conn.execute(

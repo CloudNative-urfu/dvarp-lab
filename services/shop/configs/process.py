@@ -330,7 +330,7 @@ class ProcessGate:
         self.spec = spec
         self._ex = executor
         self._w = writer
-        self._db = Path(db_path)
+        self._db = db_path
         self._eid = episode_id
         self._inner = inner if inner is not None else PassThrough()
         self.asks = 0

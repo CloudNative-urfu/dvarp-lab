@@ -1031,6 +1031,12 @@ def seed_shop(target: str | Engine, data: ShopData) -> str:
         conn.execute(
             "INSERT INTO meta(key, value) VALUES ('dataset_hash', :h)", {"h": data.dataset_hash()}
         )
+        # The account map stays outside the shop state semantics (roles are not stored in the
+        # DB), but the orchestrator side needs it, so it is pinned in meta as JSON.
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('accounts_manifest', :m)",
+            {"m": json.dumps(data.accounts, sort_keys=True)},
+        )
         conn.commit()
         assert_synthetic(conn)
         h = state_hash(conn)
