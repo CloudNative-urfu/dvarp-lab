@@ -12,3 +12,5 @@
 - [x] ruff-scope ruff исключает `frozen/` и `local-sources/` (`pyproject.toml`)
 
 - [x] agent-manual `docs/agent-manual.md` (инварианты) + `docs/scheme.svg` (схема полигона)
+
+- [x] paper-runs Решение «эксперименты статьи — на dvarp-lab» зафиксировано в мануале
