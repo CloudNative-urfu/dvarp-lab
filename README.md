@@ -22,8 +22,9 @@
 
 ```sh
 uv sync
-uv run uvicorn services.shop.app:app --port 9411 &   # и аналогично остальные
-uv run python -m launcher run --config g0 --episodes 2
+uv run uvicorn services.shop.app:app --port 9411 &   # и аналогично остальные (9412-9415)
+uv run uvicorn services.ui.app:app --port 9410 &      # консоль: http://127.0.0.1:9410
+uv run python -m launcher --config g0 --episodes 2    # CLI: та же кампания
 ```
 
 Тесты: `uv run pytest`.

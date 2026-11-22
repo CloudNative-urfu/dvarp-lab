@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dvarp-lab · консоль полигона</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span> dvarp-lab</div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="run" class="tab active">Запуск</button>
+    <button data-tab="episodes" class="tab">Эпизоды</button>
+    <button data-tab="metrics" class="tab">Метрики</button>
+    <button data-tab="history" class="tab">История</button>
+    <button data-tab="system" class="tab">Система</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ==================== RUN ==================== -->
+  <section id="tab-run" class="page">
+    <div class="page-head">
+      <span class="eyebrow">Запускатель</span>
+      <h1 class="display">Кампания прогонов</h1>
+      <p class="lede">Оси: точечно / диапазон / все / все со сдвигом. Прогон — парные эпизоды
+      (легальный + атакующий в одном стиле) от общего снимка состояния.</p>
+    </div>
+
+    <div class="card" id="run-form">
+      <div class="axis" data-axis="configs">
+        <label>Конфигурации</label>
+        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="styles">
+        <label>Стили</label>
+        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="tactics">
+        <label>Тактики</label>
+        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="agent_models">
+        <label>Модель агента</label>
+        <select class="mode"><option value="point" selected>точечно</option><option value="all">все</option><option value="all_limited">все+сдвиг</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="attacker_models">
+        <label>Модель атакующего</label>
+        <select class="mode"><option value="point" selected>точечно</option><option value="all">все</option><option value="all_limited">все+сдвиг</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="episodes">
+        <label>Эпизоды</label>
+        <select class="mode"><option value="point" selected>точечно</option><option value="range">диапазон</option><option value="all_limited">со сдвигом</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="axis" data-axis="seeds">
+        <label>Сиды (миры)</label>
+        <select class="mode"><option value="point" selected>точечно</option><option value="range">диапазон</option><option value="all_limited">со сдвигом</option></select>
+        <span class="ctl"></span>
+      </div>
+      <div class="row">
+        <label>Бюджет атаки <input id="budget" type="number" value="8" min="1"></label>
+        <label class="check"><input id="compute" type="checkbox"> пересчитать метрики после</label>
+      </div>
+      <div class="row actions">
+        <button id="btn-volume" class="btn ghost">Объём</button>
+        <button id="btn-run" class="btn primary">Запустить</button>
+        <span id="volume-out" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="card" id="probe-card">
+      <div class="card-title">Probe — одна атака без парной ноги (не попадает в метрики)</div>
+      <div class="row">
+        <label>Конфиг <select id="probe-config"></select></label>
+        <label>Тактика <select id="probe-tactic"></select></label>
+        <label>Бюджет <input id="probe-budget" type="number" value="8" min="1"></label>
+        <label>Сид <input id="probe-seed" type="number" placeholder="auto"></label>
+      </div>
+      <div class="row actions"><button id="btn-probe" class="btn ghost">Probe</button><span id="probe-out" class="hint mono"></span></div>
+    </div>
+
+    <div class="card" id="progress-card">
+      <div class="card-title">Прогресс</div>
+      <div id="progress-body" class="hint">прогон не выполняется</div>
+    </div>
+  </section>
+
+  <!-- ==================== EPISODES ==================== -->
+  <section id="tab-episodes" class="page hidden">
+    <div class="page-head">
+      <span class="eyebrow">Сырые данные</span>
+      <h1 class="display">Эпизоды</h1>
+      <p class="lede">Тексты ходов из сырой БД filter_svc (только текст — барьер).</p>
+    </div>
+    <div class="card">
+      <div class="row">
+        <label>Эпизод <input id="ep-id" class="mono" placeholder="run-L0-patient-s0"></label>
+        <button id="btn-episode" class="btn primary">Показать</button>
+      </div>
+      <div id="episode-view" class="episode-view hint">выберите эпизод</div>
+    </div>
+  </section>
+
+  <!-- ==================== METRICS ==================== -->
+  <section id="tab-metrics" class="page hidden">
+    <div class="page-head">
+      <span class="eyebrow">Движок</span>
+      <h1 class="display">Метрики</h1>
+      <p class="lede">Расчёт по формулам канона поверх сырой БД — в любое время.</p>
+    </div>
+    <div class="card">
+      <div class="row">
+        <label>Конфиг <input id="m-config" class="mono" value="g0"></label>
+        <label class="check"><input id="m-probe" type="checkbox"> включая probe</label>
+        <button id="btn-compute" class="btn primary">Пересчитать</button>
+        <button id="btn-metrics" class="btn ghost">Показать</button>
+        <span id="m-out" class="hint"></span>
+      </div>
+      <div id="metrics-view" class="hint">нет данных</div>
+    </div>
+  </section>
+
+  <!-- ==================== HISTORY ==================== -->
+  <section id="tab-history" class="page hidden">
+    <div class="page-head">
+      <span class="eyebrow">Артефакты</span>
+      <h1 class="display">История прогонов</h1>
+      <p class="lede">Манифесты runs/ — пин осей и сидов каждого прогона.</p>
+    </div>
+    <div id="history-view" class="hint">пусто</div>
+  </section>
+
+  <!-- ==================== SYSTEM ==================== -->
+  <section id="tab-system" class="page hidden">
+    <div class="page-head">
+      <span class="eyebrow">Состояние</span>
+      <h1 class="display">Система</h1>
+      <p class="lede">Здоровье сервисов и целостность хеш-цепочки сырой БД.</p>
+    </div>
+    <div class="card"><div id="health-view" class="hint">—</div></div>
+    <div class="card"><div class="card-title">Цепочка</div><div id="chain-view" class="hint">—</div></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

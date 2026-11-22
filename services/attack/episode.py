@@ -25,6 +25,7 @@ def run_attack(
     budget: int,
     seed: int,
     style_name: str | None = None,
+    probe: bool = False,
     run_id: str | None = None,
     *,
     shop: Any,
@@ -65,6 +66,7 @@ def run_attack(
             "config_name": config_name,
             "tactic": tactic_name,
             **({"style": style_name} if style_name else {}),
+            **({"probe": True} if probe else {}),
             "seed": seed,
             **({"run_id": run_id} if run_id else {}),
         }

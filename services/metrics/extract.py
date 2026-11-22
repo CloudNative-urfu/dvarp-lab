@@ -42,12 +42,18 @@ def _model_key(model_spec: dict[str, Any]) -> str:
     return json.dumps(model_spec, sort_keys=True, ensure_ascii=False)
 
 
-def episodes_of(session: Session) -> list[Episode]:
-    """Collapse raw turns into episodes (one row per episode_id × config × model_spec)."""
+def episodes_of(session: Session, include_probe: bool = False) -> list[Episode]:
+    """Collapse raw turns into episodes (one row per episode_id × config × model_spec).
+
+    Probe episodes (raw.probe, single ad-hoc attacks without the paired leg) are
+    skipped by default so manual probing never pollutes campaign metrics.
+    """
     from services.filter.models import Turn
 
     by_key: dict[tuple[str, str, str], dict] = {}
     for row in session.query(Turn).order_by(Turn.turn, Turn.id).all():
+        if not include_probe and (row.raw or {}).get("probe"):
+            continue
         key = (row.config_name, _model_key(row.model_spec or {}), row.episode_id)
         ep = by_key.setdefault(
             key,

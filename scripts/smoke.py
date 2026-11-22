@@ -23,6 +23,7 @@ SERVICES = {
     9413: "services.attack.app:app",
     9414: "services.filter.app:app",
     9415: "services.metrics.app:app",
+    9410: "services.ui.app:app",
 }
 PROCS: list[subprocess.Popen] = []
 

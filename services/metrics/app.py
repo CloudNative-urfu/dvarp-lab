@@ -77,11 +77,12 @@ def init_metrics_db() -> None:
 class ComputeIn(BaseModel):
     config_name: str | None = None
     model_spec: dict[str, Any] | None = None
+    include_probe: bool = False
 
 
-def _read_episodes() -> list[extract.Episode]:
+def _read_episodes(include_probe: bool = False) -> list[extract.Episode]:
     with Session(_raw_engine()) as session:
-        return extract.episodes_of(session)
+        return extract.episodes_of(session, include_probe=include_probe)
 
 
 def _reference_rows(
@@ -141,13 +142,17 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
     ]
 
 
-def compute(config_name: str | None = None, model_spec: dict | None = None) -> int:
+def compute(
+    config_name: str | None = None,
+    model_spec: dict | None = None,
+    include_probe: bool = False,
+) -> int:
     """Recalculate metrics from the raw DB into the metrics DB; returns stored row count.
 
     The filter selects which configs are computed; the reference config is still looked
     up in the full raw data, so L* survives a config-filtered /compute.
     """
-    all_eps = _read_episodes()
+    all_eps = _read_episodes(include_probe=include_probe)
     groups_all = extract.group(all_eps)
     eps = all_eps
     if model_spec is not None:
@@ -189,7 +194,7 @@ def health() -> dict:
 @app.post("/compute")
 def compute_endpoint(body: ComputeIn) -> dict:
     init_metrics_db()
-    return {"computed": compute(body.config_name, body.model_spec)}
+    return {"computed": compute(body.config_name, body.model_spec, body.include_probe)}
 
 
 @app.get("/metrics/{config_name}")

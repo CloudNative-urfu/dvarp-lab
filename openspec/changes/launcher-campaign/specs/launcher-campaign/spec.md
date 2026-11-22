@@ -29,3 +29,40 @@ run_id вида `{configs}-s{seed}-{timestamp}` — читаемый и уник
 #### Scenario: Clean smoke
 - **WHEN** сквозной смок завершён
 - **THEN** стенд проверен целиком, временные каталоги удалены
+
+## ADDED Requirements
+
+### Requirement: Axis specification
+Оси кампании SHALL задаваться JSON-спецификацией: каждая ось — режим
+`point | range | all | all_limited`. Перечислимые оси (configs, styles,
+tactics c фильтром split: dev|holdout, agent_models, attacker_models)
+берутся из frozen-наборов (отсортированные; range — непрерывный срез);
+технический режим `set` — явный список для CLI и пресетов. Числовые оси
+(episodes, seeds) не допускают режим `all` (неограничены).
+
+#### Scenario: Axis resolution
+- **WHEN** спецификация осей разрешается
+- **THEN** каждая ось даёт отсортированный конечный список значений;
+  `all` на числовых осях запрещён
+
+#### Scenario: Tactic split filter
+- **WHEN** ось tactics задана с фильтром split
+- **THEN** берутся только тактики этого сектора (dev/holdout)
+
+### Requirement: Volume guard
+Объём кампании SHALL проверяться до запуска: сверх guard (1000 эпизодов) —
+запрос явного `confirm: true`; объём (cells × episodes) отдаётся до старта
+для оценки.
+
+#### Scenario: Guard without confirm
+- **WHEN** объём превышает guard и confirm не задан
+- **THEN** кампания не стартует, возвращается needs_confirm с объёмом
+
+### Requirement: Seed loop
+Сиды SHALL перебираться по оси: по умолчанию один сид, диапазон — перебор
+«миров» (seed_spread, инвариант 8b); каждая ячейка мира — полный парный
+прогон с манифестом.
+
+#### Scenario: Seed spread
+- **WHEN** ось seeds задана диапазоном
+- **THEN** ячейки повторяются по «мирам» с сохранением парности

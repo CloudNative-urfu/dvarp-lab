@@ -54,11 +54,37 @@
   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
 - `GET /metrics/{config_name}` → агрегаты по config × model.
 
-## launcher (CLI, без порта)
+## launcher (CLI + модуль кампании)
 
-- `python -m launcher run --config g0 --episodes N --tactics t1,t2 --styles s1
-  --seed S [--compute]` — перебор сетки «модель × конфигурация × сценарий»:
-  на каждую ячейку — номинальная проверка, /reset, парные прогоны (legal + attack
-  на одном исходном состоянии), манифест прогона в runs/ (config × scenario ×
-  model_spec × seed).
-- Номинальные проверки — `lab.nominal.check_config` перед каждым прогоном.
+Спецификация осей (JSON): каждая ось — `{"mode": "point|range|all|all_limited"}`:
+- перечислимые оси (frozen-наборы, отсортированные): `configs`, `styles`,
+  `tactics` (+ фильтр `split: dev|holdout`), `agent_models`, `attacker_models` —
+  range = непрерывный срез отсортированного списка; технический режим `set`
+  (явный список) — для CLI и пресетов;
+- числовые оси: `episodes` (point = N эпизодов с 1-го), `seeds` (point = один
+  сид; по умолчанию — один, диапазон = перебор «миров»); режим `all` на них
+  запрещён (неограничены);
+- глобально: `budget`, `compute`, `confirm` (подтверждение объёма сверх guard
+  1000), `scenario_pairs` (явные пары style=tactic).
+CLI: `python -m launcher --config g0 --episodes 2 --seed 0 --compute` (флаги →
+та же спецификация). Каждая ячейка: `/reset` → `/configure` (номинальная
+проверка + пин model_spec) → `/snapshot` → парные прогоны → `/snapshot/restore`.
+Probe: одна атака без парной ноги — `raw.probe=true`, манифест не пишется,
+метрики по умолчанию probe-записи пропускают (`include_probe` в `/compute`).
+
+## ui_svc (порт 9410)
+
+Консоль полигона: статическая страница (палитра dvarp-prototype/console) + `/api/*`.
+**Инвариант: только читатель/вызыватель — ноль расчётов и нуля оркестрации**:
+запуск идёт через те же `launcher.campaign.run_campaign/probe`, расчёт — через
+`metrics /compute`.
+
+- `GET /` — страница (Run / Episodes / Metrics / History / System);
+- `GET /api/meta` — свод frozen (оси, guard) + health 5 сервисов;
+- `POST /api/volume` — объём кампании до запуска (cells, episodes);
+- `POST /api/run` — спецификация осей; фоновый поток, один прогон за раз
+  (409, если уже идёт); объём сверх guard требует `confirm: true`;
+- `GET /api/run/status` — живой прогресс (стадия, ячейки, текущая ячейка);
+- `POST /api/probe` — одна атака (probe);
+- `GET/POST /api/metrics/{config}`, `/api/compute` (опция include_probe),
+  `/api/text/{episode}`, `/api/chain`, `/api/runs` — прокси read-only.

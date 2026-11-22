@@ -30,6 +30,7 @@ class RunEpisode(BaseModel):
     seed: int
     style: str | None = None
     run_id: str | None = None
+    probe: bool = False
 
 
 @app.get("/health")
@@ -65,6 +66,7 @@ def run(body: RunEpisode) -> dict:
             body.budget,
             body.seed,
             style_name=body.style,
+            probe=body.probe,
             run_id=body.run_id,
             shop=Svc(SHOP_URL),
             filter_svc=Svc(FILTER_URL),
