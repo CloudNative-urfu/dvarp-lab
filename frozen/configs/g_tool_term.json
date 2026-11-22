@@ -1,0 +1,75 @@
+{
+  "control_of": null,
+  "defender": "agent",
+  "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
+  "family": "guarded",
+  "fingerprint": "3a121da8fcdc4337217ad0cdd5302399226168ed9b837ce492df8cc84c86e397",
+  "guards": [
+    {
+      "id": "tool-arg-validator",
+      "params": {},
+      "stages": [
+        "tool"
+      ]
+    }
+  ],
+  "name": "g_tool_term",
+  "notes": "Positional matrix: tool-arg-validator at tool, reaction policy canon_terminate.",
+  "operational_definition": [
+    "tool: [tool-arg-validator] allow->continue, flag->terminate, block->terminate, error->isolate",
+    "clarifications per episode: 2"
+  ],
+  "policy": {
+    "detect_only": false,
+    "max_clarifications": 2,
+    "name": "g_tool_term",
+    "stages": {
+      "tool": {
+        "on": {
+          "allow": "continue",
+          "block": "terminate",
+          "error": "isolate",
+          "flag": "terminate"
+        },
+        "score_block": null,
+        "score_flag": null
+      }
+    },
+    "version": "guard-policy-1"
+  },
+  "process": null,
+  "queue_discipline": "fifo",
+  "resolved": {
+    "guard_set_fingerprint": "cbc56cc466cf84e75f33362ba95fd27bac4fdc146ce16098c84fdf84857a4ad7",
+    "guards": [
+      {
+        "plugin": {
+          "deployment": "builtin",
+          "enabled_by_default": true,
+          "license": "",
+          "mechanism": "rules",
+          "origin": "own; argument-validator idea from arXiv 2610.09906; rules R1-R7 from trusted policy table",
+          "params": {
+            "check_refusals": true,
+            "flag_score": 0.6
+          },
+          "plugin_id": "tool-arg-validator",
+          "stages": [
+            "tool"
+          ],
+          "version": "1.0"
+        },
+        "stages": [
+          "tool"
+        ]
+      }
+    ],
+    "policy_fingerprint": "9246d5b5e1640f2e1b5e7e12e70dcc19ad9c1b079b01f80b25444d33c893f21a",
+    "policy_version": "guard-policy-1",
+    "process_fingerprint": null,
+    "process_version": null
+  },
+  "role": "main",
+  "schema": "darp-config-1",
+  "seed_label": "main"
+}

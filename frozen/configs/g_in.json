@@ -1,0 +1,78 @@
+{
+  "control_of": null,
+  "defender": "agent",
+  "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
+  "family": "guarded",
+  "fingerprint": "4cf864e845e15e91dbdc52d764546e2f7edfc0718c32c4433cf79179949703c8",
+  "guards": [
+    {
+      "id": "input-filter",
+      "params": {},
+      "stages": [
+        "input"
+      ]
+    }
+  ],
+  "name": "g_in",
+  "notes": "Positional matrix: input-filter at input, reaction policy canon_escalate.",
+  "operational_definition": [
+    "input: [input-filter] allow->continue, flag->escalate, block->terminate, error->continue",
+    "clarifications per episode: 2"
+  ],
+  "policy": {
+    "detect_only": false,
+    "max_clarifications": 2,
+    "name": "g_in",
+    "stages": {
+      "input": {
+        "on": {
+          "allow": "continue",
+          "block": "terminate",
+          "error": "continue",
+          "flag": "escalate"
+        },
+        "score_block": null,
+        "score_flag": null
+      }
+    },
+    "version": "guard-policy-1"
+  },
+  "process": null,
+  "queue_discipline": "fifo",
+  "resolved": {
+    "guard_set_fingerprint": "d5f1584fd977629e4441af6932e16dc0e532b376d2573741d0990ee9b6070ef8",
+    "guards": [
+      {
+        "plugin": {
+          "deployment": "builtin",
+          "enabled_by_default": true,
+          "license": "",
+          "mechanism": "rules",
+          "origin": "own rules; patterns of InjecAgent, AgentDojo, garak encoding probes (see rules.py)",
+          "params": {
+            "block_at": 0.85,
+            "flag_at": 0.5,
+            "min_b64_len": 16,
+            "quote_discount": 0.4
+          },
+          "plugin_id": "input-filter",
+          "stages": [
+            "input",
+            "context"
+          ],
+          "version": "1.0"
+        },
+        "stages": [
+          "input"
+        ]
+      }
+    ],
+    "policy_fingerprint": "34e9a9da4a630db0b3fcce745cff74e9af93b50a132734df04374b61f2262cae",
+    "policy_version": "guard-policy-1",
+    "process_fingerprint": null,
+    "process_version": null
+  },
+  "role": "main",
+  "schema": "darp-config-1",
+  "seed_label": "main"
+}

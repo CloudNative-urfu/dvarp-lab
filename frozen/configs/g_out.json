@@ -1,0 +1,75 @@
+{
+  "control_of": null,
+  "defender": "agent",
+  "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
+  "family": "guarded",
+  "fingerprint": "62d74f869acac2b5e7047d10c99cf455d0878b9238d373021235221e6b3e5e7c",
+  "guards": [
+    {
+      "id": "output-leak",
+      "params": {},
+      "stages": [
+        "output"
+      ]
+    }
+  ],
+  "name": "g_out",
+  "notes": "Positional matrix: output-leak at output, reaction policy canon_escalate.",
+  "operational_definition": [
+    "output: [output-leak] allow->continue, flag->escalate, block->terminate, error->continue",
+    "clarifications per episode: 2"
+  ],
+  "policy": {
+    "detect_only": false,
+    "max_clarifications": 2,
+    "name": "g_out",
+    "stages": {
+      "output": {
+        "on": {
+          "allow": "continue",
+          "block": "terminate",
+          "error": "continue",
+          "flag": "escalate"
+        },
+        "score_block": null,
+        "score_flag": null
+      }
+    },
+    "version": "guard-policy-1"
+  },
+  "process": null,
+  "queue_discipline": "fifo",
+  "resolved": {
+    "guard_set_fingerprint": "2254feac34b331d0862c6d9b21772a5c8c48570f7f0adb9c1987d270cfbe7020",
+    "guards": [
+      {
+        "plugin": {
+          "deployment": "builtin",
+          "enabled_by_default": true,
+          "license": "",
+          "mechanism": "rules",
+          "origin": "own; recognizer classes after Presidio (catalog #19), without NLP model",
+          "params": {
+            "check_internal": true,
+            "flag_score": 0.6
+          },
+          "plugin_id": "output-leak",
+          "stages": [
+            "output"
+          ],
+          "version": "1.0"
+        },
+        "stages": [
+          "output"
+        ]
+      }
+    ],
+    "policy_fingerprint": "4d24d124d5635ffefd0da108d6cf8e742e6bb32285cc7f1934558a9453b6f66e",
+    "policy_version": "guard-policy-1",
+    "process_fingerprint": null,
+    "process_version": null
+  },
+  "role": "main",
+  "schema": "darp-config-1",
+  "seed_label": "main"
+}

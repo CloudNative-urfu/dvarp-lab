@@ -1,0 +1,80 @@
+{
+  "control_of": null,
+  "defender": "agent",
+  "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
+  "family": "guarded",
+  "fingerprint": "e27718c20a30ee6bef9acba32f51a5fb244d5623de6588dafed07357b462f44c",
+  "guards": [
+    {
+      "id": "context-provenance",
+      "params": {},
+      "stages": [
+        "context"
+      ]
+    }
+  ],
+  "name": "g_ctx_term",
+  "notes": "Positional matrix: context-provenance at context, reaction policy canon_terminate.",
+  "operational_definition": [
+    "context: [context-provenance] allow->continue, flag->terminate, block->terminate, error->continue",
+    "clarifications per episode: 2"
+  ],
+  "policy": {
+    "detect_only": false,
+    "max_clarifications": 2,
+    "name": "g_ctx_term",
+    "stages": {
+      "context": {
+        "on": {
+          "allow": "continue",
+          "block": "terminate",
+          "error": "continue",
+          "flag": "terminate"
+        },
+        "score_block": null,
+        "score_flag": null
+      }
+    },
+    "version": "guard-policy-1"
+  },
+  "process": null,
+  "queue_discipline": "fifo",
+  "resolved": {
+    "guard_set_fingerprint": "b151fcb27e70ff06ada01ed75fccfbdd68845ca382281bf5a0201b638223af3b",
+    "guards": [
+      {
+        "plugin": {
+          "deployment": "builtin",
+          "enabled_by_default": true,
+          "license": "",
+          "mechanism": "rules",
+          "origin": "own; trusted/untrusted separation per section 3.2 (provenance check)",
+          "params": {
+            "block_at": 0.85,
+            "flag_at": 0.5,
+            "quote_discount": 0.4,
+            "taint_score": 0.6,
+            "unknown_rule_weight": 0.6
+          },
+          "plugin_id": "context-provenance",
+          "stages": [
+            "input",
+            "context",
+            "tool"
+          ],
+          "version": "1.0"
+        },
+        "stages": [
+          "context"
+        ]
+      }
+    ],
+    "policy_fingerprint": "f2155b04a411fa846c40a79386918165358e01fc3c24dc9750c32346a797d80e",
+    "policy_version": "guard-policy-1",
+    "process_fingerprint": null,
+    "process_version": null
+  },
+  "role": "main",
+  "schema": "darp-config-1",
+  "seed_label": "main"
+}

@@ -1,0 +1,10 @@
+{
+  "models": [
+    {
+      "name": "PLACEHOLDER-agent-1",
+      "role": "agent",
+      "params_b": 8,
+      "revision": "TODO-#84"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# Хуки коммита dvarp-lab. ruff берётся из nixpkgs (ruff из PyPI на NixOS
+# не стартует), трейс — openspec. Тесты (uv run pytest) — вручную перед
+# коммитом, в хуки не входят.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (nixpkgs)
+        entry: nix run nixpkgs#ruff -- check .
+        language: system
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format (nixpkgs)
+        entry: nix run nixpkgs#ruff -- format .
+        language: system
+        pass_filenames: false
+      - id: openspec-validate
+        name: openspec validate --all
+        entry: openspec validate --all
+        language: system
+        pass_filenames: false

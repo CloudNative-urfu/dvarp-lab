@@ -1,0 +1,31 @@
+[project]
+name = "dvarp-lab"
+version = "0.1.0"
+description = "Полигон прогона гипотез исследования: СС, трафик, атака, сырьё, метрики"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.34",
+  "sqlalchemy>=2.0",
+  "aiosqlite>=0.21",
+  "asyncpg>=0.30",
+  "httpx>=0.28",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.26", "ruff>=0.11"]
+
+[build-system]
+requires = []
+build-backend = "uv"
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
