@@ -8,3 +8,6 @@
 - [x] llm-client `services/shop/llm/` — settings, backends, limits, factory, usage_estimate (NFR-2.5/2.6)
 - [x] channel `services/shop/channel/` — legal_user, llm_user, proposal_contract, endpoints
 - [x] manual-queue `services/shop/manual_queue/` — аналитическая модель ручной очереди (FR-1.15/1.16, ревизия dvarp#18)
+
+- [x] agent `services/shop/agent/` — агент возвратов поверх llm-клиента: profiles, prompt, claims, factory, stub
+- [x] tests-agent `tests/test_agent.py` — FR-1.9/1.10/1.12, NFR-2.7, детерминизм stub
