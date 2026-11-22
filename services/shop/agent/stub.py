@@ -84,11 +84,9 @@ REASON_PATTERNS = (
     ("does_not_fit", r"(?:dont|don't|doesn't|does not|not) fit|wrong size|too (?:small|big|large)"),
     ("defective", r"broken|broke\b|damaged|defect|stop(?:ped)? working|scratch|not working"),
     ("wrong_item", r"wrong (?:item|one|model|product)|not what i ordered|other model"),
-    (
-        "not_as_described",
-        "not as (?:described|on the (?:photo|site|picture))|recieved not as received not as|"
-        "color is not",
-    ),
+    ("not_as_described",
+     ("not as (?:described|on the (?:photo|site|picture))|recieved not as received not as|"
+      "color is not")),
     ("changed_mind", r"changed? (?:my )?mind|(?:dont|don't|do not) like"),
     ("not_delivered", r"never (?:arrived|came)|not delivered"),
 )
