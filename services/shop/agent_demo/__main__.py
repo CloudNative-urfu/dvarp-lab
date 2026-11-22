@@ -83,8 +83,10 @@ def demo(out: str | None, seed: int) -> int:
         # Компетентность: все контроли корпуса, кроме не более чем CONTROL_MISSES (на корпусе v1 —
         # 22/24; корпус v2 — 20 контролей, допуск тот же в штуках, issue #29).
         (
-            (f"g0: >= {n_ctl - CONTROL_MISSES}/{n_ctl} clean controls completed by state "
-             "(competence, FR-1.10)"),
+            (
+                f"g0: >= {n_ctl - CONTROL_MISSES}/{n_ctl} clean controls completed by state "
+                "(competence, FR-1.10)"
+            ),
             s0["controls"] == n_ctl
             and s0["controls_completed"] >= n_ctl - CONTROL_MISSES
             and not s0["control_violations"],

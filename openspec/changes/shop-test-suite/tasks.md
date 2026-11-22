@@ -6,3 +6,5 @@
 
 - [x] service-tests `tests/test_shop_service.py` — барьер /turn, reset/configure, снимки
 - [x] tests-adapted Перенесённые тесты адаптированы к сервисному слою (порты, env)
+
+- [x] ruff-format agent_demo приведён к ruff format (стиль; поведение без изменений)
