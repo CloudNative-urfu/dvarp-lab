@@ -28,6 +28,7 @@ class RunEpisode(BaseModel):
     tactic: str
     budget: int
     seed: int
+    run_id: str | None = None
 
 
 @app.get("/health")
@@ -62,6 +63,7 @@ def run(body: RunEpisode) -> dict:
             body.tactic,
             body.budget,
             body.seed,
+            run_id=body.run_id,
             shop=Svc(SHOP_URL),
             filter_svc=Svc(FILTER_URL),
             attacker_base_url=os.environ.get("LAB_ATTACKER_LLM_BASE_URL"),

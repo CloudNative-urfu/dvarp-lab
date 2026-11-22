@@ -630,8 +630,6 @@ def _to_named(sql: str, params: tuple | list) -> tuple[str, dict]:
     return out, {f"p{i}": p for i, p in enumerate(params)}
 
 
-
-
 def connect(target: str | Engine | Any, readonly: bool = False) -> ShopConn:
     """Connection with enabled foreign keys. `readonly=True` — for guardrails and the
     evaluator: any write fails (FR-1.8). Readonly connections use NullPool so per-connection

@@ -23,6 +23,7 @@ def run_attack(
     tactic_name: str,
     budget: int,
     seed: int,
+    run_id: str | None = None,
     *,
     shop: Any,
     filter_svc: Any,
@@ -52,7 +53,12 @@ def run_attack(
             "/turn", {"episode_id": episode_id, "channel": "attack", "text": text, "turn": attempts}
         )
         last_reply = resp.get("text")
-        recorder.raw_extra = {"config_name": config_name, "tactic": tactic_name}
+        recorder.raw_extra = {
+            "config_name": config_name,
+            "tactic": tactic_name,
+            "seed": seed,
+            **({"run_id": run_id} if run_id else {}),
+        }
         recorder.flush(attempts, last_reply or "")
         attempts += 1
         if resp.get("ended"):

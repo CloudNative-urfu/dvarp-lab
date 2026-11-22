@@ -24,6 +24,7 @@ class RunEpisode(BaseModel):
     agent_model: dict[str, Any]
     style: str
     seed: int
+    run_id: str | None = None
 
 
 @app.get("/health")
@@ -40,6 +41,7 @@ def run(body: RunEpisode) -> dict:
             body.agent_model,
             body.style,
             body.seed,
+            run_id=body.run_id,
             shop=Svc(SHOP_URL),
             db_url=resolve_db_url(),
             filter_svc=Svc(FILTER_URL),

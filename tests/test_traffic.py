@@ -150,7 +150,8 @@ def test_model_spec_pinned_in_every_record(tmp_path):
     for rec in flt.records:
         assert rec["model_spec"] == AGENT_MODEL
         assert rec["channel"] == "legal"
-        assert rec["raw"] == {"config_name": "g0", "llm_calls": []}
+        assert rec["raw"]["config_name"] == "g0"
+        assert rec["raw"]["seed"] == 7
 
 
 def test_cassette_line_per_model_call(tmp_path):

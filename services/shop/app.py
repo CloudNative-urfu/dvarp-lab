@@ -217,6 +217,8 @@ class TurnRequest(BaseModel):
     channel: str
     text: str
     turn: int
+    run_id: str | None = None
+    seed: int | None = None
 
 
 class RestoreRequest(BaseModel):
@@ -373,7 +375,11 @@ def _deliver(
                 "turn": body.turn,
                 "text": reply,
                 "model_spec": ep.model_spec,
-                "raw": raw,
+                "raw": {
+                    **raw,
+                    **({"run_id": body.run_id} if body.run_id else {}),
+                    **({"seed": body.seed} if body.seed is not None else {}),
+                },
                 "snapshot": snapshot,
                 "config_name": STATE.config_name,
             },

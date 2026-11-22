@@ -65,6 +65,7 @@ def run_episode(
     agent_model: dict[str, Any],
     style_name: str,
     seed: int,
+    run_id: str | None = None,
     *,
     shop: Any,
     db_url: str,
@@ -78,7 +79,11 @@ def run_episode(
     style = styles[style_name]
     case = truthful_case(db_url, seed)
     recorder = Recorder(filter_svc, episode_id, "legal", agent_model)
-    recorder.raw_extra = {"config_name": config_name}
+    recorder.raw_extra = {
+        "config_name": config_name,
+        "seed": seed,
+        **({"run_id": run_id} if run_id else {}),
+    }
     if customer_complete or customer_base_url:
         model = ChatModel(recorder, complete=customer_complete, base_url=customer_base_url)
         customer = LlmCustomer(style, case, model, derive_seed(seed, episode_id, "customer"))
