@@ -55,3 +55,15 @@ state_store, pay_emu, runner+replay, freeze, Next.js-консоль) не пер
 #### Scenario: History is self-contained
 - **WHEN** произвольный коммит истории выписан в отдельное дерево
 - **THEN** `openspec validate --all` зелёный: дельты каждого коммита валидны
+
+## ADDED Requirements
+
+### Requirement: Service API contracts document
+`docs/api.md` SHALL фиксировать контракты эндпоинтов всех сервисов
+(shop, traffic, attack, filter, metrics) и формат спецификации осей
+launcher'а. Изменение эндпоинта или формата SHALL сопровождаться правкой
+документа в том же коммите.
+
+#### Scenario: Contract documented
+- **WHEN** читатель сверяет код сервиса с `docs/api.md`
+- **THEN** пути, тела запросов/ответов и порты совпадают

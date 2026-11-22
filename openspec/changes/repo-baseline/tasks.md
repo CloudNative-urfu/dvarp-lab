@@ -6,3 +6,5 @@
 - [x] services Скелеты пяти сервисов FastAPI: shop, traffic, attack, filter, metrics
 - [x] openspec openspec init: schema spec-driven, контекст проекта в `openspec/config.yaml`
 - [x] pre-commit `.pre-commit-config.yaml`: ruff из nixpkgs + `openspec validate --all`
+
+- [x] api-docs `docs/api.md` — контракты эндпоинтов сервисов
