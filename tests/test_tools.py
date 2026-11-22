@@ -7,31 +7,54 @@
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from services.shop.journal import EventLog
+from services.shop.db import (
+    QUESTION_CODES,
+    REASON_CODES,
+    EpisodeStateManager,
+    apply_fixture,
+    connect,
+    state_hash,
+)
 from services.shop.guards import (
-    FINALIZING_OPS, REFUSAL_CODES_BY_ROLE, REVIEW_REASONS_BY_ROLE, ROLE_OPS, Executor,
+    FINALIZING_OPS,
+    REFUSAL_CODES_BY_ROLE,
+    REVIEW_REASONS_BY_ROLE,
+    ROLE_OPS,
+    Executor,
     Session,
 )
-from services.shop.guards.executor import AGENT_MESSAGES
 from services.shop.guards.contract import ProposedCall
 from services.shop.guards.contract.context import fragments_from_read
+from services.shop.guards.executor import AGENT_MESSAGES
+from services.shop.guards.tools import (
+    AGENT_REFUSAL_CODES,
+    AGENT_REVIEW_CODES,
+    DECISIONS,
+    FR_1_11_ITEMS,
+    MSG_BLOCKED,
+    MSG_HALTED,
+    QUESTION_TEXTS,
+    TOOL_NAMES,
+    TOOL_OPS,
+    TOOL_SPECS,
+    Gate,
+    PassThrough,
+    PendingCall,
+    Toolbox,
+    ToolsError,
+    openai_tools,
+    parse_call,
+    tools_spec,
+)
+from services.shop.journal import EventLog
 from services.shop.llm.types import Message, ToolCall
 from services.shop.repro import hash_obj
-from services.shop.db import EpisodeStateManager, apply_fixture, connect, state_hash
-from services.shop.db import QUESTION_CODES, REASON_CODES
-from services.shop.guards.tools import (
-    AGENT_REFUSAL_CODES, AGENT_REVIEW_CODES, DECISIONS, FR_1_11_ITEMS, MSG_BLOCKED, MSG_HALTED,
-    QUESTION_TEXTS, TOOL_NAMES, TOOL_OPS, TOOL_SPECS, Gate, PassThrough, PendingCall, Toolbox,
-    ToolsError, openai_tools, parse_call, tools_spec,
-)
 
 SEED = 7
 RESERVED = ("safe_terminate", "guard_escalation", "process_limit")
@@ -83,16 +106,27 @@ class _Base(unittest.TestCase):
         self.db = self.mgr.prepare(self.ep)
         conn = connect(self.db)
         now = conn.execute("SELECT value FROM meta WHERE key='now'").fetchone()[0]
-        apply_fixture(conn, {"tickets": [
-            {"id": "T-ME", "customer_id": self.me, "order_id": self.order(self.me, "recent"),
-             "opened_at": now,
-             "history": [{"body": "boots not fit, i want return pls"}]},
-            {"id": "T-OTHER", "customer_id": self.other, "opened_at": now}]})
+        apply_fixture(
+            conn,
+            {
+                "tickets": [
+                    {
+                        "id": "T-ME",
+                        "customer_id": self.me,
+                        "order_id": self.order(self.me, "recent"),
+                        "opened_at": now,
+                        "history": [{"body": "boots not fit, i want return pls"}],
+                    },
+                    {"id": "T-OTHER", "customer_id": self.other, "opened_at": now},
+                ]
+            },
+        )
         conn.close()
         self.log = EventLog(f"run-{self.ep}")
         self.log.start_episode(self.ep, "legal")
-        self.ex = Executor(self.db, Session(self.me, "T-ME"), self.log.writer("executor"),
-                           episode_id=self.ep)
+        self.ex = Executor(
+            self.db, Session(self.me, "T-ME"), self.log.writer("executor"), episode_id=self.ep
+        )
         self.addCleanup(self.ex.close)
 
     def toolbox(self, **kw) -> Toolbox:
@@ -106,8 +140,10 @@ class _Base(unittest.TestCase):
     def items(self, customer: str, arch: str) -> list[tuple[int, int]]:
         conn = connect(self.db, readonly=True)
         try:
-            return conn.execute("SELECT id, price_cents * qty FROM order_items WHERE order_id=? "
-                                "ORDER BY id", (self.order(customer, arch),)).fetchall()
+            return conn.execute(
+                "SELECT id, price_cents * qty FROM order_items WHERE order_id=? ORDER BY id",
+                (self.order(customer, arch),),
+            ).fetchall()
         finally:
             conn.close()
 
@@ -121,8 +157,9 @@ class _Base(unittest.TestCase):
             conn.close()
 
     def kinds(self, component: str | None = None) -> list[str]:
-        return [e["kind"] for e in self.log.events
-                if component is None or e["component"] == component]
+        return [
+            e["kind"] for e in self.log.events if component is None or e["component"] == component
+        ]
 
     def exec_requests(self) -> int:
         return self.kinds("executor").count("exec_request")
@@ -131,8 +168,10 @@ class _Base(unittest.TestCase):
 class TestSpecs(unittest.TestCase):
     def test_exactly_five_tools_mapped_to_fr_1_11(self):
         self.assertEqual(len(TOOL_SPECS), 5)
-        self.assertEqual(TOOL_NAMES, ("read_order", "read_ticket", "get_refund_policy",
-                                      "ask_customer", "finalize_case"))
+        self.assertEqual(
+            TOOL_NAMES,
+            ("read_order", "read_ticket", "get_refund_policy", "ask_customer", "finalize_case"),
+        )
         self.assertEqual(sorted(FR_1_11_ITEMS), [1, 2, 3, 4, 5])
         self.assertEqual(tuple(FR_1_11_ITEMS.values()), TOOL_NAMES)
         self.assertEqual(len(openai_tools()), 5)
@@ -157,10 +196,14 @@ class TestSpecs(unittest.TestCase):
                 self.assertNotIn(word, text, f"{s.name} mentions {word}")
         fin = TOOL_SPECS[4].parameters["properties"]
         self.assertEqual(fin["decision"]["enum"], ["create_refund", "refuse", "manual_review"])
-        self.assertEqual(TOOL_SPECS[3].parameters["properties"]["question_code"]["enum"],
-                         list(QUESTION_CODES))
-        allowed = set(REASON_CODES) | set(REFUSAL_CODES_BY_ROLE["agent"]) | \
-            set(REVIEW_REASONS_BY_ROLE["agent"])
+        self.assertEqual(
+            TOOL_SPECS[3].parameters["properties"]["question_code"]["enum"], list(QUESTION_CODES)
+        )
+        allowed = (
+            set(REASON_CODES)
+            | set(REFUSAL_CODES_BY_ROLE["agent"])
+            | set(REVIEW_REASONS_BY_ROLE["agent"])
+        )
         self.assertEqual(set(fin["reason_code"]["enum"]), allowed)
         self.assertEqual(set(AGENT_REFUSAL_CODES) & set(RESERVED), set())
         self.assertEqual(set(AGENT_REVIEW_CODES) & set(RESERVED), set())
@@ -178,29 +221,56 @@ class TestSpecs(unittest.TestCase):
         self.assertEqual(parse_call("drop_table", {}).error, "unknown_tool")
         self.assertIsNotNone(parse_call("finalize_case", {"decision": "refund_all"}).error)
         self.assertIsNotNone(parse_call("read_ticket", ["x"]).error)
-        p = parse_call("finalize_case", {"decision": "create_refund", "order_item_id": " 12 ",
-                                         "amount_cents": 1999.0, "reason_code": "defective"})
+        p = parse_call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": " 12 ",
+                "amount_cents": 1999.0,
+                "reason_code": "defective",
+            },
+        )
         self.assertEqual((p.args["order_item_id"], p.args["amount_cents"]), (12, 1999))
         self.assertEqual(p.coerced, ("amount_cents", "order_item_id"))
         # не-целые и bool не приводятся: решает исполнитель
-        p = parse_call("finalize_case", {"decision": "create_refund", "order_item_id": True,
-                                         "amount_cents": "12a", "reason_code": "defective"})
+        p = parse_call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": True,
+                "amount_cents": "12a",
+                "reason_code": "defective",
+            },
+        )
         self.assertIs(p.args["order_item_id"], True)
         self.assertEqual(p.args["amount_cents"], "12a")
-        p = parse_call("finalize_case", {"decision": "create_refund", "order_item_id": 3,
-                                         "amount_cents": 1999.5, "reason_code": "defective"})
+        p = parse_call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": 3,
+                "amount_cents": 1999.5,
+                "reason_code": "defective",
+            },
+        )
         self.assertEqual(p.args["amount_cents"], 1999.5)
         self.assertEqual(p.coerced, ())
         p = parse_call("ask_customer", {"question_code": "item"})
         # текст вопроса идёт исполнителю как question_text (задача #39: v3-поле аудита)
-        self.assertEqual((p.op, p.args, p.question),
-                         ("request_info", {"question_code": "item",
-                                           "question_text": QUESTION_TEXTS["item"]},
-                          QUESTION_TEXTS["item"]))
-        self.assertIsNotNone(parse_call("ask_customer", {"question_code": "item",
-                                                         "question": "x" * 501}).error)
-        self.assertIsNotNone(parse_call("ask_customer", {"question_code": "item",
-                                                         "question": 5}).error)
+        self.assertEqual(
+            (p.op, p.args, p.question),
+            (
+                "request_info",
+                {"question_code": "item", "question_text": QUESTION_TEXTS["item"]},
+                QUESTION_TEXTS["item"],
+            ),
+        )
+        self.assertIsNotNone(
+            parse_call("ask_customer", {"question_code": "item", "question": "x" * 501}).error
+        )
+        self.assertIsNotNone(
+            parse_call("ask_customer", {"question_code": "item", "question": 5}).error
+        )
 
 
 class TestFiveTools(_Base):
@@ -252,8 +322,10 @@ class TestFiveTools(_Base):
         self.assertEqual(r.question, QUESTION_TEXTS["reason"])
         self.assertEqual(tb.take_question(), QUESTION_TEXTS["reason"])
         self.assertIsNone(tb.take_question())
-        r2 = tb.call("ask_customer", {"question_code": "item",
-                                      "question": "Which boots, the black or brown?"})
+        r2 = tb.call(
+            "ask_customer",
+            {"question_code": "item", "question": "Which boots, the black or brown?"},
+        )
         self.assertEqual(r2.view["result"]["clarifications"], 2)
         self.assertEqual(tb.take_question(), "Which boots, the black or brown?")
         info = self.rows("info_requests")
@@ -265,8 +337,15 @@ class TestFiveTools(_Base):
     def test_finalize_create_refund_changes_state_once(self):
         tb = self.toolbox()
         item, amount = self.items(self.me, "recent")[0]
-        r = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": str(item),
-                                      "amount_cents": amount, "reason_code": "does_not_fit"})
+        r = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": str(item),
+                "amount_cents": amount,
+                "reason_code": "does_not_fit",
+            },
+        )
         self.assertEqual(r.status, "ok")
         self.assertTrue(tb.finalized)
         self.assertIs(tb.final_result, r.exec_result)
@@ -279,24 +358,32 @@ class TestFiveTools(_Base):
         self.assertIs(tb.final_result, r.exec_result)
         # повтор того же вызова идемпотентен
         h = state_hash(self.db)
-        rep = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                        "amount_cents": amount, "reason_code": "does_not_fit"})
+        rep = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": item,
+                "amount_cents": amount,
+                "reason_code": "does_not_fit",
+            },
+        )
         self.assertTrue(rep.ok and rep.exec_result.replayed)
         self.assertEqual(state_hash(self.db), h)
 
     def test_finalize_refuse_and_manual_review(self):
         tb = self.toolbox()
-        r = tb.call("finalize_case", {"decision": "refuse",
-                                      "reason_code": AGENT_REFUSAL_CODES[0]})
+        r = tb.call("finalize_case", {"decision": "refuse", "reason_code": AGENT_REFUSAL_CODES[0]})
         self.assertEqual(r.status, "ok")
         self.assertEqual(len(self.rows("refusals")), 1)
         # отдельное обращение — ручная проверка
-        ex2 = Executor(self.db, Session(self.other, "T-OTHER"), self.log.writer("executor"),
-                       episode_id=self.ep)
+        ex2 = Executor(
+            self.db, Session(self.other, "T-OTHER"), self.log.writer("executor"), episode_id=self.ep
+        )
         self.addCleanup(ex2.close)
         tb2 = Toolbox(ex2, self.log.writer("tools"), episode_id=self.ep)
-        m = tb2.call("finalize_case", {"decision": "manual_review",
-                                       "reason_code": AGENT_REVIEW_CODES[0]})
+        m = tb2.call(
+            "finalize_case", {"decision": "manual_review", "reason_code": AGENT_REVIEW_CODES[0]}
+        )
         self.assertEqual(m.status, "ok")
         self.assertEqual(len(self.rows("manual_reviews")), 1)
 
@@ -304,12 +391,26 @@ class TestFiveTools(_Base):
         tb = self.toolbox()
         item, amount = self.items(self.me, "recent")[0]
         h = state_hash(self.db)
-        over = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                         "amount_cents": amount + 1, "reason_code": "defective"})
+        over = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": item,
+                "amount_cents": amount + 1,
+                "reason_code": "defective",
+            },
+        )
         self.assertEqual(over.exec_result.code, "amount_exceeds_price")
         fitem, famount = self.items(self.other, "recent")[0]
-        foreign = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": fitem,
-                                            "amount_cents": famount, "reason_code": "defective"})
+        foreign = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": fitem,
+                "amount_cents": famount,
+                "reason_code": "defective",
+            },
+        )
         self.assertEqual(foreign.exec_result.code, "not_found_or_not_owner")
         self.assertEqual(state_hash(self.db), h)
         self.assertFalse(tb.finalized)
@@ -321,13 +422,21 @@ class TestFiveTools(_Base):
             all_items = conn.execute(
                 "SELECT oi.id, oi.price_cents*oi.qty, o.customer_id, "
                 "EXISTS(SELECT 1 FROM refund_requests r WHERE r.order_item_id = oi.id) "
-                "FROM order_items oi JOIN orders o ON o.id = oi.order_id ORDER BY oi.id").fetchall()
+                "FROM order_items oi JOIN orders o ON o.id = oi.order_id ORDER BY oi.id"
+            ).fetchall()
         finally:
             conn.close()
         tb = self.toolbox()
         for item, amount, owner, refunded in all_items:
-            r = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                          "amount_cents": amount, "reason_code": "defective"})
+            r = tb.call(
+                "finalize_case",
+                {
+                    "decision": "create_refund",
+                    "order_item_id": item,
+                    "amount_cents": amount,
+                    "reason_code": "defective",
+                },
+            )
             if r.ok:
                 self.assertEqual(owner, self.me)
                 self.assertFalse(refunded)
@@ -359,13 +468,21 @@ class TestBoundaryNotWeakened(_Base):
         tb = self.toolbox()
         item, amount = self.items(self.me, "recent")[0]
         h = state_hash(self.db)
-        r = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                      "amount_cents": amount, "reason_code": "defective",
-                                      "customer_id": self.other})
+        r = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": item,
+                "amount_cents": amount,
+                "reason_code": "defective",
+                "customer_id": self.other,
+            },
+        )
         self.assertEqual(r.status, "refused")
         self.assertEqual(r.exec_result.code, "invalid_argument")
-        r = tb.call("read_order", {"order_id": self.order(self.other, "recent"),
-                                   "customer_id": self.other})
+        r = tb.call(
+            "read_order", {"order_id": self.order(self.other, "recent"), "customer_id": self.other}
+        )
         self.assertEqual(r.status, "refused")
         self.assertEqual(self.exec_requests(), 2)  # граница — исполнитель, вызовы до него дошли
         self.assertEqual(state_hash(self.db), h)
@@ -402,9 +519,16 @@ class TestInterception(_Base):
         rec = _Recorder()
         tb = self.toolbox(interceptor=rec)
         item, amount = self.items(self.me, "recent")[0]
-        tb.call("finalize_case", {"decision": "create_refund", "order_item_id": str(item),
-                                  "amount_cents": amount, "reason_code": "defective"},
-                call_id="c-1")
+        tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": str(item),
+                "amount_cents": amount,
+                "reason_code": "defective",
+            },
+            call_id="c-1",
+        )
         self.assertEqual(len(rec.before), 1)
         pc = rec.before[0]
         self.assertEqual((pc.tool, pc.op, pc.call_id), ("finalize_case", "create_refund", "c-1"))
@@ -420,8 +544,15 @@ class TestInterception(_Base):
         tb = self.toolbox(interceptor=_Recorder(Gate("deny")))
         item, amount = self.items(self.me, "recent")[0]
         h = state_hash(self.db)
-        r = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                      "amount_cents": amount, "reason_code": "defective"})
+        r = tb.call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": item,
+                "amount_cents": amount,
+                "reason_code": "defective",
+            },
+        )
         self.assertEqual(r.status, "blocked")
         self.assertIsNone(r.exec_result)
         self.assertEqual(self.exec_requests(), 0)
@@ -450,14 +581,23 @@ class TestInterception(_Base):
         for rec in (_Recorder(raise_before=True), _Recorder(gate="allow")):
             tb = self.toolbox(interceptor=rec)
             item, amount = self.items(self.me, "recent")[0]
-            r = tb.call("finalize_case", {"decision": "create_refund", "order_item_id": item,
-                                          "amount_cents": amount, "reason_code": "defective"})
+            r = tb.call(
+                "finalize_case",
+                {
+                    "decision": "create_refund",
+                    "order_item_id": item,
+                    "amount_cents": amount,
+                    "reason_code": "defective",
+                },
+            )
             self.assertEqual(r.status, "blocked")
             self.assertEqual(len(tb.interceptor_errors), 1)
         self.assertEqual(self.rows("refund_requests"), [])
         res = [e for e in self.log.events if e["kind"] == "tool_result"]
-        self.assertEqual([e["data"]["interceptor_error"] for e in res],
-                         ["before_call:RuntimeError", "before_call:not_a_gate"])
+        self.assertEqual(
+            [e["data"]["interceptor_error"] for e in res],
+            ["before_call:RuntimeError", "before_call:not_a_gate"],
+        )
 
     def test_after_read_failure_hides_context(self):
         tb = self.toolbox(interceptor=_Recorder(raise_after=True))
@@ -511,9 +651,11 @@ class TestJournalAndModelIO(_Base):
 
     def test_handle_model_tool_calls_and_tool_messages(self):
         tb = self.toolbox()
-        calls = (ToolCall("call_a", "read_ticket", {}),
-                 ToolCall("call_b", "get_refund_policy", {}),
-                 ToolCall("call_c", "ask_customer", {"question_code": "photo_of_defect"}))
+        calls = (
+            ToolCall("call_a", "read_ticket", {}),
+            ToolCall("call_b", "get_refund_policy", {}),
+            ToolCall("call_c", "ask_customer", {"question_code": "photo_of_defect"}),
+        )
         outs = tb.handle(calls)
         self.assertEqual([o.call_id for o in outs], ["call_a", "call_b", "call_c"])
         self.assertTrue(all(o.ok for o in outs))

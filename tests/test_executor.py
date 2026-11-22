@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-import io
 import shutil
 import tempfile
 import unittest

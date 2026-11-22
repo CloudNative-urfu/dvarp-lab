@@ -11,9 +11,6 @@ from __future__ import annotations
 
 import ast
 import base64
-import contextlib
-import io
-import json
 import shutil
 import sqlite3
 import sys
@@ -22,7 +19,7 @@ import types
 import unittest
 from pathlib import Path
 
-from services.shop.journal import EventLog, summarize
+from services.shop.db import EpisodeStateManager, apply_fixture, connect, state_hash
 from services.shop.guards import Executor, Session
 from services.shop.guards.contract import (
     DEFAULT_REGISTRY,
@@ -34,7 +31,6 @@ from services.shop.guards.contract import (
     ProposedCall,
     TrustedTask,
 )
-from services.shop.guards.plugins.evaluate import evaluate_corpus
 from services.shop.guards.plugins import (
     ADAPTER_IDS,
     BUILTIN_IDS,
@@ -46,15 +42,16 @@ from services.shop.guards.plugins import (
     parse_llama_guard,
     parse_qwen3guard,
 )
-from services.shop.llm import StubReply, make_chat_model
-from services.shop.db import EpisodeStateManager, apply_fixture, connect, state_hash
+from services.shop.guards.plugins.evaluate import evaluate_corpus
 from services.shop.guards.tools.specs import TOOL_NAMES
-
+from services.shop.journal import EventLog, summarize
+from services.shop.llm import StubReply, make_chat_model
 
 
 def _db_path(target: str) -> str:
     """Episode DB handles are SQLAlchemy URLs; raw sqlite3 needs the file path."""
     return target.removeprefix("sqlite:///")
+
 
 SEED = 5
 ROOT = Path(__file__).resolve().parents[1]
@@ -266,7 +263,7 @@ class TextNormTests(unittest.TestCase):
     def test_normalize_deobfuscates(self):
         self.assertIn("no manual review", normalize("n0 m4nual r3view needed"))
         self.assertIn("refund", normalize("pls r e f u n d now"))
-        self.assertIn("ignore", normalize("ig​nore"))
+        self.assertIn("ignore", normalize("ig\u200bnore"))
         self.assertIn("o-1001", normalize("order O-1001"))  # номера заказов не портятся
 
     def test_base64_decoding(self):
@@ -602,7 +599,9 @@ class ToolValidatorTests(_Base):
 
     def test_rules_read_from_trusted_table(self):
         self.assertEqual(self.refund("old").signal, "block")
-        conn = sqlite3.connect(_db_path(self.db))  # тестовая подготовка: правило окна в доверенной таблице
+        conn = sqlite3.connect(
+            _db_path(self.db)
+        )  # тестовая подготовка: правило окна в доверенной таблице
         conn.execute(
             "UPDATE refund_policy SET params_json = '{\"window_days\": 365}' WHERE rule_id = 'R1'"
         )

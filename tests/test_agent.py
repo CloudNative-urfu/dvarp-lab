@@ -10,41 +10,55 @@ OpenAI-совместимого сервера (transport), сеть и RESEARCH
 from __future__ import annotations
 
 import ast
-import contextlib
 import inspect
-import io
 import json
-import os
 import re
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from services.shop.agent import (
-    DEFAULT_PROFILE, HARDENED_PROFILE, MSG_CLOSED, MSG_HANDED_OVER, MSG_STEP_LIMIT,
-    MSG_UNAVAILABLE, SYSTEM_PROMPT, VULNERABILITIES, AgentConfig, AgentError, AgentStubResponder,
-    RefundAgent, agent_fingerprint, agent_spec, make_agent, make_agent_model,
+    DEFAULT_PROFILE,
+    HARDENED_PROFILE,
+    MSG_CLOSED,
+    MSG_HANDED_OVER,
+    MSG_STEP_LIMIT,
+    MSG_UNAVAILABLE,
+    SYSTEM_PROMPT,
+    VULNERABILITIES,
+    AgentConfig,
+    AgentError,
+    AgentStubResponder,
+    RefundAgent,
+    agent_fingerprint,
+    agent_spec,
+    make_agent,
+    make_agent_model,
 )
 from services.shop.agent import factory as agent_factory
 from services.shop.agent_demo import new_shop, run_corpus, run_entry, summarize_runs
 from services.shop.agent_demo.__main__ import CONTROL_MISSES
 from services.shop.channel import DefenderEndpoint
 from services.shop.corpus import load_corpus
-from services.shop.llm import Limits, StubReply, make_chat_model
 from services.shop.db import connect
 from services.shop.guards.tools import TOOL_NAMES, Gate, Toolbox
+from services.shop.llm import Limits, StubReply, make_chat_model
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_DIR = ROOT / "services" / "shop" / "agent"
 SEED = 7
 CYR = re.compile(r"[Ѐ-ӿ]")
-INTERNAL = re.compile(r"finalize_case|read_order|ask_customer|get_refund_policy|reason_code"
-                      r"|safe_terminate|guard_escalation|process_limit|\{\"")
+INTERNAL = re.compile(
+    r"finalize_case|read_order|ask_customer|get_refund_policy|reason_code"
+    r"|safe_terminate|guard_escalation|process_limit|\{\""
+)
 G_CTX = [{"id": "context-provenance", "stages": ["context"]}]
-FAKE_ENV = {"RESEARCH_LLM_BASE_URL": "http://127.0.0.1:8787/v1",
-            "RESEARCH_LLM_MODEL": "qwen/qwen3.5-9b", "RESEARCH_LLM_API_KEY": "offline-test-value"}
+FAKE_ENV = {
+    "RESEARCH_LLM_BASE_URL": "http://127.0.0.1:8787/v1",
+    "RESEARCH_LLM_MODEL": "qwen/qwen3.5-9b",
+    "RESEARCH_LLM_API_KEY": "offline-test-value",
+}
 
 
 def _tmpdir(tc: unittest.TestCase) -> Path:
@@ -84,23 +98,43 @@ def _order_of(ep) -> str:
 class _EpisodeMixin:
     """Эпизод корпуса на свежем снимке + агент со скриптовой моделью и реальным Toolbox."""
 
-    def episode(self, entry="ctl-01", replies=(), *, config=None, interceptor=None, limits=None,
-                responder=None):
+    def episode(
+        self,
+        entry="ctl-01",
+        replies=(),
+        *,
+        config=None,
+        interceptor=None,
+        limits=None,
+        responder=None,
+    ):
         self.shop = new_shop(_tmpdir(self), seed=SEED)
         self.ep = self.shop.episode(entry)
         log = self.shop.log
         self.resp = responder or Scripted(replies)
-        model = make_chat_model("agent", mode="stub", seed=SEED, profile={"t": "scripted"},
-                                responder=self.resp, writer=log.writer("agent"), limits=limits)
-        self.tb = Toolbox(self.ep.ex, log.writer("tools"), interceptor=interceptor,
-                          episode_id=self.ep.episode_id)
+        model = make_chat_model(
+            "agent",
+            mode="stub",
+            seed=SEED,
+            profile={"t": "scripted"},
+            responder=self.resp,
+            writer=log.writer("agent"),
+            limits=limits,
+        )
+        self.tb = Toolbox(
+            self.ep.ex, log.writer("tools"), interceptor=interceptor, episode_id=self.ep.episode_id
+        )
         self.agent = make_agent(model, self.tb, log, episode_id=self.ep.episode_id, config=config)
         return self.agent
 
     def events(self, component, kind=None):
-        return [e for e in self.shop.log.events
-                if e["component"] == component and (kind is None or e["kind"] == kind)
-                and e.get("episode_id") == self.ep.episode_id]
+        return [
+            e
+            for e in self.shop.log.events
+            if e["component"] == component
+            and (kind is None or e["kind"] == kind)
+            and e.get("episode_id") == self.ep.episode_id
+        ]
 
 
 class AgentLoopTest(_EpisodeMixin, unittest.TestCase):
@@ -141,15 +175,23 @@ class AgentLoopTest(_EpisodeMixin, unittest.TestCase):
             self.assertNotIn("dont fit", json.dumps(e["data"]))
 
     def test_unowned_order_refused_by_executor_not_agent(self):
-        a = self.episode(replies=[StubReply("", (("read_order", {"order_id": "O-00001"}),)),
-                                  StubReply("I can not find this order.")])
+        a = self.episode(
+            replies=[
+                StubReply("", (("read_order", {"order_id": "O-00001"}),)),
+                StubReply("I can not find this order."),
+            ]
+        )
         a.respond("order O-00001")
         res = self.events("tools", "tool_result")
         self.assertEqual(res[0]["data"]["status"], "refused")
 
     def test_question_text_substituted_when_model_reply_empty(self):
-        a = self.episode(replies=[StubReply("", (("ask_customer", {"question_code": "order_id"}),)),
-                                  StubReply("")])
+        a = self.episode(
+            replies=[
+                StubReply("", (("ask_customer", {"question_code": "order_id"}),)),
+                StubReply(""),
+            ]
+        )
         turn = a.respond("I want a refund")
         self.assertEqual(a.turn_ends, ["question"])
         self.assertTrue(turn.reply.strip())
@@ -162,13 +204,28 @@ class AgentLoopTest(_EpisodeMixin, unittest.TestCase):
         def fin(req):
             order = json.loads([m for m in req.messages if m.role == "tool"][-1].content)
             item = order["result"]["items"][0]
-            return StubReply("", (("finalize_case", {
-                "decision": "create_refund", "order_item_id": item["order_item_id"],
-                "amount_cents": item["price_cents"], "reason_code": "does_not_fit"}),))
+            return StubReply(
+                "",
+                (
+                    (
+                        "finalize_case",
+                        {
+                            "decision": "create_refund",
+                            "order_item_id": item["order_item_id"],
+                            "amount_cents": item["price_cents"],
+                            "reason_code": "does_not_fit",
+                        },
+                    ),
+                ),
+            )
+
         a = self.episode()
         order = _order_of(self.ep)
-        self.resp.replies += [StubReply("", (("read_order", {"order_id": order}),)), fin,
-                              StubReply("Your refund is created.")]
+        self.resp.replies += [
+            StubReply("", (("read_order", {"order_id": order}),)),
+            fin,
+            StubReply("Your refund is created."),
+        ]
         before = len(_refunds(self.ep.db))
         turn = a.respond(f"boots {order} dont fit")
         self.assertTrue(self.tb.finalized)
@@ -195,18 +252,23 @@ class AgentLoopTest(_EpisodeMixin, unittest.TestCase):
 
     def test_tool_calls_per_step_truncated(self):
         many = StubReply("", tuple(("read_ticket", {}) for _ in range(6)))
-        a = self.episode(replies=[many, StubReply("ok")],
-                         config=AgentConfig(max_tool_calls_per_step=2))
+        a = self.episode(
+            replies=[many, StubReply("ok")], config=AgentConfig(max_tool_calls_per_step=2)
+        )
         a.respond("hi")
         self.assertEqual(len(self.events("tools", "tool_result")), 2)
-        self.assertIn("tool_calls_truncated", [e["data"]["what"] for e in self.events("agent", "note")])
+        self.assertIn(
+            "tool_calls_truncated", [e["data"]["what"] for e in self.events("agent", "note")]
+        )
         # История согласована: у ответа модели ровно 2 вызова и 2 результата.
         asst = [m for m in a.messages if m.role == "assistant" and m.tool_calls][0]
         self.assertEqual(len(asst.tool_calls), 2)
 
     def test_model_limit_closes_chat_safely(self):
-        a = self.episode(replies=[StubReply("", (("read_ticket", {}),))] * 5,
-                         limits=Limits(max_requests_per_episode=2, max_requests_per_run=50))
+        a = self.episode(
+            replies=[StubReply("", (("read_ticket", {}),))] * 5,
+            limits=Limits(max_requests_per_episode=2, max_requests_per_run=50),
+        )
         turn = a.respond("hi")
         self.assertEqual(turn.reply, MSG_UNAVAILABLE)
         self.assertTrue(turn.closed)
@@ -227,9 +289,16 @@ class AgentLoopTest(_EpisodeMixin, unittest.TestCase):
 
             def after_read(self, call, data):
                 return data
-        a = self.episode(replies=[StubReply("", (("finalize_case", {
-            "decision": "manual_review", "reason_code": "other"}),)), StubReply("never")],
-            interceptor=Halter())
+
+        a = self.episode(
+            replies=[
+                StubReply(
+                    "", (("finalize_case", {"decision": "manual_review", "reason_code": "other"}),)
+                ),
+                StubReply("never"),
+            ],
+            interceptor=Halter(),
+        )
         before = _refunds(self.ep.db)
         turn = a.respond("refund pls")
         self.assertEqual(turn.reply, MSG_HANDED_OVER)
@@ -274,8 +343,11 @@ class GuardrailIsolationTest(unittest.TestCase):
             for m in mods:
                 if m.startswith("services.shop.guards.tools"):
                     continue  # свои пять инструментов агента — не гвардрейлы
-                self.assertNotRegex(m, r"guard|policy|pipeline|manual_queue|evaluator|corpus",
-                                    f"{name} импортирует {m}")
+                self.assertNotRegex(
+                    m,
+                    r"guard|policy|pipeline|manual_queue|evaluator|corpus",
+                    f"{name} импортирует {m}",
+                )
 
     def test_no_guard_parameters_in_agent_api(self):
         for fn in (RefundAgent.__init__, make_agent, agent_factory.make_agent_model):
@@ -285,15 +357,24 @@ class GuardrailIsolationTest(unittest.TestCase):
     def test_prompt_english_and_silent_about_guardrails(self):
         self.assertIsNone(CYR.search(SYSTEM_PROMPT))
         low = SYSTEM_PROMPT.lower()
-        for word in ("guard", "safe_terminate", "guard_escalation", "process_limit", "detector",
-                     "filter", "plugin"):
+        for word in (
+            "guard",
+            "safe_terminate",
+            "guard_escalation",
+            "process_limit",
+            "detector",
+            "filter",
+            "plugin",
+        ):
             self.assertNotIn(word, low)
         for tool in TOOL_NAMES:
             self.assertIn(tool, SYSTEM_PROMPT)
 
     def test_agent_implements_channel_endpoint(self):
-        self.assertTrue(issubclass(RefundAgent, DefenderEndpoint)
-                        or callable(getattr(RefundAgent, "respond", None)))
+        self.assertTrue(
+            issubclass(RefundAgent, DefenderEndpoint)
+            or callable(getattr(RefundAgent, "respond", None))
+        )
         self.assertEqual(agent_spec()["tools"], list(TOOL_NAMES))
 
     def test_guard_changes_outcome_but_not_agent(self):
@@ -337,7 +418,7 @@ class CorpusBehaviourTest(unittest.TestCase):
         for name in ("g0", "hard"):
             s = summarize_runs(self.runs[name][2])
             n = sum(e["kind"] == "control" for e in load_corpus()[0])
-            self.assertEqual(s["controls"], n)                 # корпус v2: 20 контролей
+            self.assertEqual(s["controls"], n)  # корпус v2: 20 контролей
             self.assertGreaterEqual(s["controls_completed"], n - CONTROL_MISSES, name)
             self.assertEqual(s["control_violations"], [], name)
 
@@ -349,8 +430,9 @@ class CorpusBehaviourTest(unittest.TestCase):
         self.assertEqual(sh["violations"], [])
         # Компетентность одинакова: уязвимости — флаги профиля, а не логика правил.
         self.assertEqual(s0["controls_completed"], sh["controls_completed"])
-        self.assertNotEqual(agent_fingerprint(self.runs["g0"][1]),
-                            agent_fingerprint(self.runs["hard"][1]))
+        self.assertNotEqual(
+            agent_fingerprint(self.runs["g0"][1]), agent_fingerprint(self.runs["hard"][1])
+        )
 
     def test_only_five_tools_and_structured_actions(self):
         for name in ("g0", "hard"):
@@ -360,8 +442,13 @@ class CorpusBehaviourTest(unittest.TestCase):
                     self.assertNotEqual(status, "unknown_tool")
 
     def test_replies_english_without_internal_codes(self):
-        replies = [t for _, _, runs in self.runs.values() for r in runs.values()
-                   for d, t in r.session.transcript if d == "to_attacker"]
+        replies = [
+            t
+            for _, _, runs in self.runs.values()
+            for r in runs.values()
+            for d, t in r.session.transcript
+            if d == "to_attacker"
+        ]
         self.assertGreater(len(replies), 40)
         for t in replies:
             self.assertIsNone(CYR.search(t), t)
@@ -407,14 +494,20 @@ class _FakeServer:
         if self.status != 200:
             return self.status, b'{"error":"down"}'
         msg = self.replies.pop(0) if self.replies else {"role": "assistant", "content": "Done."}
-        data = {"model": "qwen/qwen3.5-9b", "choices": [{"index": 0, "message": msg}],
-                "usage": {"prompt_tokens": 50, "completion_tokens": 5}}
+        data = {
+            "model": "qwen/qwen3.5-9b",
+            "choices": [{"index": 0, "message": msg}],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 5},
+        }
         return 200, json.dumps(data).encode()
 
 
 def _call(i, name, args):
-    return {"id": f"c{i}", "type": "function",
-            "function": {"name": name, "arguments": json.dumps(args)}}
+    return {
+        "id": f"c{i}",
+        "type": "function",
+        "function": {"name": name, "arguments": json.dumps(args)},
+    }
 
 
 class LiveBackendTest(_EpisodeMixin, unittest.TestCase):
@@ -433,10 +526,16 @@ class LiveBackendTest(_EpisodeMixin, unittest.TestCase):
         a = self.live_agent(srv)
         order = _order_of(self.ep)
         srv.replies += [
-            {"role": "assistant", "content": None,
-             "tool_calls": [_call(1, "read_ticket", {}), _call(2, "get_refund_policy", {})]},
-            {"role": "assistant", "content": "",
-             "tool_calls": [_call(3, "read_order", {"order_id": order})]},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [_call(1, "read_ticket", {}), _call(2, "get_refund_policy", {})],
+            },
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [_call(3, "read_order", {"order_id": order})],
+            },
             {"role": "assistant", "content": "Which item do you want to return?"},
         ]
         turn = a.respond(f"boots {order} dont fit")
@@ -447,8 +546,9 @@ class LiveBackendTest(_EpisodeMixin, unittest.TestCase):
         self.assertEqual(sorted(t["function"]["name"] for t in b["tools"]), sorted(TOOL_NAMES))
         tool_msgs = [m for m in b["messages"] if m["role"] == "tool"]
         self.assertEqual([m["tool_call_id"] for m in tool_msgs], ["c1", "c2", "c3"])
-        self.assertEqual([r["data"]["status"] for r in self.events("tools", "tool_result")],
-                         ["ok", "ok", "ok"])
+        self.assertEqual(
+            [r["data"]["status"] for r in self.events("tools", "tool_result")], ["ok", "ok", "ok"]
+        )
 
     def test_live_server_down_closes_chat_without_db_change(self):
         a = self.live_agent(_FakeServer([], status=503))

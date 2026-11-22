@@ -7,21 +7,17 @@ HTTP-сервером на loopback внутри процесса.
 
 from __future__ import annotations
 
-import contextlib
 import http.server
-import io
 import json
 import threading
 import unittest
-
-from tests import _env
 
 from services.shop.journal import RATE_PRESETS, EventLog, episode_fingerprint, summarize
 from services.shop.llm import (
     LIVE_EXTRA_BODY,
     LIVE_LIMITS,
-    Limits,
     LimitExceeded,
+    Limits,
     LLMConfigError,
     LLMResponseError,
     LLMSettings,
@@ -37,6 +33,7 @@ from services.shop.llm import (
     parse_params_b,
 )
 from services.shop.repro import FLOATING_VERSIONS
+from tests import _env
 
 SECRET = "sk-test-SECRET-value-123"
 ENV = {
@@ -390,9 +387,7 @@ class ExtraBodyReasoningTest(unittest.TestCase):
         self.assertEqual(b["chat_template_kwargs"], {"enable_thinking": False})
         self.assertIn("reasoning", b)
         settings = m.backend.settings
-        self.assertEqual(
-            settings.extra_body["chat_template_kwargs"], {"enable_thinking": False}
-        )
+        self.assertEqual(settings.extra_body["chat_template_kwargs"], {"enable_thinking": False})
 
     def test_extra_body_cannot_override_pinned_params(self):
         for bad in ('{"temperature": 1.0}', '{"seed": 5}', '{"model": "x"}', "[1]", "nope"):

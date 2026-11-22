@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import shutil
 import sqlite3
@@ -17,6 +15,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from services.shop.db import connect
 from services.shop.evaluator import (
     BLOCKING_DENIALS,
     TEXT_KEYS,
@@ -33,13 +32,12 @@ from services.shop.evaluator import (
 )
 from services.shop.evaluator.harness import Shop
 from services.shop.journal import EventLog, EventLogError
-from services.shop.db import connect
-
 
 
 def _db_path(target: str) -> str:
     """Episode DB handles are SQLAlchemy URLs; raw sqlite3 needs the file path."""
     return target.removeprefix("sqlite:///")
+
 
 SEED = 7
 

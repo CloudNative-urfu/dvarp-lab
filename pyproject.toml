@@ -31,6 +31,16 @@ extend-exclude = ["local-sources", "frozen"]
 # Перенесённый защитный код прототипа: fail-closed except и dict-профили — намеренные.
 "services/shop/guards/**" = ["BLE001", "RUF012"]
 "services/shop/agent/**" = ["BLE001", "RUF012"]
+# Перенесённые тесты прототипа: сохранены как есть (кроме путей импортов).
+"tests/test_guard_contract.py" = ["RUF012", "B017", "ISC004"]
+"tests/test_guard_plugins.py" = ["B017", "ISC004", "RUF059"]
+"tests/test_guard_policy.py" = ["B017", "RUF059", "RUF012"]
+"tests/test_executor.py" = ["RUF059"]
+"tests/test_agent.py" = ["RUF059", "RUF015"]
+"tests/test_configs.py" = ["RUF059", "RUF015"]
+"tests/test_evaluator.py" = ["RUF059"]
+"tests/test_tools.py" = ["RUF059"]
+"tests/test_llm.py" = ["RUF059"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -21,15 +21,11 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from services.shop.agent import RefundAgent, make_agent_model
 from services.shop.agent_demo.harness import new_shop
@@ -57,12 +53,11 @@ from services.shop.configs import (
 )
 from services.shop.configs.demo import run_corpus, summarize
 from services.shop.configs.process import MSG_DUPLICATE, MSG_ESCALATED
+from services.shop.db import connect
 from services.shop.guards import BOUNDARY_FINGERPRINT, DENIAL_CODES
 from services.shop.guards.contract import GuardSet
 from services.shop.guards.policy import GuardedDefender, ReactionPolicy, StageRule
-from services.shop.db import connect
 from services.shop.guards.tools import PendingCall
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 7
@@ -90,11 +85,14 @@ class TestSpec(unittest.TestCase):
         # позиционная матрица §4: 5 наборов × 3 политики канона + OSS-детектор на входе
         self.assertEqual(len(mains), 16)
         for pos in ("g_in", "g_ctx", "g_tool", "g_out", "g_layered"):
-            flags = [{r.on["flag"] for r in cs[pos + sfx].policy.stages.values()}
-                     for sfx in ("_iso", "", "_term")]
+            flags = [
+                {r.on["flag"] for r in cs[pos + sfx].policy.stages.values()}
+                for sfx in ("_iso", "", "_term")
+            ]
             self.assertEqual(flags, [{"isolate"}, {"escalate"}, {"terminate"}], pos)
-            self.assertEqual(len({cs[pos + sfx].guards.fingerprint()
-                                  for sfx in ("_iso", "", "_term")}), 1, pos)
+            self.assertEqual(
+                len({cs[pos + sfx].guards.fingerprint() for sfx in ("_iso", "", "_term")}), 1, pos
+            )
         self.assertTrue(all(c.defender == "agent" for c in cs))
         self.assertIsNotNone(cs["g_proc"].process)
         self.assertEqual(cs["g_proc"].queue_discipline, "fair_share")
@@ -601,6 +599,7 @@ class TestBuildAndFreezeGuard(unittest.TestCase):
                 self.assertNotEqual(type(v).__name__, "GuardPipeline")
         finally:
             b.close()
+
 
 class TestCorpusEndToEnd(unittest.TestCase):
     """Все базовые линии и контроли на корпусе разработки со скриптовой моделью агента."""
