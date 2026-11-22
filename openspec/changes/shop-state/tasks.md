@@ -6,3 +6,5 @@
 
 - [x] repro `services/shop/repro.py` — canonical_json, strip_volatile, trajectory_fingerprint, plan_contract
 - [x] plan-contract `services/shop/plan_contract.py` — контракт плана прогона
+
+- [x] style-cleanup `journal/schema.py` — вложенные if свёрнуты (поведение без изменений)

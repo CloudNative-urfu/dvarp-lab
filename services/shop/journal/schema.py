@@ -144,21 +144,18 @@ def validate_payload(cls: str, kind: str, data: Mapping[str, Any]) -> None:
                 or not 0.0 <= s <= 1.0
             ):
                 raise EventLogError(f"guard_signal: score out of [0, 1]: {s!r}")
-    if cls == "policy" and kind == "decision":
-        if data.get("action") not in POLICY_ACTIONS:
-            raise EventLogError(
-                f"policy.decision: action {data.get('action')!r} not in {POLICY_ACTIONS}"
-            )
-    if cls == "evaluator" and kind == "outcome":
-        if data.get("outcome") not in ATTACK_OUTCOMES:
-            raise EventLogError(
-                f"evaluator.outcome: outcome {data.get('outcome')!r} not in {ATTACK_OUTCOMES}"
-            )
+    if cls == "policy" and kind == "decision" and data.get("action") not in POLICY_ACTIONS:
+        raise EventLogError(
+            f"policy.decision: action {data.get('action')!r} not in {POLICY_ACTIONS}"
+        )
+    if cls == "evaluator" and kind == "outcome" and data.get("outcome") not in ATTACK_OUTCOMES:
+        raise EventLogError(
+            f"evaluator.outcome: outcome {data.get('outcome')!r} not in {ATTACK_OUTCOMES}"
+        )
     if cls == "channel" and kind == "message":
         if data.get("direction") not in CHANNEL_DIRECTIONS:
             raise EventLogError(f"channel.message: direction {data.get('direction')!r}")
         if not isinstance(data.get("text"), str):
             raise EventLogError("channel.message: message text is required")
-    if cls == "executor" and kind == "exec_result":
-        if data.get("status") not in ("ok", "refused"):
-            raise EventLogError(f"executor.exec_result: status {data.get('status')!r}")
+    if cls == "executor" and kind == "exec_result" and data.get("status") not in ("ok", "refused"):
+        raise EventLogError(f"executor.exec_result: status {data.get('status')!r}")
