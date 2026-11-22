@@ -22,8 +22,8 @@
 
 ```sh
 uv sync
-uv run uvicorn services.shop.app:app --port 9411 &   # и аналогично остальные (9412-9415)
-uv run uvicorn services.ui.app:app --port 9410 &      # консоль: http://127.0.0.1:9410
+uv run python scripts/dev.py            # все 6 сервисов + консоль: http://127.0.0.1:9410
+# (или по одному: uvicorn services.shop.app:app --port 9411 и т.д.)
 uv run python -m launcher --config g0 --episodes 2    # CLI: та же кампания
 ```
 

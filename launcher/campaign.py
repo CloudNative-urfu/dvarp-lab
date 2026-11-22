@@ -43,8 +43,13 @@ def default_services() -> dict[str, Svc]:
     }
 
 
-def _model_spec(name: str, role: str) -> ModelSpec:
-    return resolve(name, role, load_roster())
+def _model_spec(name: str | None, role: str) -> ModelSpec:
+    """Модель по имени; None/без имени — первая модель роли из ростера (дефолт кампании)."""
+    roster = load_roster()
+    if not name:
+        spec = next(m for m in roster.values() if m.role == role)
+        name = spec.name
+    return resolve(name, role, roster)
 
 
 def run_campaign(
@@ -185,7 +190,8 @@ def probe(
     problems = nominal.check_config(cfg, config, [agent])
     if problems:
         raise SystemExit("номинальная проверка не пройдена:\n" + "\n".join(problems))
-    seed = int(spec.get("seed", derive_seed(0, cfg, spec["tactic"], 0, "probe")))
+    seed = spec.get("seed")
+    seed = int(seed) if seed is not None else derive_seed(0, cfg, spec["tactic"], 0, "probe")
     shop.post("/reset", {"seed": seed})  # reset инициализирует журнал, затем configure
     shop.post("/configure", {"config_name": cfg, "agent_model": agent.as_dict()})
     return attack.post(

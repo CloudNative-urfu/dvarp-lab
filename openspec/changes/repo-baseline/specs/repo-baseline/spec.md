@@ -109,3 +109,14 @@ ruff SHALL линтовать весь код репозитория, кроме
 #### Scenario: Decision recorded
 - **WHEN** планируется кампания статьи
 - **THEN** прогоны ведутся на dvarp-lab по зафиксированному решению мануала
+
+## ADDED Requirements
+
+### Requirement: One-command dev stack
+`scripts/dev.py` SHALL поднимать весь стенд одной командой: сервисы shop,
+traffic, attack, filter, metrics и консоль ui на 9410 (порты 9410–9415),
+с общими env-настройками; остановка гасит все процессы.
+
+#### Scenario: Full stack from one command
+- **WHEN** `uv run python scripts/dev.py` запущен
+- **THEN** все сервисы и консоль подняты, смок проходим без ручных шагов

@@ -16,3 +16,5 @@
 - [x] paper-runs Решение «эксперименты статьи — на dvarp-lab» зафиксировано в мануале
 
 - [x] gitignore `local-sources/` (ссылочный клон прототипа) исключён из git
+
+- [x] dev-stack `scripts/dev.py` — все сервисы + консоль одной командой; default probe-модели и фикс сида в campaign
