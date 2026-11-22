@@ -78,3 +78,20 @@ ruff SHALL линтовать весь код репозитория, кроме
 #### Scenario: Frozen excluded
 - **WHEN** `ruff check` запущен на репозитории
 - **THEN** файлы `frozen/` и `local-sources/` не проверяются, остальной код чист
+
+## ADDED Requirements
+
+### Requirement: Agent manual and scheme as entry points
+`docs/agent-manual.md` SHALL задавать критичные инварианты полигона
+(барьер «только текст», сбор ≠ расчёт, пин model_spec, append-only цепочки,
+парные прогоны, семантика сида, номинальная проверка, frozen-дисциплина),
+а `docs/scheme.svg` — схему полигона. Код SHALL читаться как схема: правка
+механики сопровождается обновлением мануала и/или схемы в том же коммите.
+
+#### Scenario: Manual before code
+- **WHEN** агент готовится править код
+- **THEN** первым читает `docs/agent-manual.md`, а не исходники
+
+#### Scenario: Scheme follows code
+- **WHEN** меняется механика полигона
+- **THEN** `docs/scheme.svg` и мануал актуализированы в том же коммите

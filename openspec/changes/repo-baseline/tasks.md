@@ -10,3 +10,5 @@
 - [x] api-docs `docs/api.md` — контракты эндпоинтов сервисов
 
 - [x] ruff-scope ruff исключает `frozen/` и `local-sources/` (`pyproject.toml`)
+
+- [x] agent-manual `docs/agent-manual.md` (инварианты) + `docs/scheme.svg` (схема полигона)
