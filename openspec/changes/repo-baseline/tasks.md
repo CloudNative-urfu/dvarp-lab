@@ -14,3 +14,5 @@
 - [x] agent-manual `docs/agent-manual.md` (инварианты) + `docs/scheme.svg` (схема полигона)
 
 - [x] paper-runs Решение «эксперименты статьи — на dvarp-lab» зафиксировано в мануале
+
+- [x] gitignore `local-sources/` (ссылочный клон прототипа) исключён из git
