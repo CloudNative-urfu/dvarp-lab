@@ -150,7 +150,7 @@ def test_model_spec_pinned_in_every_record(tmp_path):
     for rec in flt.records:
         assert rec["model_spec"] == AGENT_MODEL
         assert rec["channel"] == "legal"
-        assert rec["raw"] == {"llm_calls": []}
+        assert rec["raw"] == {"config_name": "g0", "llm_calls": []}
 
 
 def test_cassette_line_per_model_call(tmp_path):
@@ -182,12 +182,11 @@ def test_cassette_line_per_model_call(tmp_path):
     assert result["outcome"] == "refund_granted"
     assert len(calls) == result["turns"] - 1  # opening is scripted, дальше — модель
     for i, rec in enumerate(flt.records):
-        expected = calls[i - 1] if i > 0 else []
         assert len(rec["raw"]["llm_calls"]) == (0 if i == 0 else 1)
         if i > 0:
             entry = rec["raw"]["llm_calls"][0]
-            assert entry["request"] == expected and entry["response"].startswith("reply")
+            assert entry["request"] == calls[i - 1]
+            assert entry["response"].startswith("reply")
             assert entry["role"] == "customer"
-            assert rec["raw"]["llm_calls"][0] in [c for c in flt.records[i]["raw"]["llm_calls"]]
     # сырьё кассеты не остаётся в ответе эпизода
     assert "llm_calls" not in result

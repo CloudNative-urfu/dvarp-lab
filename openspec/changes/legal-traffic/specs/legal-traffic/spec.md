@@ -45,3 +45,14 @@ Recorder эпизода SHALL пинить `model_spec` в каждой запи
 #### Scenario: Cassette per model call
 - **WHEN** клиент (stub или LLM) делает вызов модели
 - **THEN** пара «запрос → ответ» попадает в `raw.llm_calls` записи filter
+
+## ADDED Requirements
+
+### Requirement: Records carry config name
+Записи легального трафика SHALL пинить имя конфигурации защиты
+(`raw.config_name`) — сырая БД остаётся самодостаточной для метрик без
+внешнего контекста.
+
+#### Scenario: Config pin in raw
+- **WHEN** запись легального эпизода попадает в filter /record
+- **THEN** `raw.config_name` совпадает с конфигом ячейки кампании

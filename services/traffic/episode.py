@@ -78,6 +78,7 @@ def run_episode(
     style = styles[style_name]
     case = truthful_case(db_url, seed)
     recorder = Recorder(filter_svc, episode_id, "legal", agent_model)
+    recorder.raw_extra = {"config_name": config_name}
     if customer_complete or customer_base_url:
         model = ChatModel(recorder, complete=customer_complete, base_url=customer_base_url)
         customer = LlmCustomer(style, case, model, derive_seed(seed, episode_id, "customer"))

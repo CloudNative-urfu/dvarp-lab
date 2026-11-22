@@ -22,6 +22,7 @@ class Recorder:
         self.model_spec = model_spec
         self.llm_calls: list[dict] = []
         self.record_ids: list[str] = []
+        self.raw_extra: dict = {}
 
     def add_call(self, role: str, request: Messages, response: str) -> None:
         self.llm_calls.append(
@@ -29,6 +30,7 @@ class Recorder:
         )
 
     def flush(self, turn: int, text: str) -> str:
+        raw = {"llm_calls": self.llm_calls, **self.raw_extra}
         record = self.svc.post(
             "/record",
             {
@@ -37,7 +39,7 @@ class Recorder:
                 "turn": turn,
                 "text": text,
                 "model_spec": self.model_spec,
-                "raw": {"llm_calls": self.llm_calls},
+                "raw": raw,
                 "snapshot": {},
             },
         )
