@@ -82,7 +82,7 @@ class ShopState:
     config: ConfigSpec | None = None
     config_name: str = "g0"
     agent_model: dict[str, Any] | None = None
-    agent_cfg: AgentConfig = AgentConfig()
+    agent_cfg: AgentConfig = field(default_factory=AgentConfig)
     episodes: dict[str, Episode] = field(default_factory=dict)
     journal_seq: int = 0
     snapshots: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -379,7 +379,7 @@ def _deliver(
             },
         )
         return True
-    except Exception as exc:  # filter down: the episode is marked error, raw is not lost
+    except Exception as exc:  # noqa: BLE001 — any filter failure marks the episode error
         STATE.journal.writer("runner").emit(
             "svc_retry",
             {"svc": "filter", "episode_id": ep.episode_id, "error": type(exc).__name__},
