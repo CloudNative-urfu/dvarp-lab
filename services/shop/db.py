@@ -32,12 +32,9 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError as SAIntegrityError  # noqa: F401
-from sqlalchemy.orm import Session  # noqa: F401
 from sqlalchemy.pool import NullPool as _NullPool
 
 from lab.db import make_engine as _make_engine
-from lab.seeds import derive_seed  # noqa: F401  (public re-export for callers)
 from services.shop.repro import SeedError, check_seed, hash_obj, make_rng
 
 GENERATOR_VERSION = "shop-db-gen-1"
@@ -171,8 +168,6 @@ _NAMING = {
     "pk": "pk_%(table_name)s",
 }
 metadata = MetaData(naming_convention=_NAMING)
-
-_table = Table.__call__
 
 
 def _t(name: str, *cols: Any, **kw: Any) -> Table:
@@ -524,14 +519,10 @@ def make_engine(url: str, *, echo: bool = False) -> Engine:
     return _make_engine(url, echo=echo)
 
 
-def is_postgres(engine_or_conn: Any) -> bool:
-    d = getattr(engine_or_conn, "dialect", None)
-    return (
-        (d or getattr(engine_or_conn, "engine", None) and engine_or_conn.engine.dialect).name
-        == "postgresql"
-        if d is not None
-        else engine_or_conn.engine.dialect.name == "postgresql"
-    )
+def is_postgres(target: Any) -> bool:
+    """True for a postgres engine/connection; sqlite has no counterpart of some pragmas."""
+    obj = getattr(target, "_conn", target)
+    return obj.dialect.name == "postgresql"
 
 
 # ------------------------------------------------------------------ connections
@@ -580,11 +571,7 @@ class ShopConn:
                 raise RuntimeError(f"PRAGMA is SQLite-only: {s}")
             return self._conn.exec_driver_sql(s)
         if isinstance(params, (tuple, list)):
-            if params and isinstance(params[0], dict):
-                args = list(params)
-                sql = _expand_binds(sql, args)
-            else:
-                sql, args = _to_named(sql, params)
+            sql, args = _to_named(sql, params)
         else:
             args = params
         from sqlalchemy import text as _text
@@ -643,9 +630,6 @@ def _to_named(sql: str, params: tuple | list) -> tuple[str, dict]:
     return out, {f"p{i}": p for i, p in enumerate(params)}
 
 
-def _expand_binds(sql: str, dicts: list[dict]) -> str:
-    """`?` placeholders expanded with several param dicts (executemany-style)."""
-    raise RuntimeError("multi-dict params are not supported")
 
 
 def connect(target: str | Engine | Any, readonly: bool = False) -> ShopConn:

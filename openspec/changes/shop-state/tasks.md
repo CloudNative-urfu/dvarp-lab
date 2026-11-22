@@ -10,3 +10,5 @@
 - [x] style-cleanup `journal/schema.py` — вложенные if свёрнуты (поведение без изменений)
 
 - [x] shop-db `services/shop/db.py` — SQLAlchemy-модель состояния СС, детерминированный сид, seed-каталог (catalog.csv, benign_notes.csv)
+
+- [x] db-cleanup Мёртвые хелперы слоя БД удалены (поведение без изменений)
