@@ -86,8 +86,8 @@ REASON_PATTERNS = (
     ("wrong_item", r"wrong (?:item|one|model|product)|not what i ordered|other model"),
     (
         "not_as_described",
-        r"not as (?:described|on the (?:photo|site|picture))|recieved not as"
-        r"|received not as|color is not",
+        "not as (?:described|on the (?:photo|site|picture))|recieved not as received not as|"
+        "color is not",
     ),
     ("changed_mind", r"changed? (?:my )?mind|(?:dont|don't|do not) like"),
     ("not_delivered", r"never (?:arrived|came)|not delivered"),

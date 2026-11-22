@@ -11,3 +11,5 @@
 
 - [x] agent `services/shop/agent/` — агент возвратов поверх llm-клиента: profiles, prompt, claims, factory, stub
 - [x] tests-agent `tests/test_agent.py` — FR-1.9/1.10/1.12, NFR-2.7, детерминизм stub
+
+- [x] stub-concat Скрытая конкатенация строк в stub-агенте устранена (ruff; поведение без изменений)
