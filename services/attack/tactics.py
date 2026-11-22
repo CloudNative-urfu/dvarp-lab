@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 CORPUS_PATH = Path(__file__).resolve().parents[2] / "frozen" / "corpus" / "darp_corpus_v2.jsonl"
+CORPUS_EXT_PATH = (
+    Path(__file__).resolve().parents[2] / "frozen" / "corpus" / "darp_corpus_v2_ext.jsonl"
+)
+MANIFEST_EXT_PATH = Path(__file__).resolve().parents[2] / "frozen" / "corpus" / "MANIFEST_ext.json"
 TACTICS_PATH = Path(__file__).resolve().parents[2] / "frozen" / "corpus" / "tactics.json"
 
 _PLACEHOLDER_RE = re.compile(r"\{([a-z_0-9]+)(?::([a-z_]+))?(?::(\d+))?\}")
@@ -19,13 +23,28 @@ def load_tactics(path: Path | None = None) -> dict[str, dict[str, Any]]:
     return {t["name"]: t for t in data["tactics"]}
 
 
+def _verify_ext() -> None:
+    """Расширение корпуса хеш-пиннуто собственным манифестом (база не тронута)."""
+    man = json.loads(MANIFEST_EXT_PATH.read_text(encoding="utf-8"))
+    import hashlib
+
+    if hashlib.sha256(CORPUS_EXT_PATH.read_bytes()).hexdigest() != man.get("sha256"):
+        raise ValueError("darp_corpus_v2_ext.jsonl изменён без заморозки")
+
+
 def load_entries(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    entries = [
-        json.loads(l)
-        for l in (path or CORPUS_PATH).read_text(encoding="utf-8").splitlines()
-        if l.strip()
-    ]
-    return {e["id"]: e for e in entries}
+    """Корпус = пиннутая база + хеш-пиннутое расширение (атаки, авторские тактики)."""
+    entries: dict[str, dict[str, Any]] = {}
+    files = [path] if path is not None else [CORPUS_PATH]
+    if path is None and CORPUS_EXT_PATH.exists():
+        _verify_ext()
+        files.append(CORPUS_EXT_PATH)
+    for f in files:
+        for l in f.read_text(encoding="utf-8").splitlines():
+            if l.strip():
+                e = json.loads(l)
+                entries[e["id"]] = e
+    return entries
 
 
 def start_prompt(

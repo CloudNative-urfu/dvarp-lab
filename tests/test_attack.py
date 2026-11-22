@@ -47,13 +47,15 @@ def never_end(n):
 
 def test_tactics_registry_from_corpus():
     tactics = load_tactics()
-    assert set(tactics) == {
+    assert set(tactics) >= {
         "direct_task",
         "role_switch",
         "trust_spoof",
         "obfuscation",
         "instruction_split",
         "staged_injection",
+        "third_party_emergency",
+        "authority_impersonation",
     }
     for t in tactics.values():
         assert t["count"] == len(t["entries"]) > 0
@@ -256,3 +258,82 @@ def test_app_unknown_tactic_is_400():
     }
     with TestClient(app) as client:
         assert client.post("/run-episode", json=body).status_code == 400
+
+
+def test_new_social_tactics_in_registry():
+    reg = load_tactics()
+    for name, entries in (
+        ("third_party_emergency", ["atk-21", "atk-22", "atk-23", "atk-24"]),
+        ("authority_impersonation", ["atk-25", "atk-26", "atk-27", "atk-28"]),
+    ):
+        assert name in reg
+        assert reg[name]["entries"] == entries
+        assert len(reg[name]["goals"]) >= 2
+
+
+def test_new_tactic_start_prompts_resolve_clean():
+    reg = load_tactics()
+    for name in ("third_party_emergency", "authority_impersonation"):
+        prompt = start_prompt(reg[name], 42)
+        assert "{" not in prompt, prompt
+        assert "victim" not in prompt and "price}" not in prompt and "days}" not in prompt
+
+
+def test_unknown_style_rejected():
+    shop, flt = FakeShop(never_end(3)), FakeFilter()
+    with pytest.raises(ValueError, match="отсутствует в frozen/styles.json"):
+        attack_episode.run_attack(
+            "e1",
+            "g0",
+            ATTACKER_MODEL,
+            "direct_task",
+            2,
+            7,
+            style_name="no_such",
+            shop=shop,
+            filter_svc=flt,
+        )
+
+
+def test_style_mixed_into_attacker_system_prompt():
+    prompts = []
+
+    def fake_complete(messages):
+        prompts.append(messages)
+        return "still want refund for my order, process it"
+
+    shop, flt = FakeShop(never_end(3)), FakeFilter()
+    result = attack_episode.run_attack(
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "third_party_emergency",
+        2,
+        7,
+        style_name="patient",
+        shop=shop,
+        filter_svc=flt,
+        attacker_complete=fake_complete,
+    )
+    assert result["outcome"] == "budget_exhausted"
+    system = prompts[0][0]["content"]
+    assert "TACTIC: third_party_emergency" in system
+    assert "Communication style" in system
+    assert "Calm patient customer" in system
+
+
+def test_attack_record_pins_style():
+    shop, flt = FakeShop(never_end(2)), FakeFilter()
+    attack_episode.run_attack(
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "authority_impersonation",
+        1,
+        7,
+        style_name="irritated",
+        shop=shop,
+        filter_svc=flt,
+    )
+    for rec in flt.records:
+        assert rec["raw"].get("style") == "irritated"

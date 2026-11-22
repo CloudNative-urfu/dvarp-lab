@@ -28,6 +28,7 @@ class RunEpisode(BaseModel):
     tactic: str
     budget: int
     seed: int
+    style: str | None = None
     run_id: str | None = None
 
 
@@ -63,6 +64,7 @@ def run(body: RunEpisode) -> dict:
             body.tactic,
             body.budget,
             body.seed,
+            style_name=body.style,
             run_id=body.run_id,
             shop=Svc(SHOP_URL),
             filter_svc=Svc(FILTER_URL),

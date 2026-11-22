@@ -111,6 +111,7 @@ def run(args: argparse.Namespace) -> dict:
                 "tactic": scenario["tactic"],
                 "budget": args.budget,
                 "seed": seed_a,
+                "style": scenario["style"],
                 "run_id": run_id,
             }
             attacked = attack.post("/run-episode", body)

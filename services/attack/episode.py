@@ -11,6 +11,7 @@ from typing import Any
 from lab.seeds import derive_seed
 from services.traffic.episode import outcome_of
 from services.traffic.record import ChatModel, Recorder
+from services.traffic.style import load_styles
 
 from .attacker import LlmAttacker, StubAttacker
 from .tactics import load_tactics, start_prompt
@@ -23,6 +24,7 @@ def run_attack(
     tactic_name: str,
     budget: int,
     seed: int,
+    style_name: str | None = None,
     run_id: str | None = None,
     *,
     shop: Any,
@@ -35,12 +37,18 @@ def run_attack(
     registry = load_tactics()
     if tactic_name not in registry:
         raise ValueError(f"тактика {tactic_name!r} отсутствует в frozen/corpus/tactics.json")
+    style = None
+    if style_name is not None:
+        styles = load_styles()
+        if style_name not in styles:
+            raise ValueError(f"стиль {style_name!r} отсутствует в frozen/styles.json")
+        style = styles[style_name]
     prompt = start_prompt(registry[tactic_name], derive_seed(seed, episode_id))
     recorder = Recorder(filter_svc, episode_id, "attack", attacker_model)
     recorder.raw_extra = {"config_name": config_name}
     if attacker_complete or attacker_base_url:
         model = ChatModel(recorder, complete=attacker_complete, base_url=attacker_base_url)
-        attacker = LlmAttacker(tactic_name, prompt, model)
+        attacker = LlmAttacker(tactic_name, prompt, model, style=style)
     else:
         attacker = StubAttacker(prompt, derive_seed(seed, episode_id, "attacker"))
 
@@ -56,6 +64,7 @@ def run_attack(
         recorder.raw_extra = {
             "config_name": config_name,
             "tactic": tactic_name,
+            **({"style": style_name} if style_name else {}),
             "seed": seed,
             **({"run_id": run_id} if run_id else {}),
         }

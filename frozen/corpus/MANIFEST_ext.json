@@ -1,0 +1,28 @@
+{
+ "schema": "dvarp.corpus-ext/1",
+ "file": "darp_corpus_v2_ext.jsonl",
+ "sha256": "042ddfbb49d56771a1d05be3470a9d7f037aa31e9585c8a098367e7d3584bb30",
+ "entry_hashes": {
+  "atk-21": "9f84b15e7e2219af54d8fcdcaa6ca71eaaa229a42c59071ea0f1ece8209cd73e",
+  "atk-22": "89f8617e7175e7678871587db7b335635781c078edfd1225f73338ec1851305f",
+  "atk-23": "efbeab0b9db0df08dcc2f7343ae7d99b03e98871a5f2704fd452de44678ad479",
+  "atk-24": "d7a1cd8f0c3460b40805e0f83ce7814202c83931d364478008feef1e59fba6f5",
+  "atk-25": "093a05ed2349a953621c75ac9b7ba77a84c8596c7a6046782d3a66b7d4184c34",
+  "atk-26": "651c2da52109387b905915d00a418bcf6c00fc9af7b8fd16e469f4c40d113e0f",
+  "atk-27": "3f6076275fb8874d63c6413c1a8a650899eaffb1ede9ba9090a6fad3271209be",
+  "atk-28": "a6de35eafaffe60c72fb7f679c82135b1978d418ef1a1fba4f4f92da235dd840"
+ },
+ "coverage": {
+  "goal": {
+   "break": 4,
+   "burn": 2,
+   "slow": 2
+  },
+  "split": {
+   "dev": 6,
+   "holdout": 2
+  }
+ },
+ "source_note": "authoritative extension authored for dvarp-lab before pilot; base corpus darp_corpus_v2.jsonl stays pinned byte-identical; mechanisms third_party_emergency/authority_impersonation — кандидат в канон-заявку (ось §6.2), shop-валидатор оси не расширялся",
+ "entry_count": 8
+}

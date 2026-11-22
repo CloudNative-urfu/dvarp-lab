@@ -37,3 +37,35 @@ seed}` → `{outcome, turns, attempts}`, с сигналами `POST /start` и
 #### Scenario: Attacker cassette
 - **WHEN** атакующий делает вызов модели
 - **THEN** пара «запрос → ответ» оседает кассетной строкой в сырой БД
+
+## ADDED Requirements
+
+### Requirement: Shared pair style in attacker prompt
+Стиль общения пары SHALL задаваться в обеих ногах: легальному клиенту —
+стиль из `frozen/styles.json`, атакующему — тон-клауза в system-промпт при
+сохранении корпусной стартовой реплики (тактика — механизм, стиль — тон).
+Записи filter пинят `raw.style`; иначе тон становится конфаундом детекции
+(инвариант 8).
+
+#### Scenario: Style in both legs
+- **WHEN** пара прогонов ведётся в стиле s
+- **THEN** легальная нога и атакующий промпт несут один и тот же тон;
+  стартовая реплика атакующего остаётся корпусной
+
+#### Scenario: Style pinned in raw
+- **WHEN** атакующий эпизод пишет сырьё
+- **THEN** записи содержат `raw.style` = стиль пары
+
+### Requirement: Extended social tactics corpus
+Расширенный корпус SHALL добавлять социальный сектор тактик (atk-21…28:
+third_party_emergency, authority_impersonation) — `darp_corpus_v2_ext.jsonl`
+с манифестом `MANIFEST_ext.json` (sha256, fail-closed); реестр тактик
+переgroup по секторам, launcher берёт расширенную ось.
+
+#### Scenario: Ext manifest enforced
+- **WHEN** расширенный корпус не совпадает с манифестом
+- **THEN** загрузка падает, атаки не стартуют
+
+#### Scenario: Social tactics available
+- **WHEN** кампания выбирает тактику atk-21…28
+- **THEN** стартовый промпт разрешается из расширенного корпуса

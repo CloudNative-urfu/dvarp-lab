@@ -31,9 +31,12 @@
 ## attack_svc (порт 9413)
 
 - `POST /run-episode` `{episode_id, config_name, agent_model, attacker_model, tactic: str,
-  budget: int, seed: int}` → `{outcome, turns, attempts}` — размеченный стартовый промпт
-  тактики из frozen/corpus, ходы через shop_svc /turn (channel="attack"), видит только
-  текст; без доступа к БД магазина и защите.
+  budget: int, seed: int, style: str?}` → `{outcome, turns, attempts}` — размеченный
+  стартовый промпт тактики из frozen/corpus, ходы через shop_svc /turn (channel="attack"),
+  видит только текст; без доступа к БД магазина и защите. `style` — общий с легальным
+  трафиком тон парного прогона (frozen/styles.json): тон-клауза в system-промпт
+  атакующего, стартовая реплика остаётся корпусной (тактика — механизм, стиль — тон).
+  Записи filter пинят `raw.style`.
 - `POST /start` / `POST /stop` — сигналы начала/конца атаки для launcher.
 
 ## filter_svc (порт 9414)
