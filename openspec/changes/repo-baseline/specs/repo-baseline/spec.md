@@ -143,3 +143,14 @@ traffic, attack, filter, metrics и консоль ui на 9410 (порты 9410
 #### Scenario: Roadmap state
 - **WHEN** читатель сверяет состояние исследования
 - **THEN** текущая стадия и открытые места видны в мануале
+
+## ADDED Requirements
+
+### Requirement: Environment template
+`env.example` SHALL перечислять все переменные окружения стенда (LAB_*:
+URL сервисов, БД, LLM-эндпоинты) как шаблон без секретов; ключи LLM живут
+только в env процесса и не попадают в журнал и манифесты.
+
+#### Scenario: Template without secrets
+- **WHEN** разработчик разворачивает стенд по env.example
+- **THEN** все переменные описаны; секреты в репозиторий не попадают
