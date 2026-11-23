@@ -33,11 +33,12 @@ ENV_PARAMS_B = "RESEARCH_LLM_PARAMS_B"
 ENV_EXTRA_BODY = "RESEARCH_LLM_EXTRA_BODY"  # необязательный JSON-объект доп. полей запроса
 REQUIRED_ENV = (ENV_BASE_URL, ENV_MODEL)
 
-SIZE_TARGET_B = 8.0       # ориентир NFR-2.6
-SIZE_EXCEPTION_B = 12.0   # исключение для отдельных контролей
+SIZE_TARGET_B = 8.0  # ориентир NFR-2.6
+SIZE_EXCEPTION_B = 12.0  # исключение для отдельных контролей
 
-RESERVED_BODY_KEYS = frozenset({"model", "messages", "temperature", "seed", "max_tokens", "stream",
-                                "tools", "tool_choice"})
+RESERVED_BODY_KEYS = frozenset(
+    {"model", "messages", "temperature", "seed", "max_tokens", "stream", "tools", "tool_choice"}
+)
 
 _SIZE_RE = re.compile(r"(?<![a-z0-9.])(\d+(?:\.\d+)?)\s*([bm])(?![a-z])", re.IGNORECASE)
 
@@ -63,17 +64,27 @@ class SizeVerdict:
 def check_model_size(params_b: float | None, *, model: str = "") -> SizeVerdict:
     if params_b is None:
         raise LLMConfigError(
-            f"размер модели {model!r} неизвестен: задайте {ENV_PARAMS_B} (NFR-2.6, fail-closed)")
-    if isinstance(params_b, bool) or not isinstance(params_b, (int, float)) \
-            or not math.isfinite(params_b) or params_b <= 0:
+            f"размер модели {model!r} неизвестен: задайте {ENV_PARAMS_B} (NFR-2.6, fail-closed)"
+        )
+    if (
+        isinstance(params_b, bool)
+        or not isinstance(params_b, (int, float))
+        or not math.isfinite(params_b)
+        or params_b <= 0
+    ):
         raise LLMConfigError(f"недопустимый размер модели: {params_b!r}")
     if params_b <= SIZE_TARGET_B:
         return SizeVerdict(float(params_b), "within_target", None)
     if params_b <= SIZE_EXCEPTION_B:
-        return SizeVerdict(float(params_b), "exception_control",
-                           f"модель {model!r} {params_b:g}B > ориентира {SIZE_TARGET_B:g}B: "
-                           f"учитывается как исключение до {SIZE_EXCEPTION_B:g}B (NFR-2.6)")
-    raise LLMConfigError(f"модель {model!r} {params_b:g}B больше предела {SIZE_EXCEPTION_B:g}B (NFR-2.6)")
+        return SizeVerdict(
+            float(params_b),
+            "exception_control",
+            f"модель {model!r} {params_b:g}B > ориентира {SIZE_TARGET_B:g}B: "
+            f"учитывается как исключение до {SIZE_EXCEPTION_B:g}B (NFR-2.6)",
+        )
+    raise LLMConfigError(
+        f"модель {model!r} {params_b:g}B больше предела {SIZE_EXCEPTION_B:g}B (NFR-2.6)"
+    )
 
 
 def check_local_endpoint(base_url: str) -> str:
@@ -85,7 +96,9 @@ def check_local_endpoint(base_url: str) -> str:
         raise LLMConfigError(f"{ENV_BASE_URL}: схема {parts.scheme!r} не http/https")
     if parts.username or parts.password:
         # Учётные данные в URL попали бы в журналы и манифест.
-        raise LLMConfigError(f"{ENV_BASE_URL}: учётные данные в URL запрещены, используйте {ENV_API_KEY}")
+        raise LLMConfigError(
+            f"{ENV_BASE_URL}: учётные данные в URL запрещены, используйте {ENV_API_KEY}"
+        )
     host = (parts.hostname or "").lower()
     if not host:
         raise LLMConfigError(f"{ENV_BASE_URL}: нет имени хоста")
@@ -96,10 +109,13 @@ def check_local_endpoint(base_url: str) -> str:
         except ValueError:
             raise LLMConfigError(
                 f"{ENV_BASE_URL}: хост {host!r} не адрес локального контура (NFR-2.5); "
-                "используйте loopback/частный IP или localhost") from None
+                "используйте loopback/частный IP или localhost"
+            ) from None
         local = ip.is_loopback or ip.is_private or ip.is_link_local
         if not local:
-            raise LLMConfigError(f"{ENV_BASE_URL}: {host} — публичный адрес, вне локального контура (NFR-2.5)")
+            raise LLMConfigError(
+                f"{ENV_BASE_URL}: {host} — публичный адрес, вне локального контура (NFR-2.5)"
+            )
     return base_url.strip().rstrip("/")
 
 
@@ -142,20 +158,36 @@ class LLMSettings:
 
     def public_dict(self) -> dict:
         """Безопасное представление для манифеста и журнала (без ключа)."""
-        return {"base_url": self.base_url, "model": self.model, "params_b": self.size.params_b,
-                "size_status": self.size.status, "temperature": self.temperature, "seed": self.seed,
-                "max_output_tokens": self.max_output_tokens, "timeout_s": self.timeout_s,
-                "extra_body": self.extra_body, "api_key_set": self.has_api_key}
+        return {
+            "base_url": self.base_url,
+            "model": self.model,
+            "params_b": self.size.params_b,
+            "size_status": self.size.status,
+            "temperature": self.temperature,
+            "seed": self.seed,
+            "max_output_tokens": self.max_output_tokens,
+            "timeout_s": self.timeout_s,
+            "extra_body": self.extra_body,
+            "api_key_set": self.has_api_key,
+        }
 
     def model_spec(self, role: str) -> ModelSpec:
         """Пин модели для журнала прогонов (lab.modelspec)."""
-        return ModelSpec(name=self.model, role=role, params_b=self.size.params_b,
-                         revision=self.model)
+        return ModelSpec(
+            name=self.model, role=role, params_b=self.size.params_b, revision=self.model
+        )
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str], *, seed: int = 0, temperature: float = 0.0,
-                 max_output_tokens: int = 512, timeout_s: float = 60.0,
-                 extra_body: Mapping | None = None) -> LLMSettings:
+    def from_env(
+        cls,
+        environ: Mapping[str, str],
+        *,
+        seed: int = 0,
+        temperature: float = 0.0,
+        max_output_tokens: int = 512,
+        timeout_s: float = 60.0,
+        extra_body: Mapping | None = None,
+    ) -> LLMSettings:
         """`extra_body` из аргумента дополняется/переопределяется JSON из RESEARCH_LLM_EXTRA_BODY."""
         missing = [k for k in REQUIRED_ENV if not (environ.get(k) or "").strip()]
         if missing:
@@ -182,4 +214,6 @@ class LLMSettings:
                 raise LLMConfigError(f"{ENV_EXTRA_BODY} должен быть JSON-объектом")
             extra.update(env_extra)
         key = (environ.get(ENV_API_KEY) or "").strip() or None
-        return cls(base_url, model, size, temperature, seed, max_output_tokens, timeout_s, extra, key)
+        return cls(
+            base_url, model, size, temperature, seed, max_output_tokens, timeout_s, extra, key
+        )

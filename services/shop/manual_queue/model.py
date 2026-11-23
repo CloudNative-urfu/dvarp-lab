@@ -50,8 +50,10 @@ def _num(value: Any, name: str, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise QueueError(f"{name}: ожидается конечное число, получено {value!r}")
     if value < 0 or (positive and value == 0):
-        raise QueueError(f"{name}: ожидается {'положительное' if positive else 'неотрицательное'}, "
-                         f"получено {value!r}")
+        raise QueueError(
+            f"{name}: ожидается {'положительное' if positive else 'неотрицательное'}, "
+            f"получено {value!r}"
+        )
     return float(value)
 
 
@@ -61,9 +63,9 @@ class QueueConfig:
     service_minutes: float = SERVICE_MODES["base"]
     discipline: str = "fifo"
     service_dist: str = "fixed"
-    seed: int | None = None          # нужен только для service_dist="exponential"
+    seed: int | None = None  # нужен только для service_dist="exponential"
     sla_minutes: float = DEFAULT_SLA_MINUTES
-    mode: str = "base"               # справочная метка режима чувствительности
+    mode: str = "base"  # справочная метка режима чувствительности
     # Деградация ревьюера (Oversight Capacity; ревизия 1, case-update §6 п. 4) — допущение,
     # по умолчанию выключена. ℓ — число разборов, начатых этим оператором за последние
     # `fatigue_window` минут: время разбора s·(1 + fatigue_per_case·ℓ), вероятность пропустить
@@ -74,7 +76,11 @@ class QueueConfig:
     miss_cap: float = 0.5
 
     def __post_init__(self):
-        if isinstance(self.operators, bool) or not isinstance(self.operators, int) or self.operators < 1:
+        if (
+            isinstance(self.operators, bool)
+            or not isinstance(self.operators, int)
+            or self.operators < 1
+        ):
             raise QueueError(f"operators: ожидается целое ≥ 1, получено {self.operators!r}")
         _num(self.service_minutes, "service_minutes", positive=True)
         _num(self.sla_minutes, "sla_minutes", positive=True)
@@ -88,7 +94,8 @@ class QueueConfig:
         if self.miss_cap > 1:
             raise QueueError("miss_cap: вероятность ≤ 1")
         if self.service_dist == "exponential" and (
-                isinstance(self.seed, bool) or not isinstance(self.seed, int)):
+            isinstance(self.seed, bool) or not isinstance(self.seed, int)
+        ):
             raise QueueError("service_dist=exponential требует явного целого seed")
 
     @classmethod
@@ -130,7 +137,9 @@ class CaseRecord:
         if not isinstance(self.case_id, str) or not self.case_id:
             raise QueueError("case_id обязателен")
         if self.traffic not in TRAFFIC_CLASSES:
-            raise QueueError(f"{self.case_id}: класс трафика {self.traffic!r} не из {TRAFFIC_CLASSES}")
+            raise QueueError(
+                f"{self.case_id}: класс трафика {self.traffic!r} не из {TRAFFIC_CLASSES}"
+            )
         _num(self.t_arrival, f"{self.case_id}.t_arrival")
         _num(self.auto_minutes, f"{self.case_id}.auto_minutes")
         if not isinstance(self.escalated, bool):
@@ -152,13 +161,13 @@ class CaseOutcome:
     t_enqueue: float | None
     t_start: float | None
     t_end: float
-    wait_minutes: float          # ожидание оператора (0 для неэскалированных)
-    service_minutes: float       # время ручного разбора (0 для неэскалированных)
-    delay_minutes: float         # завершение − прибытие
+    wait_minutes: float  # ожидание оператора (0 для неэскалированных)
+    service_minutes: float  # время ручного разбора (0 для неэскалированных)
+    delay_minutes: float  # завершение − прибытие
     operator: int | None
     depth_at_enqueue: int | None  # сколько разборов уже ждало в очереди в момент постановки
     beyond_sla: bool
-    miss_prob: float = 0.0       # вероятность ошибки уставшего ревьюера (режим деградации)
+    miss_prob: float = 0.0  # вероятность ошибки уставшего ревьюера (режим деградации)
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -178,7 +187,7 @@ def _mean(values: list[float]) -> float:
 class QueueResult:
     config: QueueConfig
     outcomes: dict[str, CaseOutcome]
-    depth_timeline: list[tuple[float, int]]   # (момент, число ожидающих после изменения)
+    depth_timeline: list[tuple[float, int]]  # (момент, число ожидающих после изменения)
     trace: list[dict] = field(default_factory=list)  # service_start/service_end по времени
 
     def by_traffic(self, traffic: str) -> list[CaseOutcome]:
@@ -243,8 +252,8 @@ class QueueResult:
             "config_fingerprint": self.config.fingerprint(),
             "cases": total,
             "escalated": escalated,
-            "E": escalated / total if total else 0.0,          # доля эскалаций от всего трафика
-            "Q_legal": legal.get("mean_delay", 0.0),          # Q(g) для break-even
+            "E": escalated / total if total else 0.0,  # доля эскалаций от всего трафика
+            "Q_legal": legal.get("mean_delay", 0.0),  # Q(g) для break-even
             "traffic": traffic,
             "queue": {
                 "max_depth": self.max_depth(),
@@ -288,8 +297,10 @@ class _Waiting:
             return self.fifo.popleft()
         # fair_share: аккаунт с наименьшим числом начатых разборов; при равенстве — тот,
         # чей ожидающий разбор поставлен раньше (индексы уже упорядочены по постановке).
-        acc = min((a for a, q in self.by_account.items() if q),
-                  key=lambda a: (self.served.get(a, 0), self.by_account[a][0]))
+        acc = min(
+            (a for a, q in self.by_account.items() if q),
+            key=lambda a: (self.served.get(a, 0), self.by_account[a][0]),
+        )
         idx = self.by_account[acc].popleft()
         self.served[acc] = self.served.get(acc, 0) + 1
         return idx
@@ -304,7 +315,9 @@ def simulate(cases: Iterable[CaseRecord], config: QueueConfig) -> QueueResult:
     if len(set(ids)) != len(ids):
         raise QueueError("повторяющиеся case_id в потоке")
     # Канонический порядок постановки: не зависит от порядка добавления.
-    esc = sorted((c for c in cases if c.escalated), key=lambda c: (c.t_enqueue, c.t_arrival, c.case_id))
+    esc = sorted(
+        (c for c in cases if c.escalated), key=lambda c: (c.t_enqueue, c.t_arrival, c.case_id)
+    )
     service = [_service_time(c, config) for c in esc]
 
     heap: list[tuple[float, int, int]] = [(c.t_enqueue, _ARRIVE, i) for i, c in enumerate(esc)]
@@ -326,7 +339,9 @@ def simulate(cases: Iterable[CaseRecord], config: QueueConfig) -> QueueResult:
         if kind == _DEPART:
             heapq.heappush(free, op_of[i])
             end[i] = t
-            trace.append({"kind": "service_end", "t": t, "case": esc[i].case_id, "operator": op_of[i]})
+            trace.append(
+                {"kind": "service_end", "t": t, "case": esc[i].case_id, "operator": op_of[i]}
+            )
         else:
             depth_at[i] = waiting.n
             waiting.push(i, esc[i].account)
@@ -356,14 +371,41 @@ def simulate(cases: Iterable[CaseRecord], config: QueueConfig) -> QueueResult:
             ts, op = start[i]
             delay = end[i] - c.t_arrival
             outcomes[c.case_id] = CaseOutcome(
-                c.case_id, c.traffic, c.account, c.episode_id, c.t_arrival, True, c.t_enqueue,
-                ts, end[i], ts - c.t_enqueue, service[i], delay, op, depth_at[i],
-                delay > config.sla_minutes, miss.get(i, 0.0))
+                c.case_id,
+                c.traffic,
+                c.account,
+                c.episode_id,
+                c.t_arrival,
+                True,
+                c.t_enqueue,
+                ts,
+                end[i],
+                ts - c.t_enqueue,
+                service[i],
+                delay,
+                op,
+                depth_at[i],
+                delay > config.sla_minutes,
+                miss.get(i, 0.0),
+            )
         else:
             outcomes[c.case_id] = CaseOutcome(
-                c.case_id, c.traffic, c.account, c.episode_id, c.t_arrival, False, None, None,
-                c.t_arrival + c.auto_minutes, 0.0, 0.0, c.auto_minutes, None, None,
-                c.auto_minutes > config.sla_minutes)
+                c.case_id,
+                c.traffic,
+                c.account,
+                c.episode_id,
+                c.t_arrival,
+                False,
+                None,
+                None,
+                c.t_arrival + c.auto_minutes,
+                0.0,
+                0.0,
+                c.auto_minutes,
+                None,
+                None,
+                c.auto_minutes > config.sla_minutes,
+            )
     outcomes = dict(sorted(outcomes.items()))
     return QueueResult(config, outcomes, timeline, trace)
 
@@ -381,7 +423,9 @@ class ManualQueue:
 
     def __init__(self, config: QueueConfig, writer: ComponentWriter | None = None):
         if writer is not None and writer.component != "manual_queue":
-            raise QueueError(f"очередь пишет только от имени manual_queue, а не {writer.component!r}")
+            raise QueueError(
+                f"очередь пишет только от имени manual_queue, а не {writer.component!r}"
+            )
         self.config = config
         self._writer = writer
         self._cases: dict[str, CaseRecord] = {}
@@ -394,11 +438,20 @@ class ManualQueue:
             raise QueueError(f"обращение {case.case_id!r} уже добавлено")
         self._cases[case.case_id] = case
         if case.escalated and self._writer is not None:
-            self._writer.emit("enqueue", {
-                "case_id": case.case_id, "case_episode": case.episode_id,
-                "case_traffic": case.traffic, "account": case.account, "reason": case.reason,
-                "operators": self.config.operators, "service_minutes": self.config.service_minutes,
-            }, episode_id=case.episode_id if in_episode else None, t_sim=case.t_enqueue)
+            self._writer.emit(
+                "enqueue",
+                {
+                    "case_id": case.case_id,
+                    "case_episode": case.episode_id,
+                    "case_traffic": case.traffic,
+                    "account": case.account,
+                    "reason": case.reason,
+                    "operators": self.config.operators,
+                    "service_minutes": self.config.service_minutes,
+                },
+                episode_id=case.episode_id if in_episode else None,
+                t_sim=case.t_enqueue,
+            )
 
     def extend(self, cases: Iterable[CaseRecord]) -> None:
         for c in cases:
@@ -416,16 +469,27 @@ class ManualQueue:
         if self._writer is not None:
             for step in res.trace:
                 o = res.outcomes[step["case"]]
-                data = {"case_id": o.case_id, "case_episode": o.episode_id,
-                        "case_traffic": o.traffic, "operator": step["operator"]}
+                data = {
+                    "case_id": o.case_id,
+                    "case_episode": o.episode_id,
+                    "case_traffic": o.traffic,
+                    "operator": step["operator"],
+                }
                 if step["kind"] == "service_start":
-                    self._writer.emit("service_start", dict(
-                        data, wait_minutes=o.wait_minutes, depth_at_enqueue=o.depth_at_enqueue),
-                        t_sim=step["t"])
+                    self._writer.emit(
+                        "service_start",
+                        dict(
+                            data, wait_minutes=o.wait_minutes, depth_at_enqueue=o.depth_at_enqueue
+                        ),
+                        t_sim=step["t"],
+                    )
                 else:
-                    self._writer.emit("service_end", dict(
-                        data, delay_minutes=o.delay_minutes, beyond_sla=o.beyond_sla),
-                        cost={"manual_minutes": o.service_minutes}, t_sim=step["t"])
+                    self._writer.emit(
+                        "service_end",
+                        dict(data, delay_minutes=o.delay_minutes, beyond_sla=o.beyond_sla),
+                        cost={"manual_minutes": o.service_minutes},
+                        t_sim=step["t"],
+                    )
         return res
 
 

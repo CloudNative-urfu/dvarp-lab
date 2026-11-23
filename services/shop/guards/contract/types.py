@@ -37,10 +37,25 @@ MAX_LABELS = 8
 _LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,63}$")
 
 # Ключи, которых не может быть в ответе плагина: это бизнес-решения или реакции (FR-1.8).
-FORBIDDEN_SIGNAL_KEYS = frozenset({
-    "action", "decision", "reaction", "verdict", "reply", "response", "refund", "refuse",
-    "escalate", "terminate", "tool_call", "sql", "write", "rewrite", "sanitized_text",
-})
+FORBIDDEN_SIGNAL_KEYS = frozenset(
+    {
+        "action",
+        "decision",
+        "reaction",
+        "verdict",
+        "reply",
+        "response",
+        "refund",
+        "refuse",
+        "escalate",
+        "terminate",
+        "tool_call",
+        "sql",
+        "write",
+        "rewrite",
+        "sanitized_text",
+    }
+)
 SIGNAL_KEYS = ("signal", "score", "reasons", "labels", "targets")
 
 
@@ -53,6 +68,7 @@ class GuardContractViolation(GuardContractError):
 
 
 # ------------------------------------------------------------------ заморозка значений
+
 
 def freeze(value: Any, path: str = "value") -> Any:
     """Рекурсивно превращает JSON-подобное значение в неизменяемое."""
@@ -91,6 +107,7 @@ def _req_str(value: Any, name: str, *, allow_empty: bool = False) -> str:
 
 # ------------------------------------------------------------------ вход
 
+
 @dataclass(frozen=True)
 class ContextFragment:
     """Фрагмент контекста с происхождением: что агент прочитал и откуда (FR-1.6).
@@ -98,6 +115,7 @@ class ContextFragment:
     `source` — ссылка на место в данных (например `order:O-1:note`, `ticket:T-1:msg:3`),
     чтобы политика могла изолировать именно этот фрагмент.
     """
+
     text: str
     provenance: str
     source: str
@@ -106,7 +124,8 @@ class ContextFragment:
         _req_str(self.text, "ContextFragment.text", allow_empty=True)
         if self.provenance not in PROVENANCES:
             raise GuardContractError(
-                f"ContextFragment.provenance {self.provenance!r} не из {PROVENANCES}")
+                f"ContextFragment.provenance {self.provenance!r} не из {PROVENANCES}"
+            )
         _req_str(self.source, "ContextFragment.source")
 
     @property
@@ -121,6 +140,7 @@ class ContextFragment:
 class TrustedTask:
     """Доверенная бизнес-задача эпизода. Берётся из сессии канала и сценария, а не из текста
     пользователя: атакующий не может переписать задачу, которую видит гвардрейл."""
+
     task_id: str
     description: str
     customer_id: str
@@ -141,9 +161,14 @@ class TrustedTask:
             _req_str(self.order_id, "TrustedTask.order_id")
 
     def to_json(self) -> dict[str, Any]:
-        return {"task_id": self.task_id, "description": self.description,
-                "customer_id": self.customer_id, "ticket_id": self.ticket_id,
-                "allowed_tools": list(self.allowed_tools), "order_id": self.order_id}
+        return {
+            "task_id": self.task_id,
+            "description": self.description,
+            "customer_id": self.customer_id,
+            "ticket_id": self.ticket_id,
+            "allowed_tools": list(self.allowed_tools),
+            "order_id": self.order_id,
+        }
 
 
 @dataclass(frozen=True)
@@ -153,6 +178,7 @@ class ProposedCall:
     У объекта нет ссылки на исполнитель и нет метода исполнения: гвардрейл может только
     оценить вызов. Исполняет (или не исполняет) его код по решению политики.
     """
+
     tool: str
     args: Mapping[str, Any] = field(default_factory=dict)
     call_id: str = ""
@@ -181,6 +207,7 @@ class GuardInput:
     - `candidate_output` — черновик ответа агента (обязателен на стадии `output`): он ещё
       не ушёл в канал, политика решает, отправлять ли его.
     """
+
     stage: str
     text: str
     task: TrustedTask
@@ -214,13 +241,19 @@ class GuardInput:
         return tuple((i, c) for i, c in enumerate(self.context) if not c.trusted)
 
     def to_json(self) -> dict[str, Any]:
-        return {"stage": self.stage, "text": self.text, "task": self.task.to_json(),
-                "context": [c.to_json() for c in self.context],
-                "proposed_call": self.proposed_call.to_json() if self.proposed_call else None,
-                "candidate_output": self.candidate_output, "turn": self.turn}
+        return {
+            "stage": self.stage,
+            "text": self.text,
+            "task": self.task.to_json(),
+            "context": [c.to_json() for c in self.context],
+            "proposed_call": self.proposed_call.to_json() if self.proposed_call else None,
+            "candidate_output": self.candidate_output,
+            "turn": self.turn,
+        }
 
 
 # ------------------------------------------------------------------ выход
+
 
 @dataclass(frozen=True)
 class GuardSignal:
@@ -233,6 +266,7 @@ class GuardSignal:
     - `targets` — индексы фрагментов `GuardInput.context`, на которые указывает сигнал
       (политика может изолировать только их).
     """
+
     signal: str
     score: float | None = None
     reasons: tuple[str, ...] = ()
@@ -244,20 +278,27 @@ class GuardSignal:
             raise GuardContractError(f"GuardSignal.signal {self.signal!r} не из {GUARD_SIGNALS}")
         if self.score is not None:
             s = self.score
-            if isinstance(s, bool) or not isinstance(s, (int, float)) or not math.isfinite(s) \
-                    or not 0.0 <= s <= 1.0:
+            if (
+                isinstance(s, bool)
+                or not isinstance(s, (int, float))
+                or not math.isfinite(s)
+                or not 0.0 <= s <= 1.0
+            ):
                 raise GuardContractError(f"GuardSignal.score вне [0, 1]: {s!r}")
             object.__setattr__(self, "score", float(s))
         elif self.signal == "score":
             raise GuardContractError("сигнал score без значения score")
         reasons = tuple(self.reasons)
         if len(reasons) > MAX_REASONS or any(
-                not isinstance(r, str) or not r or len(r) > MAX_REASON_LEN for r in reasons):
+            not isinstance(r, str) or not r or len(r) > MAX_REASON_LEN for r in reasons
+        ):
             raise GuardContractError(
-                f"GuardSignal.reasons: до {MAX_REASONS} непустых строк по ≤{MAX_REASON_LEN} символов")
+                f"GuardSignal.reasons: до {MAX_REASONS} непустых строк по ≤{MAX_REASON_LEN} символов"
+            )
         labels = tuple(self.labels)
-        if len(labels) > MAX_LABELS or any(not isinstance(x, str) or not _LABEL_RE.match(x)
-                                           for x in labels):
+        if len(labels) > MAX_LABELS or any(
+            not isinstance(x, str) or not _LABEL_RE.match(x) for x in labels
+        ):
             raise GuardContractError(f"GuardSignal.labels: до {MAX_LABELS} меток вида [a-z0-9_.:-]")
         targets = tuple(self.targets)
         if any(isinstance(t, bool) or not isinstance(t, int) or t < 0 for t in targets):
@@ -274,24 +315,35 @@ class GuardSignal:
         forbidden = keys & FORBIDDEN_SIGNAL_KEYS
         if forbidden:
             raise GuardContractViolation(
-                f"плагин вернул бизнес-решение/реакцию {sorted(forbidden)} вместо сигнала (FR-1.8)")
+                f"плагин вернул бизнес-решение/реакцию {sorted(forbidden)} вместо сигнала (FR-1.8)"
+            )
         unknown = keys - set(SIGNAL_KEYS)
         if unknown:
             raise GuardContractError(f"неизвестные поля сигнала: {sorted(unknown)}")
         if "signal" not in m:
             raise GuardContractError("в ответе плагина нет поля signal")
-        return cls(signal=m["signal"], score=m.get("score"),
-                   reasons=tuple(m.get("reasons", ())), labels=tuple(m.get("labels", ())),
-                   targets=tuple(m.get("targets", ())))
+        return cls(
+            signal=m["signal"],
+            score=m.get("score"),
+            reasons=tuple(m.get("reasons", ())),
+            labels=tuple(m.get("labels", ())),
+            targets=tuple(m.get("targets", ())),
+        )
 
     def check_targets(self, inp: GuardInput) -> None:
         bad = [t for t in self.targets if t >= len(inp.context)]
         if bad:
-            raise GuardContractError(f"GuardSignal.targets {bad} вне контекста из {len(inp.context)}")
+            raise GuardContractError(
+                f"GuardSignal.targets {bad} вне контекста из {len(inp.context)}"
+            )
 
     def to_json(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"signal": self.signal, "reasons": list(self.reasons),
-                               "labels": list(self.labels), "targets": list(self.targets)}
+        out: dict[str, Any] = {
+            "signal": self.signal,
+            "reasons": list(self.reasons),
+            "labels": list(self.labels),
+            "targets": list(self.targets),
+        }
         if self.score is not None:
             out["score"] = self.score
         return out
@@ -303,7 +355,8 @@ def as_signal(value: Any) -> GuardSignal:
     if isinstance(value, Mapping):
         return GuardSignal.from_mapping(value)
     raise GuardContractViolation(
-        f"плагин вернул {type(value).__name__} вместо GuardSignal (FR-1.7)")
+        f"плагин вернул {type(value).__name__} вместо GuardSignal (FR-1.7)"
+    )
 
 
 def fragments(items: Sequence[Mapping[str, Any]]) -> tuple[ContextFragment, ...]:

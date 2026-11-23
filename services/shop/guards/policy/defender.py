@@ -72,25 +72,39 @@ class GuardedDefender:
     def _finish(self, reply: str, closed: bool) -> DefenderTurn:
         # нарушение контракта плагином — дефект прогона, а не реакция
         self._pipeline.raise_violations()
-        return DefenderTurn(reply=reply, closed=bool(closed),
-                            signals=self._pipeline.research_signals())
+        return DefenderTurn(
+            reply=reply, closed=bool(closed), signals=self._pipeline.research_signals()
+        )
 
 
-def assemble_pipeline(log: EventLog, executor: Executor, *, db_path: str | Path,
-                      guards: GuardSet | Iterable[Mapping[str, Any]], policy: ReactionPolicy,
-                      task: TrustedTask, episode_id: str | None = None,
-                      models: Mapping[str, Any] | None = None,
-                      registry: GuardRegistry | None = None,
-                      allow_disabled: bool = False) -> GuardPipeline:
+def assemble_pipeline(
+    log: EventLog,
+    executor: Executor,
+    *,
+    db_path: str | Path,
+    guards: GuardSet | Iterable[Mapping[str, Any]],
+    policy: ReactionPolicy,
+    task: TrustedTask,
+    episode_id: str | None = None,
+    models: Mapping[str, Any] | None = None,
+    registry: GuardRegistry | None = None,
+    allow_disabled: bool = False,
+) -> GuardPipeline:
     """Конвейер эпизода: хост гвардрейлов (журнал `guard:<id>`, БД только на чтение),
     писатель `policy`, исполнитель эпизода. `guards` — `GuardSet` или его спецификация."""
     if not isinstance(guards, GuardSet):
         guards = GuardSet.from_spec(list(guards), registry, allow_disabled=allow_disabled)
     host = GuardHost(log.writer, episode_id=episode_id, db_path=db_path, models=models)
     try:
-        return GuardPipeline(guards, policy, host=host, executor=executor,
-                             writer=log.writer("policy"), task=task, episode_id=episode_id)
+        return GuardPipeline(
+            guards,
+            policy,
+            host=host,
+            executor=executor,
+            writer=log.writer("policy"),
+            task=task,
+            episode_id=episode_id,
+        )
     except Exception:
         host.close()
         raise
-

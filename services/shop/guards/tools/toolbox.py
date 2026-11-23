@@ -66,6 +66,7 @@ class PendingCall:
     аргументы инструмента в терминах модели (с `decision`, `question`). Ссылки на исполнитель
     нет: перехватчик не может исполнить вызов сам.
     """
+
     tool: str
     op: str
     args: Mapping[str, Any]
@@ -115,10 +116,10 @@ class ToolOutcome:
     tool: str
     call_id: str
     status: str
-    view: dict[str, Any]                 # что получает модель (JSON-сериализуемо)
+    view: dict[str, Any]  # что получает модель (JSON-сериализуемо)
     op: str | None = None
     exec_result: ExecResult | None = None
-    question: str | None = None          # текст уточнения для следующей реплики (инструмент 4)
+    question: str | None = None  # текст уточнения для следующей реплики (инструмент 4)
 
     @property
     def ok(self) -> bool:
@@ -129,8 +130,9 @@ class ToolOutcome:
 
     def message(self) -> Message:
         """Результат как сообщение role=tool для продолжения диалога с моделью."""
-        return Message("tool", self.content(), tool_call_id=self.call_id or self.tool,
-                       name=self.tool)
+        return Message(
+            "tool", self.content(), tool_call_id=self.call_id or self.tool, name=self.tool
+        )
 
 
 def _coerce_int(v: Any) -> tuple[Any, bool]:
@@ -172,8 +174,11 @@ def parse_call(name: str, args: Any) -> _Parsed:
     if name == "finalize_case":
         decision = raw.pop("decision", None)
         if decision not in DECISIONS:
-            return _Parsed(None, tool_args=tool_args,
-                           error="decision must be one of: " + ", ".join(DECISIONS) + ".")
+            return _Parsed(
+                None,
+                tool_args=tool_args,
+                error="decision must be one of: " + ", ".join(DECISIONS) + ".",
+            )
         op = DECISIONS[decision]
     elif name == "ask_customer":
         op = "request_info"
@@ -182,8 +187,11 @@ def parse_call(name: str, args: Any) -> _Parsed:
             return _Parsed(None, tool_args=tool_args, error="question must be a string.")
         q = (q or "").strip()
         if len(q) > MAX_QUESTION_CHARS:
-            return _Parsed(None, tool_args=tool_args,
-                           error=f"question is longer than {MAX_QUESTION_CHARS} characters.")
+            return _Parsed(
+                None,
+                tool_args=tool_args,
+                error=f"question is longer than {MAX_QUESTION_CHARS} characters.",
+            )
         code = raw.get("question_code")
         default = QUESTION_TEXTS.get(code) if isinstance(code, str) else None
         question = q or default
@@ -212,8 +220,15 @@ def _log_args(d: Mapping[str, Any]) -> dict[str, Any]:
 class Toolbox:
     """Пять инструментов одного эпизода поверх одного исполнителя."""
 
-    def __init__(self, executor: Executor, writer: ComponentWriter, *, role: str = "agent",
-                 interceptor: ToolInterceptor | None = None, episode_id: str | None = None):
+    def __init__(
+        self,
+        executor: Executor,
+        writer: ComponentWriter,
+        *,
+        role: str = "agent",
+        interceptor: ToolInterceptor | None = None,
+        episode_id: str | None = None,
+    ):
         if not isinstance(executor, Executor):
             raise ToolsError("нужен Executor эпизода")
         if not isinstance(writer, ComponentWriter) or writer.component != "tools":
@@ -264,17 +279,26 @@ class Toolbox:
 
     # ------------------------------------------------------------------ вызовы
 
-    def call(self, name: str, args: Any = None, *, call_id: str = "",
-             t_sim: float | None = None) -> ToolOutcome:
+    def call(
+        self, name: str, args: Any = None, *, call_id: str = "", t_sim: float | None = None
+    ) -> ToolOutcome:
         w0, c0 = time.perf_counter(), time.process_time()
         self._n += 1
         call_id = call_id or f"tc{self._n}"
         p = parse_call(str(name), args)
-        self._writer.emit("tool_call", {
-            "tool": str(name)[:64], "call_id": call_id, "op": p.op,
-            "args": _log_args(p.tool_args or (args if isinstance(args, Mapping) else {})),
-            "coerced": list(p.coerced), "role": self._role,
-        }, episode_id=self._episode_id, t_sim=t_sim)
+        self._writer.emit(
+            "tool_call",
+            {
+                "tool": str(name)[:64],
+                "call_id": call_id,
+                "op": p.op,
+                "args": _log_args(p.tool_args or (args if isinstance(args, Mapping) else {})),
+                "coerced": list(p.coerced),
+                "role": self._role,
+            },
+            episode_id=self._episode_id,
+            t_sim=t_sim,
+        )
         external = [0.0, 0.0]  # время исполнителя и перехватчика: не затраты слоя инструментов
 
         def timed(fn, *a, **kw):
@@ -287,25 +311,39 @@ class Toolbox:
 
         n_err = len(self.interceptor_errors)
         out = self._run(str(name), p, call_id, timed, t_sim)
-        cost = {"latency_ms": max(0.0, (time.perf_counter() - w0 - external[0]) * 1000.0),
-                "cpu_ms": max(0.0, (time.process_time() - c0 - external[1]) * 1000.0)}
+        cost = {
+            "latency_ms": max(0.0, (time.perf_counter() - w0 - external[0]) * 1000.0),
+            "cpu_ms": max(0.0, (time.process_time() - c0 - external[1]) * 1000.0),
+        }
         er = out.exec_result
-        self._writer.emit("tool_result", {
-            "tool": out.tool[:64], "call_id": call_id, "op": out.op, "status": out.status,
-            "code": er.code if er is not None else None,
-            "replayed": bool(er.replayed) if er is not None else False,
-            "interceptor_error": (self.interceptor_errors[-1]
-                                  if len(self.interceptor_errors) > n_err else None),
-        }, episode_id=self._episode_id, cost=cost, t_sim=t_sim)
+        self._writer.emit(
+            "tool_result",
+            {
+                "tool": out.tool[:64],
+                "call_id": call_id,
+                "op": out.op,
+                "status": out.status,
+                "code": er.code if er is not None else None,
+                "replayed": bool(er.replayed) if er is not None else False,
+                "interceptor_error": (
+                    self.interceptor_errors[-1] if len(self.interceptor_errors) > n_err else None
+                ),
+            },
+            episode_id=self._episode_id,
+            cost=cost,
+            t_sim=t_sim,
+        )
         return out
 
     def _run(self, name: str, p: _Parsed, call_id: str, timed, t_sim) -> ToolOutcome:
         if self._halted:
-            return ToolOutcome(name, call_id, "halted", {"status": "refused", "reason": MSG_HALTED},
-                               op=p.op)
+            return ToolOutcome(
+                name, call_id, "halted", {"status": "refused", "reason": MSG_HALTED}, op=p.op
+            )
         if p.error == "unknown_tool":
-            return ToolOutcome(name, call_id, "unknown_tool",
-                               {"status": "error", "reason": MSG_UNKNOWN_TOOL})
+            return ToolOutcome(
+                name, call_id, "unknown_tool", {"status": "error", "reason": MSG_UNKNOWN_TOOL}
+            )
         if p.error is not None:
             return ToolOutcome(name, call_id, "invalid", {"status": "error", "reason": p.error})
         assert p.op is not None
@@ -322,36 +360,49 @@ class Toolbox:
         if gate.action != "allow":
             if gate.action == "halt":
                 self._halted = True
-            return ToolOutcome(name, call_id, "blocked",
-                               {"status": "refused", "reason": gate.message or MSG_BLOCKED},
-                               op=p.op)
+            return ToolOutcome(
+                name,
+                call_id,
+                "blocked",
+                {"status": "refused", "reason": gate.message or MSG_BLOCKED},
+                op=p.op,
+            )
         res: ExecResult = timed(self._ex.execute, self._role, p.op, t_sim=t_sim, **p.args)
         if not res.ok:
-            return ToolOutcome(name, call_id, "refused", res.agent_view(), op=p.op,
-                               exec_result=res)
+            return ToolOutcome(name, call_id, "refused", res.agent_view(), op=p.op, exec_result=res)
         view = res.agent_view()
         question = None
         if p.op in READ_OPS:
             self._reads.append((p.op, copy.deepcopy(res.data)))
             try:
                 shown = timed(self._interceptor.after_read, pending, copy.deepcopy(res.data))
-            except Exception as exc:  # сбой точки «контекст» — модель не получает непроверенный текст
+            except (
+                Exception
+            ) as exc:  # сбой точки «контекст» — модель не получает непроверенный текст
                 self.interceptor_errors.append(f"after_read:{type(exc).__name__}")
-                return ToolOutcome(name, call_id, "blocked",
-                                   {"status": "refused", "reason": MSG_BLOCKED},
-                                   op=p.op, exec_result=res)
+                return ToolOutcome(
+                    name,
+                    call_id,
+                    "blocked",
+                    {"status": "refused", "reason": MSG_BLOCKED},
+                    op=p.op,
+                    exec_result=res,
+                )
             view = {"status": "ok", "result": shown if isinstance(shown, dict) else {}}
         elif p.op == "request_info":
             question = p.question
             self._question = question
-            view = {"status": "ok", "result": {**res.data, "question": question,
-                                               "awaiting_customer": True}}
+            view = {
+                "status": "ok",
+                "result": {**res.data, "question": question, "awaiting_customer": True},
+            }
         elif p.op in FINALIZING_OPS:
             if self._finalized is None:
                 self._finalized = res
         return ToolOutcome(name, call_id, "ok", view, op=p.op, exec_result=res, question=question)
 
-    def handle(self, tool_calls: Iterable[ToolCall], *, t_sim: float | None = None
-               ) -> list[ToolOutcome]:
+    def handle(
+        self, tool_calls: Iterable[ToolCall], *, t_sim: float | None = None
+    ) -> list[ToolOutcome]:
         """Выполнить вызовы из ответа модели (`Completion.tool_calls`) по порядку."""
         return [self.call(tc.name, tc.arguments, call_id=tc.id, t_sim=t_sim) for tc in tool_calls]

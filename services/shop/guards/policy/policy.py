@@ -70,6 +70,7 @@ class StageRule:
     `allow`/`flag` есть оценка и задан `score_block`, оценка ≥ порога повышает его до `block`
     (порог «если механизм их допускает», §5 п. 4).
     """
+
     on: Mapping[str, str]
     score_flag: float | None = None
     score_block: float | None = None
@@ -99,8 +100,12 @@ class StageRule:
             return "block"
         if signal == "flag":
             return "flag"
-        if signal == "score" and score is not None and self.score_flag is not None \
-                and score >= self.score_flag:
+        if (
+            signal == "score"
+            and score is not None
+            and self.score_flag is not None
+            and score >= self.score_flag
+        ):
             return "flag"
         return "allow"
 
@@ -108,8 +113,7 @@ class StageRule:
         return self.on[self.effective_signal(signal, score)]
 
     def to_json(self) -> dict[str, Any]:
-        return {"on": dict(self.on), "score_flag": self.score_flag,
-                "score_block": self.score_block}
+        return {"on": dict(self.on), "score_flag": self.score_flag, "score_block": self.score_block}
 
 
 CONTINUE_RULE = StageRule({})
@@ -126,6 +130,7 @@ class ReactionPolicy:
       журналируются, исполняется всегда `continue`;
     - `name` — метка для отчёта и хеша конфигурации.
     """
+
     name: str
     stages: Mapping[str, StageRule] = field(default_factory=dict)
     max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
@@ -157,9 +162,13 @@ class ReactionPolicy:
         return self.stages.get(stage, CONTINUE_RULE)
 
     def to_json(self) -> dict[str, Any]:
-        return {"version": POLICY_VERSION, "name": self.name,
-                "stages": {s: self.stages[s].to_json() for s in STAGES if s in self.stages},
-                "max_clarifications": self.max_clarifications, "detect_only": self.detect_only}
+        return {
+            "version": POLICY_VERSION,
+            "name": self.name,
+            "stages": {s: self.stages[s].to_json() for s in STAGES if s in self.stages},
+            "max_clarifications": self.max_clarifications,
+            "detect_only": self.detect_only,
+        }
 
     def fingerprint(self) -> str:
         return hash_obj(self.to_json())
@@ -178,15 +187,21 @@ class ReactionPolicy:
         for st, r in dict(spec.get("stages") or {}).items():
             if not isinstance(r, Mapping) or set(r) - {"on", "score_flag", "score_block"}:
                 raise PolicyError(f"stages.{st}: поля on/score_flag/score_block")
-            stages[st] = StageRule(dict(r.get("on") or {}), r.get("score_flag"), r.get("score_block"))
-        return cls(name=spec.get("name", ""), stages=stages,
-                   max_clarifications=spec.get("max_clarifications", DEFAULT_MAX_CLARIFICATIONS),
-                   detect_only=spec.get("detect_only", False))
+            stages[st] = StageRule(
+                dict(r.get("on") or {}), r.get("score_flag"), r.get("score_block")
+            )
+        return cls(
+            name=spec.get("name", ""),
+            stages=stages,
+            max_clarifications=spec.get("max_clarifications", DEFAULT_MAX_CLARIFICATIONS),
+            detect_only=spec.get("detect_only", False),
+        )
 
     def as_detect_only(self) -> ReactionPolicy:
         """Та же таблица реакций в режиме «чистый детектор» (реакция отключена)."""
-        return ReactionPolicy(self.name + "+detect_only", dict(self.stages),
-                              self.max_clarifications, True)
+        return ReactionPolicy(
+            self.name + "+detect_only", dict(self.stages), self.max_clarifications, True
+        )
 
 
 def strictest(actions: Iterable[str]) -> str:
@@ -202,41 +217,61 @@ def strictest(actions: Iterable[str]) -> str:
 # Сбой плагина по умолчанию — fail-open (`continue`) на входе/выходе/контексте и fail-closed
 # (`isolate`: не исполнять вызов) на инструменте; это явное допущение zero-версии.
 
-def _r(flag: str = "continue", block: str = "continue", error: str = "continue",
-       **kw: Any) -> StageRule:
+
+def _r(
+    flag: str = "continue", block: str = "continue", error: str = "continue", **kw: Any
+) -> StageRule:
     return StageRule({"allow": "continue", "flag": flag, "block": block, "error": error}, **kw)
 
 
-PRESETS: Mapping[str, ReactionPolicy] = MappingProxyType({
-    "none": ReactionPolicy("none"),
-    # g_in: фильтр входа, flag → escalate, block → safe-terminate
-    "input_escalate": ReactionPolicy("input_escalate", {"input": _r("escalate", "terminate")}),
-    # g_in_failclosed (ревизия 1, Shield to Target): тот же фильтр входа, но сбой детектора —
-    # безопасное завершение вместо продолжения (fail-closed)
-    "input_escalate_failclosed": ReactionPolicy(
-        "input_escalate_failclosed", {"input": _r("escalate", "terminate", "terminate")}),
-    # g_tool: валидатор аргументов, block → отклонить вызов и уточнить
-    "tool_clarify": ReactionPolicy("tool_clarify", {"tool": _r("isolate", "clarify", "isolate")}),
-    # g_ctx: проверка происхождения контекста, flag → изолировать фрагмент
-    "context_isolate": ReactionPolicy("context_isolate",
-                                      {"context": _r("isolate", "isolate"),
-                                       "tool": _r("continue", "isolate", "isolate")}),
-    # g_out: утечка в ответе — не отправлять черновик; блок — безопасное завершение
-    "output_withhold": ReactionPolicy("output_withhold", {"output": _r("isolate", "terminate")}),
-    # комбинация g_in + g_tool (+ контекст и выход)
-    "layered": ReactionPolicy("layered", {
-        "input": _r("escalate", "terminate"),
-        "context": _r("isolate", "isolate"),
-        "tool": _r("isolate", "clarify", "isolate"),
-        "output": _r("isolate", "terminate"),
-    }),
-    # Три политики реакции канона (dvarp design.md §4, §10) для позиционной матрицы: различаются
-    # только реакцией на `flag` (изолировать фрагмент / ручная проверка / безопасное завершение);
-    # `block` — всегда безопасное завершение; сбой — fail-open, на инструменте fail-closed.
-    **{f"canon_{a}": ReactionPolicy(f"canon_{a}", {
-        st: _r(a, "terminate", "isolate" if st == "tool" else "continue") for st in STAGES})
-       for a in ("isolate", "escalate", "terminate")},
-})
+PRESETS: Mapping[str, ReactionPolicy] = MappingProxyType(
+    {
+        "none": ReactionPolicy("none"),
+        # g_in: фильтр входа, flag → escalate, block → safe-terminate
+        "input_escalate": ReactionPolicy("input_escalate", {"input": _r("escalate", "terminate")}),
+        # g_in_failclosed (ревизия 1, Shield to Target): тот же фильтр входа, но сбой детектора —
+        # безопасное завершение вместо продолжения (fail-closed)
+        "input_escalate_failclosed": ReactionPolicy(
+            "input_escalate_failclosed", {"input": _r("escalate", "terminate", "terminate")}
+        ),
+        # g_tool: валидатор аргументов, block → отклонить вызов и уточнить
+        "tool_clarify": ReactionPolicy(
+            "tool_clarify", {"tool": _r("isolate", "clarify", "isolate")}
+        ),
+        # g_ctx: проверка происхождения контекста, flag → изолировать фрагмент
+        "context_isolate": ReactionPolicy(
+            "context_isolate",
+            {"context": _r("isolate", "isolate"), "tool": _r("continue", "isolate", "isolate")},
+        ),
+        # g_out: утечка в ответе — не отправлять черновик; блок — безопасное завершение
+        "output_withhold": ReactionPolicy(
+            "output_withhold", {"output": _r("isolate", "terminate")}
+        ),
+        # комбинация g_in + g_tool (+ контекст и выход)
+        "layered": ReactionPolicy(
+            "layered",
+            {
+                "input": _r("escalate", "terminate"),
+                "context": _r("isolate", "isolate"),
+                "tool": _r("isolate", "clarify", "isolate"),
+                "output": _r("isolate", "terminate"),
+            },
+        ),
+        # Три политики реакции канона (dvarp design.md §4, §10) для позиционной матрицы: различаются
+        # только реакцией на `flag` (изолировать фрагмент / ручная проверка / безопасное завершение);
+        # `block` — всегда безопасное завершение; сбой — fail-open, на инструменте fail-closed.
+        **{
+            f"canon_{a}": ReactionPolicy(
+                f"canon_{a}",
+                {
+                    st: _r(a, "terminate", "isolate" if st == "tool" else "continue")
+                    for st in STAGES
+                },
+            )
+            for a in ("isolate", "escalate", "terminate")
+        },
+    }
+)
 
 
 def preset(name: str, *, detect_only: bool = False) -> ReactionPolicy:

@@ -24,8 +24,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 _ZERO_WIDTH = re.compile("[\u200b‌‍⁠﻿­]")
-_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t",
-                       "@": "a", "$": "s"})
+_LEET = str.maketrans(
+    {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
+)
 # Слово, в котором цифры/символы перемешаны с буквами (h1gh, v4lue, r3view) — признак leetspeak.
 _LEET_TOKEN = re.compile(r"\b(?=[a-z0-9@$]*[a-z])(?=[a-z0-9@$]*[013457@$])[a-z0-9@$]{2,}\b")
 # Числа вида 30, 2000, O-1001 не трогаем: leet заменяется только внутри слов с буквами.
@@ -50,7 +51,9 @@ def normalize(text: str) -> str:
 def leet_tokens(text: str) -> int:
     """Число слов с leetspeak в исходном тексте (после NFKC и нижнего регистра)."""
     t = unicodedata.normalize("NFKC", text).lower()
-    return sum(1 for m in _LEET_TOKEN.finditer(t) if not re.fullmatch(r"[a-z]?\d+[a-z]{0,2}", m.group(0)))
+    return sum(
+        1 for m in _LEET_TOKEN.finditer(t) if not re.fullmatch(r"[a-z]?\d+[a-z]{0,2}", m.group(0))
+    )
 
 
 def spaced_runs(text: str) -> int:
@@ -74,8 +77,11 @@ def decode_base64_payloads(text: str, *, min_len: int = 16) -> list[str]:
             s = raw.decode("ascii")
         except UnicodeDecodeError:
             continue
-        if s and all(32 <= ord(c) < 127 or c in "\n\t" for c in s) and \
-                sum(c.isalpha() for c in s) >= 0.6 * len(s.replace(" ", "")):
+        if (
+            s
+            and all(32 <= ord(c) < 127 or c in "\n\t" for c in s)
+            and sum(c.isalpha() for c in s) >= 0.6 * len(s.replace(" ", ""))
+        ):
             out.append(s)
     return out
 
@@ -91,14 +97,16 @@ class Rule:
     weight: float
     label: str
     reason: str
-    quotable: bool = True   # понижается ли вес внутри цитаты
+    quotable: bool = True  # понижается ли вес внутри цитаты
 
 
-def rule(rule_id: str, regex: str, weight: float, label: str, reason: str, *,
-         quotable: bool = True) -> Rule:
+def rule(
+    rule_id: str, regex: str, weight: float, label: str, reason: str, *, quotable: bool = True
+) -> Rule:
     assert 0.0 < weight <= 1.0, rule_id
-    return Rule(rule_id, re.compile(regex, re.IGNORECASE | re.MULTILINE), weight, label, reason,
-                quotable)
+    return Rule(
+        rule_id, re.compile(regex, re.IGNORECASE | re.MULTILINE), weight, label, reason, quotable
+    )
 
 
 @dataclass(frozen=True)
@@ -106,7 +114,7 @@ class Hit:
     rule_id: str
     label: str
     reason: str
-    weight: float           # с учётом цитаты
+    weight: float  # с учётом цитаты
     quoted: bool
 
 
@@ -149,10 +157,15 @@ def grade(score: float, flag_at: float, block_at: float) -> str:
     return "allow"
 
 
-def summarize_hits(hits: Sequence[Hit], max_reasons: int = 8) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def summarize_hits(
+    hits: Sequence[Hit], max_reasons: int = 8
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Основания (по убыванию веса) и метки (без повторов, в порядке силы) для сигнала."""
     ordered = sorted(hits, key=lambda h: (-h.weight, h.rule_id))
-    reasons = tuple(dict.fromkeys(
-        f"{h.rule_id}: {h.reason}" + (" (quoted)" if h.quoted else "") for h in ordered))
+    reasons = tuple(
+        dict.fromkeys(
+            f"{h.rule_id}: {h.reason}" + (" (quoted)" if h.quoted else "") for h in ordered
+        )
+    )
     labels = tuple(dict.fromkeys(h.label for h in ordered))
     return reasons[:max_reasons], labels[:8]

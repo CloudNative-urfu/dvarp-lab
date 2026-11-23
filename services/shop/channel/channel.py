@@ -53,7 +53,7 @@ def check_user_message(msg: Any, delivered: int, max_user_turns: int) -> str | N
     """Код нарушения протокола или None, если реплику можно доставить."""
     if delivered >= max_user_turns:
         return "turn_limit_exceeded"
-    if type(msg) is not str:          # подкласс str мог бы пронести лишние атрибуты
+    if type(msg) is not str:  # подкласс str мог бы пронести лишние атрибуты
         return "non_text_message"
     if not msg.strip():
         return "empty_message"
@@ -98,18 +98,24 @@ def _defender_turn(out: Any) -> DefenderTurn:
 class TextChannel:
     """Канал прогона: один журнал, один режим, лимит реплик пользователя."""
 
-    def __init__(self, log: EventLog, *, mode: str = "main",
-                 max_user_turns: int = DEFAULT_MAX_USER_TURNS):
+    def __init__(
+        self, log: EventLog, *, mode: str = "main", max_user_turns: int = DEFAULT_MAX_USER_TURNS
+    ):
         if mode not in MODES:
             raise ChannelError(f"режим канала {mode!r} не из {MODES}")
         if not isinstance(log, EventLog):
             raise ChannelError("нужен EventLog прогона")
         if (mode == "research") != log.research_mode:
-            raise ChannelError(f"режим канала {mode!r} не совпадает с журналом "
-                               f"(research_mode={log.research_mode}): research-mode не смешивается "
-                               "с основными прогонами (FR-1.3)")
-        if isinstance(max_user_turns, bool) or not isinstance(max_user_turns, int) \
-                or max_user_turns < 1:
+            raise ChannelError(
+                f"режим канала {mode!r} не совпадает с журналом "
+                f"(research_mode={log.research_mode}): research-mode не смешивается "
+                "с основными прогонами (FR-1.3)"
+            )
+        if (
+            isinstance(max_user_turns, bool)
+            or not isinstance(max_user_turns, int)
+            or max_user_turns < 1
+        ):
             raise ChannelError("max_user_turns — целое ≥ 1")
         self.mode = mode
         self.max_user_turns = max_user_turns
@@ -123,8 +129,14 @@ class TextChannel:
     def research(self) -> bool:
         return self.mode == "research"
 
-    def run_session(self, episode_id: str, user: UserEndpoint, defender: DefenderEndpoint, *,
-                    transcript: TranscriptSink | None = None) -> SessionResult:
+    def run_session(
+        self,
+        episode_id: str,
+        user: UserEndpoint,
+        defender: DefenderEndpoint,
+        *,
+        transcript: TranscriptSink | None = None,
+    ) -> SessionResult:
         if not isinstance(user, UserEndpoint):
             raise ChannelError("пользовательская сторона должна иметь next_message(obs)")
         if not isinstance(defender, DefenderEndpoint):
@@ -132,14 +144,19 @@ class TextChannel:
         if transcript is not None and not isinstance(transcript, TranscriptSink):
             raise ChannelError("transcript должен иметь record(author, text)")
         if id(defender) in self._defenders:
-            raise ChannelError("экземпляр защищаемой стороны уже использован в другой сессии: "
-                               "она не должна знать историю прошлых попыток (FR-1.3)")
+            raise ChannelError(
+                "экземпляр защищаемой стороны уже использован в другой сессии: "
+                "она не должна знать историю прошлых попыток (FR-1.3)"
+            )
         self._defenders[id(defender)] = defender
         self._sessions += 1
         sid = f"{episode_id}#s{self._sessions}"
         w, ep = self._w, episode_id
-        w.emit("session_open", {"session_id": sid, "mode": self.mode,
-                                "max_user_turns": self.max_user_turns}, episode_id=ep)
+        w.emit(
+            "session_open",
+            {"session_id": sid, "mode": self.mode, "max_user_turns": self.max_user_turns},
+            episode_id=ep,
+        )
 
         log_rows: list[tuple[str, str]] = []
         delivered = replies = 0
@@ -147,9 +164,18 @@ class TextChannel:
         obs = Observation(reply=None, turn=0, turns_left=self.max_user_turns)
 
         def close(st: str) -> None:
-            w.emit("session_close", {"session_id": sid, "mode": self.mode, "status": st,
-                                     "user_turns": delivered, "defender_turns": replies,
-                                     "violation": violation}, episode_id=ep)
+            w.emit(
+                "session_close",
+                {
+                    "session_id": sid,
+                    "mode": self.mode,
+                    "status": st,
+                    "user_turns": delivered,
+                    "defender_turns": replies,
+                    "violation": violation,
+                },
+                episode_id=ep,
+            )
 
         while True:
             try:
@@ -162,16 +188,33 @@ class TextChannel:
                 break
             violation = check_user_message(msg, delivered, self.max_user_turns)
             if violation is not None:
-                w.emit("protocol_violation", {
-                    "session_id": sid, "mode": self.mode, "violation": violation,
-                    "turn": delivered + 1,
-                    "chars": len(msg) if type(msg) is str else None,
-                    "type": type(msg).__name__}, episode_id=ep)
+                w.emit(
+                    "protocol_violation",
+                    {
+                        "session_id": sid,
+                        "mode": self.mode,
+                        "violation": violation,
+                        "turn": delivered + 1,
+                        "chars": len(msg) if type(msg) is str else None,
+                        "type": type(msg).__name__,
+                    },
+                    episode_id=ep,
+                )
                 status = "protocol_violation"
                 break
             delivered += 1
-            w.emit("message", {"session_id": sid, "mode": self.mode, "direction": "to_defender",
-                               "turn": delivered, "text": msg, "chars": len(msg)}, episode_id=ep)
+            w.emit(
+                "message",
+                {
+                    "session_id": sid,
+                    "mode": self.mode,
+                    "direction": "to_defender",
+                    "turn": delivered,
+                    "text": msg,
+                    "chars": len(msg),
+                },
+                episode_id=ep,
+            )
             log_rows.append(("to_defender", msg))
             try:
                 if transcript is not None:
@@ -179,7 +222,7 @@ class TextChannel:
                 turn = _defender_turn(defender.respond(msg))
                 reply, truncated = turn.reply, False
                 if len(reply) > MAX_REPLY_CHARS:
-                    reply = reply[:MAX_REPLY_CHARS - len(TRUNCATION_MARK)] + TRUNCATION_MARK
+                    reply = reply[: MAX_REPLY_CHARS - len(TRUNCATION_MARK)] + TRUNCATION_MARK
                     truncated = True
                 if transcript is not None and reply.strip():
                     transcript.record("agent", reply)
@@ -190,17 +233,39 @@ class TextChannel:
                     raise
                 raise DefenderEndpointError(f"{sid}: {type(exc).__name__}: {exc}") from exc
             replies += 1
-            w.emit("message", {"session_id": sid, "mode": self.mode, "direction": "to_attacker",
-                               "turn": delivered, "text": reply, "chars": len(reply),
-                               "truncated": truncated, "closed": turn.closed}, episode_id=ep)
+            w.emit(
+                "message",
+                {
+                    "session_id": sid,
+                    "mode": self.mode,
+                    "direction": "to_attacker",
+                    "turn": delivered,
+                    "text": reply,
+                    "chars": len(reply),
+                    "truncated": truncated,
+                    "closed": turn.closed,
+                },
+                episode_id=ep,
+            )
             log_rows.append(("to_attacker", reply))
             if feedback is not None:
-                w.emit("research_feedback", {"session_id": sid, "mode": self.mode,
-                                             "turn": delivered, "feedback": dict(feedback)},
-                       episode_id=ep)
-            obs = Observation(reply=reply, turn=delivered,
-                              turns_left=self.max_user_turns - delivered,
-                              closed=turn.closed, research=feedback)
+                w.emit(
+                    "research_feedback",
+                    {
+                        "session_id": sid,
+                        "mode": self.mode,
+                        "turn": delivered,
+                        "feedback": dict(feedback),
+                    },
+                    episode_id=ep,
+                )
+            obs = Observation(
+                reply=reply,
+                turn=delivered,
+                turns_left=self.max_user_turns - delivered,
+                closed=turn.closed,
+                research=feedback,
+            )
             if turn.closed:
                 on_close = getattr(user, "on_close", None)
                 if callable(on_close):
@@ -213,9 +278,16 @@ class TextChannel:
                 break
 
         close(status)
-        return SessionResult(session_id=sid, episode_id=ep, mode=self.mode, status=status,
-                             user_turns=delivered, defender_turns=replies, violation=violation,
-                             transcript=tuple(log_rows))
+        return SessionResult(
+            session_id=sid,
+            episode_id=ep,
+            mode=self.mode,
+            status=status,
+            user_turns=delivered,
+            defender_turns=replies,
+            violation=violation,
+            transcript=tuple(log_rows),
+        )
 
 
 def ensure_not_mixed(results) -> str:

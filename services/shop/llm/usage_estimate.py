@@ -23,8 +23,10 @@ def estimate_text(text: str) -> int:
 
 
 def estimate_tool_calls(calls: Iterable[ToolCall]) -> int:
-    return sum(estimate_text(tc.name) + estimate_text(json.dumps(tc.arguments, sort_keys=True))
-               for tc in calls)
+    return sum(
+        estimate_text(tc.name) + estimate_text(json.dumps(tc.arguments, sort_keys=True))
+        for tc in calls
+    )
 
 
 def estimate_prompt(messages: Sequence[Message], tools: Sequence[ToolSpec] = ()) -> int:

@@ -61,28 +61,43 @@ class UsageMeter:
         L = self.limits
         ep = self._ep(episode_id)
         if self.run.requests >= L.max_requests_per_run:
-            raise LimitExceeded(f"лимит запросов на прогон {L.max_requests_per_run} исчерпан",
-                                scope="run", limit_name="max_requests_per_run",
-                                limit=L.max_requests_per_run, used=self.run.requests)
+            raise LimitExceeded(
+                f"лимит запросов на прогон {L.max_requests_per_run} исчерпан",
+                scope="run",
+                limit_name="max_requests_per_run",
+                limit=L.max_requests_per_run,
+                used=self.run.requests,
+            )
         if ep is not None and ep.requests >= L.max_requests_per_episode:
-            raise LimitExceeded(f"лимит запросов на эпизод {L.max_requests_per_episode} исчерпан "
-                                f"({episode_id})", scope="episode",
-                                limit_name="max_requests_per_episode",
-                                limit=L.max_requests_per_episode, used=ep.requests)
+            raise LimitExceeded(
+                f"лимит запросов на эпизод {L.max_requests_per_episode} исчерпан ({episode_id})",
+                scope="episode",
+                limit_name="max_requests_per_episode",
+                limit=L.max_requests_per_episode,
+                used=ep.requests,
+            )
         budget = L.max_output_tokens
-        for scope, cnt, cap in (("run", self.run, L.max_tokens_per_run),
-                                ("episode", ep, L.max_tokens_per_episode)):
+        for scope, cnt, cap in (
+            ("run", self.run, L.max_tokens_per_run),
+            ("episode", ep, L.max_tokens_per_episode),
+        ):
             if cnt is None or cap is None:
                 continue
             left = cap - cnt.tokens
             if left <= 0:
-                raise LimitExceeded(f"бюджет токенов ({scope}) {cap} исчерпан", scope=scope,
-                                    limit_name=f"max_tokens_per_{scope}", limit=cap, used=cnt.tokens)
+                raise LimitExceeded(
+                    f"бюджет токенов ({scope}) {cap} исчерпан",
+                    scope=scope,
+                    limit_name=f"max_tokens_per_{scope}",
+                    limit=cap,
+                    used=cnt.tokens,
+                )
             budget = min(budget, left)
         return budget
 
-    def record(self, episode_id: str | None, *, tokens_in: int, tokens_out: int,
-               failed: bool = False) -> None:
+    def record(
+        self, episode_id: str | None, *, tokens_in: int, tokens_out: int, failed: bool = False
+    ) -> None:
         for cnt in (self.run, self._ep(episode_id)):
             if cnt is None:
                 continue
@@ -93,7 +108,15 @@ class UsageMeter:
 
     def snapshot(self) -> dict:
         def d(c: _Counter) -> dict:
-            return {"requests": c.requests, "failed": c.failed, "tokens_in": c.tokens_in,
-                    "tokens_out": c.tokens_out}
-        return {"limits": self.limits.to_dict(), "run": d(self.run),
-                "episodes": {k: d(v) for k, v in sorted(self.episodes.items())}}
+            return {
+                "requests": c.requests,
+                "failed": c.failed,
+                "tokens_in": c.tokens_in,
+                "tokens_out": c.tokens_out,
+            }
+
+        return {
+            "limits": self.limits.to_dict(),
+            "run": d(self.run),
+            "episodes": {k: d(v) for k, v in sorted(self.episodes.items())},
+        }

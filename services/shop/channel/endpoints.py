@@ -84,10 +84,17 @@ class RuleDemoDefender:
         self.received.append(text)
         low = text.lower()
         if "manager" in low or "human" in low:
-            return DefenderTurn("I passed your case to a support specialist. They will contact you.",
-                                closed=True, signals={"escalated": True, "policy_action": "escalate"})
+            return DefenderTurn(
+                "I passed your case to a support specialist. They will contact you.",
+                closed=True,
+                signals={"escalated": True, "policy_action": "escalate"},
+            )
         if "order" in low and any(ch.isdigit() for ch in text):
-            return DefenderTurn("Thanks. I checked the order. A refund request needs the item name.",
-                                signals={"clarification_requested": True, "exec_status": "ok"})
-        return DefenderTurn("Could you tell me the order number and what is wrong with the item?",
-                            signals={"clarification_requested": True})
+            return DefenderTurn(
+                "Thanks. I checked the order. A refund request needs the item name.",
+                signals={"clarification_requested": True, "exec_status": "ok"},
+            )
+        return DefenderTurn(
+            "Could you tell me the order number and what is wrong with the item?",
+            signals={"clarification_requested": True},
+        )

@@ -50,7 +50,8 @@ from .types import (
 # хеш (seed, эпизод, плагин, точка, вход) < rate. Сбой выглядит для политики как обычный
 # `error` (таймаут детектора), плагин при этом не вызывается.
 _FAULTS: contextvars.ContextVar[tuple[float, int] | None] = contextvars.ContextVar(
-    "lab_guard_faults", default=None)
+    "lab_guard_faults", default=None
+)
 
 
 @contextlib.contextmanager
@@ -80,10 +81,11 @@ class InjectedGuardFault(TimeoutError):
 @dataclass(frozen=True)
 class GuardResult:
     """Итог одного вызова для политики: сигнал (или сбой) и записанные затраты."""
+
     plugin_id: str
     version: str
     stage: str
-    status: str                         # ok | error
+    status: str  # ok | error
     signal: GuardSignal | None
     error: str | None = None
     cost: Mapping[str, Any] = field(default_factory=dict)
@@ -118,13 +120,18 @@ class GuardHost:
     `models` — модели-детекторы по `plugin_id` для плагинов с `needs_model`.
     """
 
-    def __init__(self, writer_for: Callable[[str], ComponentWriter], *,
-                 episode_id: str | None = None, db_path: str | Path | None = None,
-                 models: Mapping[str, Any] | None = None):
+    def __init__(
+        self,
+        writer_for: Callable[[str], ComponentWriter],
+        *,
+        episode_id: str | None = None,
+        db_path: str | Path | None = None,
+        models: Mapping[str, Any] | None = None,
+    ):
         self._writer_for = writer_for
         self._writers: dict[str, ComponentWriter] = {}
         self.episode_id = episode_id
-        self.db_path = Path(db_path) if db_path is not None else None
+        self.db_path = db_path if db_path is not None else None
         self._models = dict(models or {})
         self._monitor: sqlite3.Connection | None = None
         if self.db_path is not None:
@@ -152,24 +159,36 @@ class GuardHost:
             return None
         return self._monitor.execute("PRAGMA data_version").fetchone()[0]
 
-    def run(self, plugin: GuardPlugin, inp: GuardInput, *, t_sim: float | None = None) -> GuardResult:
+    def run(
+        self, plugin: GuardPlugin, inp: GuardInput, *, t_sim: float | None = None
+    ) -> GuardResult:
         if not isinstance(plugin, GuardPlugin):
             raise GuardContractError(f"{plugin!r} не является GuardPlugin")
         if not isinstance(inp, GuardInput):
             raise GuardContractError("вход гвардрейла должен быть GuardInput")
         if inp.stage not in plugin.stages:
             raise GuardContractError(
-                f"{plugin.plugin_id}: стадия {inp.stage!r} не поддерживается ({list(plugin.stages)})")
+                f"{plugin.plugin_id}: стадия {inp.stage!r} не поддерживается ({list(plugin.stages)})"
+            )
         if plugin.needs_db and self.db_path is None:
             raise GuardContractError(f"{plugin.plugin_id}: нужна БД эпизода (db_path)")
         model = self._models.get(plugin.plugin_id)
         if plugin.needs_model and model is None:
             raise GuardContractError(f"{plugin.plugin_id}: нужна модель-детектор")
 
-        base = {"plugin": plugin.plugin_id, "version": plugin.version, "stage": inp.stage,
-                "plugin_fp": plugin.fingerprint(), **input_digest(inp)}
-        rt = GuardRuntime(db_path=self.db_path if plugin.needs_db else None, model=model,
-                          episode_id=self.episode_id, t_sim=t_sim)
+        base = {
+            "plugin": plugin.plugin_id,
+            "version": plugin.version,
+            "stage": inp.stage,
+            "plugin_fp": plugin.fingerprint(),
+            **input_digest(inp),
+        }
+        rt = GuardRuntime(
+            db_path=self.db_path if plugin.needs_db else None,
+            model=model,
+            episode_id=self.episode_id,
+            t_sim=t_sim,
+        )
         writer = self._writer(plugin)
         v0 = self._db_version()
         sig: GuardSignal | None = None
@@ -185,17 +204,21 @@ class GuardHost:
         finally:
             rt.close()
         # Задержку и CPU замеряет хост; начисленное плагином (токены, запросы, GPU) — сверху.
-        cost = dict(rt.charged, latency_ms=(time.perf_counter() - w0) * 1000.0,
-                    cpu_ms=(time.process_time() - c0) * 1000.0)
+        cost = dict(
+            rt.charged,
+            latency_ms=(time.perf_counter() - w0) * 1000.0,
+            cpu_ms=(time.process_time() - c0) * 1000.0,
+        )
         rep = rt.replayed
         data = dict(base)
-        if rep:   # воспроизведение по кэшу: записанные затраты живого вывода (ревизия 2)
+        if rep:  # воспроизведение по кэшу: записанные затраты живого вывода (ревизия 2)
             cost["cpu_ms"] += rep.get("cpu_ms", 0.0)
             cost["latency_ms"] += rep.get("latency_ms", 0.0)
             data["replayed_compute"] = {k: round(v, 3) for k, v in rep.items()}
         if self._db_version() != v0:
             failure = GuardContractViolation(
-                f"{plugin.plugin_id}: состояние БД изменилось во время вызова (FR-1.8)")
+                f"{plugin.plugin_id}: состояние БД изменилось во время вызова (FR-1.8)"
+            )
             data["violation"] = "db_write"
         elif isinstance(failure, GuardContractViolation):
             data["violation"] = "decision_or_non_signal"
@@ -209,11 +232,19 @@ class GuardHost:
         if isinstance(failure, GuardContractViolation):
             # дефект плагина, а не «сбой детектора»: прогон с ним не засчитывается
             raise failure
-        return GuardResult(plugin.plugin_id, plugin.version, inp.stage, "error", None,
-                           error=f"{type(failure).__name__}: {failure}"[:300], cost=cost)
+        return GuardResult(
+            plugin.plugin_id,
+            plugin.version,
+            inp.stage,
+            "error",
+            None,
+            error=f"{type(failure).__name__}: {failure}"[:300],
+            cost=cost,
+        )
 
-    def evaluate(self, guards: GuardSet, inp: GuardInput, *,
-                 t_sim: float | None = None) -> tuple[GuardResult, ...]:
+    def evaluate(
+        self, guards: GuardSet, inp: GuardInput, *, t_sim: float | None = None
+    ) -> tuple[GuardResult, ...]:
         """Вызвать все плагины набора, установленные в точке `inp.stage`, по порядку.
         Сигналы не агрегируются: свёртку и выбор реакции делает политика."""
         return tuple(self.run(p, inp, t_sim=t_sim) for p in guards.at(inp.stage))

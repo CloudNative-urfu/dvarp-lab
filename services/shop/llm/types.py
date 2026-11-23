@@ -41,8 +41,16 @@ class LimitExceeded(LLMError):
     для защищаемой — повод безопасно завершить эпизод. Трактовку выбирает вызывающий код.
     """
 
-    def __init__(self, message: str, *, scope: str, limit_name: str, limit: int, used: int,
-                 owner: str = "own"):
+    def __init__(
+        self,
+        message: str,
+        *,
+        scope: str,
+        limit_name: str,
+        limit: int,
+        used: int,
+        owner: str = "own",
+    ):
         super().__init__(message)
         self.scope, self.limit_name, self.limit, self.used = scope, limit_name, limit, used
         # Ревизия 6: чей лимит исчерпан — собственный лимит стороны ("own") или общий бюджет
@@ -58,9 +66,14 @@ class ToolCall:
     arguments: dict
 
     def to_openai(self) -> dict:
-        return {"id": self.id, "type": "function",
-                "function": {"name": self.name,
-                             "arguments": json.dumps(self.arguments, sort_keys=True)}}
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "arguments": json.dumps(self.arguments, sort_keys=True),
+            },
+        }
 
 
 @dataclass(frozen=True)
@@ -101,10 +114,16 @@ def as_message(m: Message | Mapping[str, Any]) -> Message:
             continue
         fn = tc.get("function", {})
         args = fn.get("arguments", {})
-        calls.append(ToolCall(tc.get("id", ""), fn.get("name", ""),
-                              json.loads(args) if isinstance(args, str) else dict(args)))
-    return Message(m["role"], m.get("content") or "", tuple(calls), m.get("tool_call_id"),
-                   m.get("name"))
+        calls.append(
+            ToolCall(
+                tc.get("id", ""),
+                fn.get("name", ""),
+                json.loads(args) if isinstance(args, str) else dict(args),
+            )
+        )
+    return Message(
+        m["role"], m.get("content") or "", tuple(calls), m.get("tool_call_id"), m.get("name")
+    )
 
 
 @dataclass(frozen=True)
@@ -116,8 +135,14 @@ class ToolSpec:
     parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
 
     def to_openai(self) -> dict:
-        return {"type": "function", "function": {"name": self.name, "description": self.description,
-                                                 "parameters": self.parameters}}
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
 
 
 @dataclass(frozen=True)
@@ -153,8 +178,12 @@ class Completion:
 
     def cost(self, *, requests: int = 1) -> dict:
         """Запись затрат в формате event_log (для компонентов без вида llm_call, напр. guard:*)."""
-        return {"tokens_in": self.usage.tokens_in, "tokens_out": self.usage.tokens_out,
-                "requests": requests, "latency_ms": self.latency_ms}
+        return {
+            "tokens_in": self.usage.tokens_in,
+            "tokens_out": self.usage.tokens_out,
+            "requests": requests,
+            "latency_ms": self.latency_ms,
+        }
 
 
 def normalize_messages(messages: Sequence[Message | Mapping[str, Any]]) -> tuple[Message, ...]:

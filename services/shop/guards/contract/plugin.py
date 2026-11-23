@@ -23,7 +23,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from services.shop.db import connect
+from services.shop.db import ShopConn, connect
 from services.shop.journal import COST_FIELDS
 from services.shop.repro import hash_obj
 
@@ -49,28 +49,35 @@ def _authorizer(action: int, arg1: Any, arg2: Any, dbname: Any, source: Any) -> 
     return sqlite3.SQLITE_DENY
 
 
-def open_readonly(db_path: str | Path) -> sqlite3.Connection:
-    """Соединение для гвардрейла: только чтение на трёх уровнях (URI ro, query_only,
-    авторизатор). Любой INSERT/UPDATE/DELETE/DDL/ATTACH завершается ошибкой."""
+def open_readonly(db_path: str) -> ShopConn:
+    """Connection for a guardrail: read-only on two levels (query_only pragma plus the
+    authorizer where the dialect supports it). Any INSERT/UPDATE/DELETE/DDL/ATTACH fails."""
     conn = connect(db_path, readonly=True)
-    conn.set_authorizer(_authorizer)
+    if conn._conn.dialect.name == "sqlite":
+        conn._conn.connection.set_authorizer(_authorizer)
     return conn
 
 
 class GuardRuntime:
     """Среда одного вызова плагина. Создаётся хостом на каждый вызов и закрывается им."""
 
-    def __init__(self, *, db_path: str | Path | None = None, model: Any = None,
-                 episode_id: str | None = None, t_sim: float | None = None):
-        self._db_path = Path(db_path) if db_path is not None else None
-        self._conn: sqlite3.Connection | None = None
+    def __init__(
+        self,
+        *,
+        db_path: str | Path | None = None,
+        model: Any = None,
+        episode_id: str | None = None,
+        t_sim: float | None = None,
+    ):
+        self._db_path = db_path if db_path is not None else None
+        self._conn: ShopConn | None = None
         self._model = model
         self._episode_id = episode_id
         self._t_sim = t_sim
         self._cost: dict[str, Any] = {}
         self._replayed: dict[str, float] = {}
 
-    def db(self) -> sqlite3.Connection:
+    def db(self) -> ShopConn:
         if self._db_path is None:
             raise GuardContractError("гвардрейлу не передана БД эпизода")
         if self._conn is None:
@@ -134,7 +141,7 @@ class GuardPlugin:
     stages: ClassVar[tuple[str, ...]] = ()
     deployment: ClassVar[str] = "builtin"
     license: ClassVar[str] = ""
-    origin: ClassVar[str] = ""           # откуда взят механизм/модель (каталог §16, статья)
+    origin: ClassVar[str] = ""  # откуда взят механизм/модель (каталог §16, статья)
     enabled_by_default: ClassVar[bool] = True
     needs_db: ClassVar[bool] = False
     needs_model: ClassVar[bool] = False
@@ -151,7 +158,8 @@ class GuardPlugin:
             d = cls.default_params[k]
             if d is not None and not _same_kind(d, v):
                 raise GuardContractError(
-                    f"{cls.plugin_id}: параметр {k} типа {type(v).__name__}, ожидался {type(d).__name__}")
+                    f"{cls.plugin_id}: параметр {k} типа {type(v).__name__}, ожидался {type(d).__name__}"
+                )
             merged[k] = v
         object.__setattr__(self, "params", freeze(merged, f"{cls.plugin_id}.params"))
         object.__setattr__(self, "_frozen", True)
@@ -171,10 +179,17 @@ class GuardPlugin:
 
     def describe(self) -> dict[str, Any]:
         cls = type(self)
-        return {"plugin_id": cls.plugin_id, "version": cls.version, "mechanism": cls.mechanism,
-                "stages": list(cls.stages), "deployment": cls.deployment, "license": cls.license,
-                "origin": cls.origin, "enabled_by_default": cls.enabled_by_default,
-                "params": thaw(self.params)}
+        return {
+            "plugin_id": cls.plugin_id,
+            "version": cls.version,
+            "mechanism": cls.mechanism,
+            "stages": list(cls.stages),
+            "deployment": cls.deployment,
+            "license": cls.license,
+            "origin": cls.origin,
+            "enabled_by_default": cls.enabled_by_default,
+            "params": thaw(self.params),
+        }
 
     def fingerprint(self) -> str:
         return hash_obj(self.describe())
@@ -199,7 +214,9 @@ def validate_plugin_class(cls: type) -> None:
         raise GuardContractError(f"{cls!r} не является подклассом GuardPlugin")
     name = getattr(cls, "__name__", "?")
     if not PLUGIN_ID_RE.match(cls.plugin_id or ""):
-        raise GuardContractError(f"{name}: plugin_id {cls.plugin_id!r} не вида [a-z0-9][a-z0-9_.-]*")
+        raise GuardContractError(
+            f"{name}: plugin_id {cls.plugin_id!r} не вида [a-z0-9][a-z0-9_.-]*"
+        )
     if not isinstance(cls.version, str) or not cls.version:
         raise GuardContractError(f"{cls.plugin_id}: версия обязательна (NFR-2.2, NFR-2.5)")
     if cls.mechanism not in MECHANISMS:
@@ -207,7 +224,8 @@ def validate_plugin_class(cls: type) -> None:
     if cls.deployment not in DEPLOYMENTS:
         raise GuardContractError(
             f"{cls.plugin_id}: развёртывание {cls.deployment!r} не из {DEPLOYMENTS} "
-            "(NFR-2.4: только OSS/self-hosted)")
+            "(NFR-2.4: только OSS/self-hosted)"
+        )
     if cls.deployment == "self_hosted" and (not cls.license or not cls.origin):
         raise GuardContractError(f"{cls.plugin_id}: для self_hosted нужны license и origin")
     stages = tuple(cls.stages)

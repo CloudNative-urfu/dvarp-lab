@@ -66,9 +66,11 @@ def _context_targets(inp: GuardInput) -> tuple[int, ...]:
 # ------------------------------------------------------------------ Qwen3Guard-Gen
 
 _QWEN_SAFETY = re.compile(r"Safety: (Safe|Unsafe|Controversial)")
-_QWEN_CATS = re.compile(r"(Violent|Non-violent Illegal Acts|Sexual Content or Sexual Acts|PII|"
-                        r"Suicide & Self-Harm|Unethical Acts|Politically Sensitive Topics|"
-                        r"Copyright Violation|Jailbreak|None)")
+_QWEN_CATS = re.compile(
+    r"(Violent|Non-violent Illegal Acts|Sexual Content or Sexual Acts|PII|"
+    r"Suicide & Self-Harm|Unethical Acts|Politically Sensitive Topics|"
+    r"Copyright Violation|Jailbreak|None)"
+)
 
 
 def parse_qwen3guard(content: str) -> tuple[str, list[str]]:
@@ -94,29 +96,47 @@ class Qwen3GuardAdapter(GuardPlugin):
     origin = "catalog #9: Qwen/Qwen3Guard-Gen-4B (Hugging Face), served locally"
     enabled_by_default = False
     needs_model = True
-    default_params = {"model": "Qwen/Qwen3Guard-Gen-4B", "unsafe": "block", "controversial": "flag",
-                      "max_tokens": 64}
+    default_params = {
+        "model": "Qwen/Qwen3Guard-Gen-4B",
+        "unsafe": "block",
+        "controversial": "flag",
+        "max_tokens": 64,
+    }
 
     def inspect(self, inp: GuardInput, rt: GuardRuntime) -> GuardSignal:
-        comp = rt.complete(_conversation(inp, include_untrusted=True),
-                           max_tokens=self.params["max_tokens"])
+        comp = rt.complete(
+            _conversation(inp, include_untrusted=True), max_tokens=self.params["max_tokens"]
+        )
         safety, cats = parse_qwen3guard(comp.content)
         labels = tuple(dict.fromkeys(_label(c) for c in cats))[:8]
         if safety == "Safe":
             return GuardSignal("allow", score=0.0, reasons=("qwen3guard: Safe",))
         sig = self.params["unsafe" if safety == "Unsafe" else "controversial"]
-        return GuardSignal(sig, score=1.0 if safety == "Unsafe" else 0.5,
-                           reasons=(f"qwen3guard: {safety}",), labels=labels,
-                           targets=_context_targets(inp))
+        return GuardSignal(
+            sig,
+            score=1.0 if safety == "Unsafe" else 0.5,
+            reasons=(f"qwen3guard: {safety}",),
+            labels=labels,
+            targets=_context_targets(inp),
+        )
 
 
 # ------------------------------------------------------------------ Llama Guard 3
 
 LLAMA_GUARD_CATEGORIES = {
-    "S1": "Violent Crimes", "S2": "Non-Violent Crimes", "S3": "Sex-Related Crimes",
-    "S4": "Child Sexual Exploitation", "S5": "Defamation", "S6": "Specialized Advice",
-    "S7": "Privacy", "S8": "Intellectual Property", "S9": "Indiscriminate Weapons", "S10": "Hate",
-    "S11": "Suicide & Self-Harm", "S12": "Sexual Content", "S13": "Elections",
+    "S1": "Violent Crimes",
+    "S2": "Non-Violent Crimes",
+    "S3": "Sex-Related Crimes",
+    "S4": "Child Sexual Exploitation",
+    "S5": "Defamation",
+    "S6": "Specialized Advice",
+    "S7": "Privacy",
+    "S8": "Intellectual Property",
+    "S9": "Indiscriminate Weapons",
+    "S10": "Hate",
+    "S11": "Suicide & Self-Harm",
+    "S12": "Sexual Content",
+    "S13": "Elections",
     "S14": "Code Interpreter Abuse",
 }
 
@@ -146,18 +166,23 @@ class LlamaGuard3Adapter(GuardPlugin):
 
     def inspect(self, inp: GuardInput, rt: GuardRuntime) -> GuardSignal:
         # Шаблон чата Llama Guard 3 (категории S1–S14 и инструкция формата) применяет сервер.
-        comp = rt.complete(_conversation(inp, include_untrusted=False),
-                           max_tokens=self.params["max_tokens"])
+        comp = rt.complete(
+            _conversation(inp, include_untrusted=False), max_tokens=self.params["max_tokens"]
+        )
         unsafe, cats = parse_llama_guard(comp.content)
         if not unsafe:
             return GuardSignal("allow", score=0.0, reasons=("llama-guard: safe",))
-        return GuardSignal(self.params["unsafe"], score=1.0,
-                           reasons=tuple(f"llama-guard: {c} {LLAMA_GUARD_CATEGORIES[c]}"
-                                         for c in cats)[:8] or ("llama-guard: unsafe",),
-                           labels=tuple(c.lower() for c in cats)[:8])
+        return GuardSignal(
+            self.params["unsafe"],
+            score=1.0,
+            reasons=tuple(f"llama-guard: {c} {LLAMA_GUARD_CATEGORIES[c]}" for c in cats)[:8]
+            or ("llama-guard: unsafe",),
+            labels=tuple(c.lower() for c in cats)[:8],
+        )
 
 
 # ------------------------------------------------------------------ Granite Guardian 3.1
+
 
 def parse_granite(content: str) -> bool:
     m = re.match(r"\s*(yes|no)\b", content or "", re.IGNORECASE)
@@ -177,8 +202,12 @@ class GraniteGuardianAdapter(GuardPlugin):
     origin = "catalog #8: ibm-granite/granite-guardian-3.1-2b (Hugging Face), served locally"
     enabled_by_default = False
     needs_model = True
-    default_params = {"model": "ibm-granite/granite-guardian-3.1-2b", "risk_name": "jailbreak",
-                      "yes": "block", "max_tokens": 8}
+    default_params = {
+        "model": "ibm-granite/granite-guardian-3.1-2b",
+        "risk_name": "jailbreak",
+        "yes": "block",
+        "max_tokens": 8,
+    }
 
     def inspect(self, inp: GuardInput, rt: GuardRuntime) -> GuardSignal:
         # Упрощение: risk_name передаётся системным сообщением, а не guardian_config шаблона
@@ -188,12 +217,17 @@ class GraniteGuardianAdapter(GuardPlugin):
         risky = parse_granite(rt.complete(msgs, max_tokens=self.params["max_tokens"]).content)
         if not risky:
             return GuardSignal("allow", score=0.0, reasons=("granite-guardian: No",))
-        return GuardSignal(self.params["yes"], score=1.0,
-                           reasons=(f"granite-guardian: Yes ({self.params['risk_name']})",),
-                           labels=(_label(self.params["risk_name"]),), targets=_context_targets(inp))
+        return GuardSignal(
+            self.params["yes"],
+            score=1.0,
+            reasons=(f"granite-guardian: Yes ({self.params['risk_name']})",),
+            labels=(_label(self.params["risk_name"]),),
+            targets=_context_targets(inp),
+        )
 
 
 # ------------------------------------------------------------------ Presidio (библиотека)
+
 
 @register
 class PresidioAdapter(GuardPlugin):
@@ -205,8 +239,12 @@ class PresidioAdapter(GuardPlugin):
     license = "MIT"
     origin = "catalog #19: microsoft/presidio (presidio_analyzer), local library"
     enabled_by_default = False
-    default_params = {"entities": ["EMAIL_ADDRESS", "CREDIT_CARD", "PHONE_NUMBER", "PERSON"],
-                      "threshold": 0.5, "language": "en", "hit": "block"}
+    default_params = {
+        "entities": ["EMAIL_ADDRESS", "CREDIT_CARD", "PHONE_NUMBER", "PERSON"],
+        "threshold": 0.5,
+        "language": "en",
+        "hit": "block",
+    }
 
     def inspect(self, inp: GuardInput, rt: GuardRuntime) -> GuardSignal:
         try:
@@ -214,15 +252,27 @@ class PresidioAdapter(GuardPlugin):
         except ImportError as exc:
             raise AdapterUnavailable("presidio_analyzer is not installed") from exc
         engine = mod.AnalyzerEngine()
-        found = engine.analyze(text=inp.candidate_output, language=self.params["language"],
-                               entities=list(self.params["entities"]))
-        hits = sorted({(r.entity_type, float(r.score)) for r in found
-                       if float(r.score) >= self.params["threshold"]}, key=lambda x: (-x[1], x[0]))
+        found = engine.analyze(
+            text=inp.candidate_output,
+            language=self.params["language"],
+            entities=list(self.params["entities"]),
+        )
+        hits = sorted(
+            {
+                (r.entity_type, float(r.score))
+                for r in found
+                if float(r.score) >= self.params["threshold"]
+            },
+            key=lambda x: (-x[1], x[0]),
+        )
         if not hits:
             return GuardSignal("allow", score=0.0)
-        return GuardSignal(self.params["hit"], score=min(1.0, hits[0][1]),
-                           reasons=tuple(f"presidio: {e} {s:.2f}" for e, s in hits)[:8],
-                           labels=tuple(dict.fromkeys(_label(e) for e, _ in hits))[:8])
+        return GuardSignal(
+            self.params["hit"],
+            score=min(1.0, hits[0][1]),
+            reasons=tuple(f"presidio: {e} {s:.2f}" for e, s in hits)[:8],
+            labels=tuple(dict.fromkeys(_label(e) for e, _ in hits))[:8],
+        )
 
 
 ADAPTER_PLUGINS = (Qwen3GuardAdapter, LlamaGuard3Adapter, GraniteGuardianAdapter, PresidioAdapter)

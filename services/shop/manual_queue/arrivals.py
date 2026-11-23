@@ -14,7 +14,7 @@ from services.shop.repro import check_seed, make_rng
 
 from .model import QueueError
 
-DEFAULT_MEAN_GAP = 3.0   # средний интервал прибытия легальных обращений, мин
+DEFAULT_MEAN_GAP = 3.0  # средний интервал прибытия легальных обращений, мин
 DEFAULT_N_LEGAL = 24
 DEFAULT_W_A = 0.2
 
@@ -22,9 +22,9 @@ DEFAULT_W_A = 0.2
 @dataclass(frozen=True)
 class Slot:
     case_id: str
-    traffic: str        # legal / attack
+    traffic: str  # legal / attack
     t_arrival: float
-    index: int          # номер внутри своего потока
+    index: int  # номер внутри своего потока
 
 
 def poisson_times(seed: int, label: str, n: int, mean_gap: float) -> list[float]:
@@ -49,8 +49,14 @@ def attack_count(n_legal: int, w_a: float) -> int:
     return round(n_legal * w_a / (1.0 - w_a))
 
 
-def build_flow(seed: int, n_legal: int = DEFAULT_N_LEGAL, w_a: float = DEFAULT_W_A,
-               mean_gap: float = DEFAULT_MEAN_GAP, *, with_attacks: bool = True) -> list[Slot]:
+def build_flow(
+    seed: int,
+    n_legal: int = DEFAULT_N_LEGAL,
+    w_a: float = DEFAULT_W_A,
+    mean_gap: float = DEFAULT_MEAN_GAP,
+    *,
+    with_attacks: bool = True,
+) -> list[Slot]:
     """Поток прогона, отсортированный по моменту прибытия.
 
     Атаки распределены по тому же горизонту, что и легальный поток: средний интервал
@@ -62,6 +68,8 @@ def build_flow(seed: int, n_legal: int = DEFAULT_N_LEGAL, w_a: float = DEFAULT_W
         n_att = attack_count(n_legal, w_a)
         if n_att:
             gap = mean_gap * n_legal / n_att
-            slots += [Slot(f"attack-{i:03d}", "attack", t, i)
-                      for i, t in enumerate(poisson_times(seed, "attack", n_att, gap))]
+            slots += [
+                Slot(f"attack-{i:03d}", "attack", t, i)
+                for i, t in enumerate(poisson_times(seed, "attack", n_att, gap))
+            ]
     return sorted(slots, key=lambda s: (s.t_arrival, s.case_id))

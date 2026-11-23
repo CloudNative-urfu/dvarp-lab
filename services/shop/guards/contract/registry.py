@@ -45,15 +45,22 @@ class GuardRegistry:
         return plugin_id in self._classes
 
     def ids(self, *, include_disabled: bool = True) -> list[str]:
-        return sorted(i for i, c in self._classes.items()
-                      if include_disabled or c.enabled_by_default)
+        return sorted(
+            i for i, c in self._classes.items() if include_disabled or c.enabled_by_default
+        )
 
-    def create(self, plugin_id: str, params: Mapping[str, Any] | None = None, *,
-               allow_disabled: bool = False) -> GuardPlugin:
+    def create(
+        self,
+        plugin_id: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        allow_disabled: bool = False,
+    ) -> GuardPlugin:
         cls = self.get(plugin_id)
         if not cls.enabled_by_default and not allow_disabled:
             raise GuardContractError(
-                f"гвардрейл {plugin_id!r} выключен по умолчанию; нужен allow_disabled=True")
+                f"гвардрейл {plugin_id!r} выключен по умолчанию; нужен allow_disabled=True"
+            )
         return cls(**dict(params or {}))
 
     def catalog(self) -> list[dict[str, Any]]:
@@ -62,10 +69,17 @@ class GuardRegistry:
 
 
 def _class_meta(cls: type[GuardPlugin]) -> dict[str, Any]:
-    return {"plugin_id": cls.plugin_id, "version": cls.version, "mechanism": cls.mechanism,
-            "stages": list(cls.stages), "deployment": cls.deployment, "license": cls.license,
-            "origin": cls.origin, "enabled_by_default": cls.enabled_by_default,
-            "params": dict(cls.default_params)}
+    return {
+        "plugin_id": cls.plugin_id,
+        "version": cls.version,
+        "mechanism": cls.mechanism,
+        "stages": list(cls.stages),
+        "deployment": cls.deployment,
+        "license": cls.license,
+        "origin": cls.origin,
+        "enabled_by_default": cls.enabled_by_default,
+        "params": dict(cls.default_params),
+    }
 
 
 # Общий реестр полигона: встроенные плагины (guard_plugins) регистрируются в нём при импорте.
@@ -102,20 +116,29 @@ class GuardSet:
             bad = [s for s in it.stages if s not in it.plugin.stages]
             if bad:
                 raise GuardContractError(
-                    f"{pid}: точки {bad} не поддерживаются плагином (допустимо {list(it.plugin.stages)})")
+                    f"{pid}: точки {bad} не поддерживаются плагином (допустимо {list(it.plugin.stages)})"
+                )
             if len(set(it.stages)) != len(it.stages):
                 raise GuardContractError(f"{pid}: повтор точки установки")
         object.__setattr__(self, "_items", items)
         object.__setattr__(self, "_spec", spec)
-        object.__setattr__(self, "_fp", hash_obj([
-            {"stages": list(it.stages), "plugin": it.plugin.describe()} for it in items]))
+        object.__setattr__(
+            self,
+            "_fp",
+            hash_obj([{"stages": list(it.stages), "plugin": it.plugin.describe()} for it in items]),
+        )
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise AttributeError("GuardSet заморожен (NFR-2.10)")
 
     @classmethod
-    def from_spec(cls, spec: Iterable[Mapping[str, Any]], registry: GuardRegistry | None = None,
-                  *, allow_disabled: bool = False) -> GuardSet:
+    def from_spec(
+        cls,
+        spec: Iterable[Mapping[str, Any]],
+        registry: GuardRegistry | None = None,
+        *,
+        allow_disabled: bool = False,
+    ) -> GuardSet:
         registry = registry or DEFAULT_REGISTRY
         items, norm = [], []
         for i, entry in enumerate(spec):

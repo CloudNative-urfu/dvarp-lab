@@ -58,12 +58,17 @@ from .policy import SEVERITY, ReactionPolicy, strictest
 
 # Тексты, которые код политики отправляет в канал (английский, NFR-2.7). Они не раскрывают
 # устройство гвардрейлов: обычный пользователь видит эскалацию, уточнение или отказ (§4.2).
-MSG_ESCALATED = ("Thank you. Your request needs a manual check, I have passed it to a human "
-                 "operator. You will get an answer from our team.")
-MSG_TERMINATED = ("Sorry, I can not continue with this request in chat. If you still need help "
-                  "with a return, please open a new request.")
-MSG_WITHHELD = ("Sorry, I can not share that. Is there anything else about your return I can "
-                "help with?")
+MSG_ESCALATED = (
+    "Thank you. Your request needs a manual check, I have passed it to a human "
+    "operator. You will get an answer from our team."
+)
+MSG_TERMINATED = (
+    "Sorry, I can not continue with this request in chat. If you still need help "
+    "with a return, please open a new request."
+)
+MSG_WITHHELD = (
+    "Sorry, I can not share that. Is there anything else about your return I can help with?"
+)
 CLARIFY_CODE = "other"
 MSG_CLARIFY = QUESTION_TEXTS[CLARIFY_CODE]
 # Что видит агент вместо изолированного текста.
@@ -83,26 +88,33 @@ class PipelineError(RuntimeError):
     """Неверная сборка конвейера (не реакция на сигнал)."""
 
 
-def task_for_session(session: Session, description: str, *, order_id: str | None = None,
-                     task_id: str | None = None) -> TrustedTask:
+def task_for_session(
+    session: Session, description: str, *, order_id: str | None = None, task_id: str | None = None
+) -> TrustedTask:
     """Доверенная задача эпизода из сессии оркестратора (не из текста пользователя)."""
-    return TrustedTask(task_id=task_id or f"refund:{session.ticket_id}", description=description,
-                       customer_id=session.customer_id, ticket_id=session.ticket_id,
-                       allowed_tools=TOOL_NAMES, order_id=order_id)
+    return TrustedTask(
+        task_id=task_id or f"refund:{session.ticket_id}",
+        description=description,
+        customer_id=session.customer_id,
+        ticket_id=session.ticket_id,
+        allowed_tools=TOOL_NAMES,
+        order_id=order_id,
+    )
 
 
 @dataclass(frozen=True)
 class Decision:
     """Решение политики в одной точке установки за один вызов конвейера."""
+
     stage: str
-    action: str                       # исполненное действие
-    proposed: str                     # действие по таблице до detect_only / лимита уточнений
+    action: str  # исполненное действие
+    proposed: str  # действие по таблице до detect_only / лимита уточнений
     signals: tuple[dict[str, Any], ...] = ()
     targets: tuple[int, ...] = ()
     blocked: bool = False
     exec_status: str | None = None
     exec_code: str | None = None
-    reply: str | None = None          # текст, который код политики отправит вместо агента
+    reply: str | None = None  # текст, который код политики отправит вместо агента
     basis: str = ""
 
     @property
@@ -130,9 +142,17 @@ def _read_texts(op: str, data: Mapping[str, Any]) -> list[dict[str, Any]]:
 class GuardPipeline:
     """Конвейер одного эпизода. Реализует `tools.ToolInterceptor` (точки tool и context)."""
 
-    def __init__(self, guards: GuardSet, policy: ReactionPolicy, *, host: GuardHost,
-                 executor: Executor, writer: ComponentWriter, task: TrustedTask,
-                 episode_id: str | None = None):
+    def __init__(
+        self,
+        guards: GuardSet,
+        policy: ReactionPolicy,
+        *,
+        host: GuardHost,
+        executor: Executor,
+        writer: ComponentWriter,
+        task: TrustedTask,
+        episode_id: str | None = None,
+    ):
         if not isinstance(guards, GuardSet):
             raise PipelineError("нужен GuardSet конфигурации")
         if not isinstance(policy, ReactionPolicy):
@@ -145,8 +165,10 @@ class GuardPipeline:
             raise PipelineError("нужен писатель журнала компонента 'policy'")
         if not isinstance(task, TrustedTask):
             raise PipelineError("нужна TrustedTask")
-        if (task.customer_id, task.ticket_id) != (executor.session.customer_id,
-                                                  executor.session.ticket_id):
+        if (task.customer_id, task.ticket_id) != (
+            executor.session.customer_id,
+            executor.session.ticket_id,
+        ):
             raise PipelineError("доверенная задача не совпадает с сессией исполнителя")
         self.guards, self.policy, self.task = guards, policy, task
         self._host, self._ex, self._writer = host, executor, writer
@@ -155,7 +177,7 @@ class GuardPipeline:
         self._turn = 0
         self._fragments: list[ContextFragment] = []
         self._seen: set[tuple[str, str, str]] = set()
-        self._frozen: str | None = None        # действие, приостановившее текущий ход
+        self._frozen: str | None = None  # действие, приостановившее текущий ход
         self._pending_reply: str | None = None
         self._final_reply: str | None = None
         self.halted = False
@@ -211,8 +233,16 @@ class GuardPipeline:
             except GuardContractViolation as exc:
                 # дефект плагина: журнал уже записал guard_error; прогон будет отвергнут
                 self.violations.append(f"{plugin.plugin_id}: {exc}"[:300])
-                out.append(GuardResult(plugin.plugin_id, plugin.version, inp.stage, "error",
-                                       None, error="GuardContractViolation"))
+                out.append(
+                    GuardResult(
+                        plugin.plugin_id,
+                        plugin.version,
+                        inp.stage,
+                        "error",
+                        None,
+                        error="GuardContractViolation",
+                    )
+                )
         return tuple(out)
 
     def _decide(self, stage: str, results: tuple[GuardResult, ...]) -> tuple[str, list, tuple]:
@@ -224,14 +254,30 @@ class GuardPipeline:
                 act = rule.on[eff]
                 if act == "isolate":
                     targets.update(r.signal.targets)
-                sigs.append({"plugin": r.plugin_id, "status": "ok", "signal": r.signal.signal,
-                             "score": r.signal.score, "effective": eff, "action": act,
-                             "labels": list(r.signal.labels)})
+                sigs.append(
+                    {
+                        "plugin": r.plugin_id,
+                        "status": "ok",
+                        "signal": r.signal.signal,
+                        "score": r.signal.score,
+                        "effective": eff,
+                        "action": act,
+                        "labels": list(r.signal.labels),
+                    }
+                )
             else:
                 act = rule.on["error"]
-                sigs.append({"plugin": r.plugin_id, "status": "error", "signal": None,
-                             "score": None, "effective": "error", "action": act,
-                             "labels": []})
+                sigs.append(
+                    {
+                        "plugin": r.plugin_id,
+                        "status": "error",
+                        "signal": None,
+                        "score": None,
+                        "effective": "error",
+                        "action": act,
+                        "labels": [],
+                    }
+                )
             actions.append(act)
         return strictest(actions), sigs, tuple(sorted(targets))
 
@@ -270,8 +316,9 @@ class GuardPipeline:
             return self._final_reply
         return MSG_CLARIFY if action == "clarify" else None
 
-    def _run_stage(self, inp: GuardInput, *, extra: Mapping[str, Any] | None = None
-                   ) -> Decision | None:
+    def _run_stage(
+        self, inp: GuardInput, *, extra: Mapping[str, Any] | None = None
+    ) -> Decision | None:
         """Вызвать плагины точки, выбрать и исполнить реакцию, записать решение.
         Возвращает None, если в точке нет плагинов (g0: ни затрат, ни событий)."""
         if not self.guards.at(inp.stage):
@@ -288,30 +335,51 @@ class GuardPipeline:
         blocked = action != "continue"
         if action == "isolate" and inp.stage == "context" and not targets:
             targets = tuple(i for i, _ in inp.untrusted_fragments())
-        basis += (f"{inp.stage}: strictest plugin action {proposed}"
-                  + (f" -> executed {action}" if action != proposed else ""))
-        d = Decision(stage=inp.stage, action=action, proposed=proposed, signals=tuple(sigs),
-                     targets=targets, blocked=blocked,
-                     exec_status=res.status if res is not None else None,
-                     exec_code=res.code if res is not None else None,
-                     reply=self._reply_for(action),
-                     basis=basis)
+        basis += f"{inp.stage}: strictest plugin action {proposed}" + (
+            f" -> executed {action}" if action != proposed else ""
+        )
+        d = Decision(
+            stage=inp.stage,
+            action=action,
+            proposed=proposed,
+            signals=tuple(sigs),
+            targets=targets,
+            blocked=blocked,
+            exec_status=res.status if res is not None else None,
+            exec_code=res.code if res is not None else None,
+            reply=self._reply_for(action),
+            basis=basis,
+        )
         self.decisions.append(d)
         self._turn_decisions.append(d)
-        data = {"point": inp.stage, "action": action, "proposed": proposed,
-                "detect_only": self.policy.detect_only, "blocked": blocked,
-                "signals": [dict(s) for s in sigs], "targets": list(targets),
-                "exec": ({"op": res.op, "status": res.status, "code": res.code}
-                         if res is not None else None),
-                "clarifications": self.clarifications, "halted": self.halted,
-                "escalated": self.escalated, "turn": self._turn,
-                "policy": self.policy.name, "policy_fp": self.policy.fingerprint()[:16],
-                "basis": basis, **dict(extra or {})}
+        data = {
+            "point": inp.stage,
+            "action": action,
+            "proposed": proposed,
+            "detect_only": self.policy.detect_only,
+            "blocked": blocked,
+            "signals": [dict(s) for s in sigs],
+            "targets": list(targets),
+            "exec": (
+                {"op": res.op, "status": res.status, "code": res.code} if res is not None else None
+            ),
+            "clarifications": self.clarifications,
+            "halted": self.halted,
+            "escalated": self.escalated,
+            "turn": self._turn,
+            "policy": self.policy.name,
+            "policy_fp": self.policy.fingerprint()[:16],
+            "basis": basis,
+            **dict(extra or {}),
+        }
         cost_policy[0] += time.perf_counter() - w1
         cost_policy[1] += time.process_time() - c1
-        self._writer.emit("decision", data, episode_id=self.episode_id,
-                          cost={"latency_ms": cost_policy[0] * 1000.0,
-                                "cpu_ms": cost_policy[1] * 1000.0})
+        self._writer.emit(
+            "decision",
+            data,
+            episode_id=self.episode_id,
+            cost={"latency_ms": cost_policy[0] * 1000.0, "cpu_ms": cost_policy[1] * 1000.0},
+        )
         return d
 
     def _input(self, stage: str, **kw: Any) -> GuardInput:
@@ -333,8 +401,13 @@ class GuardPipeline:
         self._pending_reply = None
         self._turn_decisions = []
         if self.halted:
-            d = Decision("input", "continue", "continue", reply=self._final_reply or MSG_TERMINATED,
-                         basis="automatic handling already stopped")
+            d = Decision(
+                "input",
+                "continue",
+                "continue",
+                reply=self._final_reply or MSG_TERMINATED,
+                basis="automatic handling already stopped",
+            )
             return d, None
         d = self._run_stage(self._input("input", context=tuple(self._fragments)))
         if d is None or d.action == "continue":
@@ -352,17 +425,32 @@ class GuardPipeline:
             return Gate("halt", MSG_CALL_DENIED)
         if self._frozen is not None:
             # ход приостановлен реакцией политики: до ответа пользователя вызовы не исполняются
-            self._writer.emit("decision", {
-                "point": "tool", "action": self._frozen, "proposed": self._frozen,
-                "detect_only": False, "blocked": True, "signals": [], "targets": [],
-                "exec": None, "clarifications": self.clarifications, "halted": False,
-                "escalated": self.escalated, "turn": self._turn, "policy": self.policy.name,
-                "policy_fp": self.policy.fingerprint()[:16], "tool": call.tool,
-                "basis": f"turn suspended by policy action {self._frozen}; call not executed",
-            }, episode_id=self.episode_id)
+            self._writer.emit(
+                "decision",
+                {
+                    "point": "tool",
+                    "action": self._frozen,
+                    "proposed": self._frozen,
+                    "detect_only": False,
+                    "blocked": True,
+                    "signals": [],
+                    "targets": [],
+                    "exec": None,
+                    "clarifications": self.clarifications,
+                    "halted": False,
+                    "escalated": self.escalated,
+                    "turn": self._turn,
+                    "policy": self.policy.name,
+                    "policy_fp": self.policy.fingerprint()[:16],
+                    "tool": call.tool,
+                    "basis": f"turn suspended by policy action {self._frozen}; call not executed",
+                },
+                episode_id=self.episode_id,
+            )
             return Gate("deny", MSG_CALL_DENIED)
-        inp = self._input("tool", context=tuple(self._fragments),
-                          proposed_call=ProposedCall(**call.proposed()))
+        inp = self._input(
+            "tool", context=tuple(self._fragments), proposed_call=ProposedCall(**call.proposed())
+        )
         d = self._run_stage(inp, extra={"tool": call.tool, "op": call.op})
         if d is None or d.action == "continue":
             return Gate("allow")
@@ -386,8 +474,9 @@ class GuardPipeline:
         if self.halted:
             return self._redact(call.op, data, frags, None)
         inp = self._input("context", context=frags)
-        d = self._run_stage(inp, extra={"tool": call.tool, "op": call.op,
-                                        "n_fragments": len(frags)})
+        d = self._run_stage(
+            inp, extra={"tool": call.tool, "op": call.op, "n_fragments": len(frags)}
+        )
         if d is None or d.action == "continue":
             return data
         if d.action == "isolate":
@@ -397,13 +486,20 @@ class GuardPipeline:
         return self._redact(call.op, data, frags, None)
 
     @staticmethod
-    def _redact(op: str, data: dict[str, Any], frags: tuple[ContextFragment, ...],
-                targets: tuple[int, ...] | None) -> dict[str, Any]:
+    def _redact(
+        op: str,
+        data: dict[str, Any],
+        frags: tuple[ContextFragment, ...],
+        targets: tuple[int, ...] | None,
+    ) -> dict[str, Any]:
         """Копия данных чтения с изолированными фрагментами. `targets=None` — все недоверенные."""
         out = copy.deepcopy(data)
         refs = _read_texts(op, out)
-        idx = (targets if targets is not None
-               else tuple(i for i, f in enumerate(frags) if not f.trusted))
+        idx = (
+            targets
+            if targets is not None
+            else tuple(i for i, f in enumerate(frags) if not f.trusted)
+        )
         for i in idx:
             if 0 <= i < len(refs):
                 refs[i]["text"] = ISOLATED_FRAGMENT
@@ -416,10 +512,13 @@ class GuardPipeline:
         if not isinstance(draft, str):
             raise PipelineError("черновик ответа — строка")
         if self.halted:
-            return (Decision("output", "continue", "continue", basis="already stopped"),
-                    self._final_reply or MSG_TERMINATED)
-        d = self._run_stage(self._input("output", context=tuple(self._fragments),
-                                        candidate_output=draft))
+            return (
+                Decision("output", "continue", "continue", basis="already stopped"),
+                self._final_reply or MSG_TERMINATED,
+            )
+        d = self._run_stage(
+            self._input("output", context=tuple(self._fragments), candidate_output=draft)
+        )
         if d is None or d.action == "continue":
             return (d or Decision("output", "continue", "continue")), draft
         if self.halted:
@@ -430,37 +529,58 @@ class GuardPipeline:
 
     # ------------------------------------------------------------------ очередь и сводка
 
-    def case_record(self, *, case_id: str, traffic: str, t_arrival: float,
-                    auto_minutes: float, account: str = "") -> CaseRecord:
+    def case_record(
+        self,
+        *,
+        case_id: str,
+        traffic: str,
+        t_arrival: float,
+        auto_minutes: float,
+        account: str = "",
+    ) -> CaseRecord:
         """Обращение потока для общей ручной очереди: эскалация политики физически
         попадает в ту же очередь, что и легальные обращения (FR-1.15, FR-1.16)."""
-        return CaseRecord(case_id=case_id, traffic=traffic, t_arrival=t_arrival,
-                          auto_minutes=auto_minutes, escalated=self.escalated, account=account,
-                          episode_id=self.episode_id,
-                          reason="guard_escalation" if self.escalated else None)
+        return CaseRecord(
+            case_id=case_id,
+            traffic=traffic,
+            t_arrival=t_arrival,
+            auto_minutes=auto_minutes,
+            escalated=self.escalated,
+            account=account,
+            episode_id=self.episode_id,
+            reason="guard_escalation" if self.escalated else None,
+        )
 
     def summary(self) -> dict[str, Any]:
         by: dict[str, dict[str, int]] = {}
         for d in self.decisions:
             by.setdefault(d.stage, {}).setdefault(d.action, 0)
             by[d.stage][d.action] += 1
-        return {"policy": self.policy.name, "guards_fp": self.guards.fingerprint(),
-                "policy_fp": self.policy.fingerprint(), "decisions": by,
-                "n_decisions": len(self.decisions),
-                "blocked": sum(1 for d in self.decisions if d.blocked),
-                "clarifications": self.clarifications, "escalated": self.escalated,
-                "terminated": self.terminated, "halted": self.halted,
-                "violations": list(self.violations)}
+        return {
+            "policy": self.policy.name,
+            "guards_fp": self.guards.fingerprint(),
+            "policy_fp": self.policy.fingerprint(),
+            "decisions": by,
+            "n_decisions": len(self.decisions),
+            "blocked": sum(1 for d in self.decisions if d.blocked),
+            "clarifications": self.clarifications,
+            "escalated": self.escalated,
+            "terminated": self.terminated,
+            "halted": self.halted,
+            "violations": list(self.violations),
+        }
 
     def research_signals(self) -> dict[str, Any]:
         """Сигналы хода для research-mode (канал передаёт их только в этом режиме)."""
         ds = self._turn_decisions
         raw = [d.raw_signal for d in ds if d.raw_signal]
         order = {"allow": 0, "score": 1, "flag": 2, "block": 3}
-        return {"escalated": self.escalated,
-                "clarification_requested": any(d.action == "clarify" for d in ds),
-                "guard_signal": max(raw, key=order.__getitem__) if raw else None,
-                "policy_action": strictest(d.action for d in ds) if ds else None}
+        return {
+            "escalated": self.escalated,
+            "clarification_requested": any(d.action == "clarify" for d in ds),
+            "guard_signal": max(raw, key=order.__getitem__) if raw else None,
+            "policy_action": strictest(d.action for d in ds) if ds else None,
+        }
 
 
 assert set(_REACTION_OPS) | {"continue", "isolate"} == set(SEVERITY)

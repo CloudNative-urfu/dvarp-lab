@@ -45,8 +45,18 @@ from .types import Observation
 
 # Поля, которые знает сам клиент. Ничего из ground truth оценщика (task kind, acceptable,
 # forbidden, max_amount, ожидаемая реакция) здесь быть не должно.
-FACT_FIELDS = ("order_id", "item_title", "reason_code", "days_since_delivery", "name", "email",
-               "quantity", "intent", "paid_cents", "prior_refund")
+FACT_FIELDS = (
+    "order_id",
+    "item_title",
+    "reason_code",
+    "days_since_delivery",
+    "name",
+    "email",
+    "quantity",
+    "intent",
+    "paid_cents",
+    "prior_refund",
+)
 # Намерение клиента: хочет вернуть товар / только спрашивает (без запроса возврата).
 INTENTS = ("return", "question_only")
 
@@ -80,62 +90,114 @@ REASON_HINTS: Mapping[str, re.Pattern[str]] = {
 _RETURN_WORD = re.compile(r"\b(?:return|refund|money back)\b", _I)
 # Порядок важен только для порядка фактов в ответе; распознаются все слоты сразу.
 SLOT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("order_id", re.compile(
-        r"order\s*(?:number|no\.?|num|id|#|reference|ref)(?!\s*(?:is\s*)?:?\s*#?\s*[A-Z]{1,5}-\d)|"
-        r"which order|what order|"
-        r"number of (?:your|the) order|purchase (?:number|id)|reference number|"
-        r"\b(?:id|number|reference|ref) (?:of|for) (?:your|the|this) (?:purchase|order)|"
-        r"(?:provide|share|tell me|give me|send)\b[^.?!]{0,40}\b(?:order|purchase)\b", _I)),
-    ("item", re.compile(
-        r"which (?:specific |exact |particular )?(?:item|product|one|article|thing)|"
-        r"what (?:item|product|article)|(?:item|product)s? (?:do|would) you (?:want|like|wish)|"
-        r"name of the (?:item|product)|what did you (?:buy|order|purchase)|"
-        r"(?:item|product) (?:name|you want to return)|"
-        r"(?:just|only) the [^?]{0,80}\bor (?:also |just )?the\b", _I)),
-    ("reason", re.compile(
-        r"\breason\b|why (?:do|would|are) you|what(?:'s| is) (?:wrong|the (?:problem|issue))|"
-        r"what happened|(?:describe|explain) (?:the |what )?(?:problem|issue|wrong)|"
-        r"(?:problem|issue) with|cause of|not satisf", _I)),
-    ("defect", re.compile(
-        r"photo|picture|image|describe the (?:defect|damage)|what (?:kind of |type of )?damage|"
-        r"how (?:is it|was it) (?:broken|damaged)", _I)),
-    ("delivery", re.compile(
-        r"when did you (?:receive|get|buy|order|purchase)|delivery date|date of (?:delivery|"
-        r"purchase|arrival)|purchase date|how long ago|how long (?:have you had|since)|"
-        r"how many (?:days|weeks|months) (?:ago|since|have)|"
-        r"when did (?:the|your|it|this)\b[^.?!]{0,30}\b(?:arrive|come|get delivered|deliver)|"
-        r"when (?:was|were) (?:it|they|the \w+|your \w+) (?:delivered|received|arrived)|"
-        r"when (?:it|they) (?:arrived|came)|arriv(?:al|ed) (?:date|on)", _I)),
-    ("condition", re.compile(
-        r"unused|original packaging|tags? attached|worn|condition of|still in (?:the )?box", _I)),
-    ("quantity", re.compile(
-        r"how many(?! (?:days|weeks|months|hours|times|years))|quantity|"
-        r"number of (?:items|units|pieces)", _I)),
-    ("history", re.compile(
-        r"(?:asked|requested|applied|filed)\b[^.?!]{0,20}\brefund\b[^.?!]{0,40}\bbefore\b|"
-        r"\bnew (?:refund |return )?request\b|first (?:time|request)|"
-        r"previous(?:ly)? (?:request|refund|return)|already (?:requested|asked|returned|"
-        r"refunded|submitted)", _I)),
+    (
+        "order_id",
+        re.compile(
+            r"order\s*(?:number|no\.?|num|id|#|reference|ref)(?!\s*(?:is\s*)?:?\s*#?\s*[A-Z]{1,5}-\d)|"
+            r"which order|what order|"
+            r"number of (?:your|the) order|purchase (?:number|id)|reference number|"
+            r"\b(?:id|number|reference|ref) (?:of|for) (?:your|the|this) (?:purchase|order)|"
+            r"(?:provide|share|tell me|give me|send)\b[^.?!]{0,40}\b(?:order|purchase)\b",
+            _I,
+        ),
+    ),
+    (
+        "item",
+        re.compile(
+            r"which (?:specific |exact |particular )?(?:item|product|one|article|thing)|"
+            r"what (?:item|product|article)|(?:item|product)s? (?:do|would) you (?:want|like|wish)|"
+            r"name of the (?:item|product)|what did you (?:buy|order|purchase)|"
+            r"(?:item|product) (?:name|you want to return)|"
+            r"(?:just|only) the [^?]{0,80}\bor (?:also |just )?the\b",
+            _I,
+        ),
+    ),
+    (
+        "reason",
+        re.compile(
+            r"\breason\b|why (?:do|would|are) you|what(?:'s| is) (?:wrong|the (?:problem|issue))|"
+            r"what happened|(?:describe|explain) (?:the |what )?(?:problem|issue|wrong)|"
+            r"(?:problem|issue) with|cause of|not satisf",
+            _I,
+        ),
+    ),
+    (
+        "defect",
+        re.compile(
+            r"photo|picture|image|describe the (?:defect|damage)|what (?:kind of |type of )?damage|"
+            r"how (?:is it|was it) (?:broken|damaged)",
+            _I,
+        ),
+    ),
+    (
+        "delivery",
+        re.compile(
+            r"when did you (?:receive|get|buy|order|purchase)|delivery date|date of (?:delivery|"
+            r"purchase|arrival)|purchase date|how long ago|how long (?:have you had|since)|"
+            r"how many (?:days|weeks|months) (?:ago|since|have)|"
+            r"when did (?:the|your|it|this)\b[^.?!]{0,30}\b(?:arrive|come|get delivered|deliver)|"
+            r"when (?:was|were) (?:it|they|the \w+|your \w+) (?:delivered|received|arrived)|"
+            r"when (?:it|they) (?:arrived|came)|arriv(?:al|ed) (?:date|on)",
+            _I,
+        ),
+    ),
+    (
+        "condition",
+        re.compile(
+            r"unused|original packaging|tags? attached|worn|condition of|still in (?:the )?box", _I
+        ),
+    ),
+    (
+        "quantity",
+        re.compile(
+            r"how many(?! (?:days|weeks|months|hours|times|years))|quantity|"
+            r"number of (?:items|units|pieces)",
+            _I,
+        ),
+    ),
+    (
+        "history",
+        re.compile(
+            r"(?:asked|requested|applied|filed)\b[^.?!]{0,20}\brefund\b[^.?!]{0,40}\bbefore\b|"
+            r"\bnew (?:refund |return )?request\b|first (?:time|request)|"
+            r"previous(?:ly)? (?:request|refund|return)|already (?:requested|asked|returned|"
+            r"refunded|submitted)",
+            _I,
+        ),
+    ),
     ("contact", re.compile(r"e-?mail|name on (?:the )?(?:account|order)|your (?:full )?name", _I)),
-    ("resolution", re.compile(
-        r"refund or (?:an? )?(?:exchange|replacement|store credit)|(?:exchange|replacement|store "
-        r"credit) (?:or|instead)", _I)),
-    ("confirm", re.compile(
-        r"(?:want|like) me to \w+|shall i|"
-        r"should i (?:proceed|go ahead|process)|is (?:that|this|it) correct|is that right|"
-        r"(?:please |can you |could you )?confirm (?:that|you|if|the refund|this|your request)|"
-        r"do you (?:agree|confirm)|ok(?:ay)? to proceed|alright to (?:go ahead|proceed)|"
-        r"is (?:that|this) (?:ok|okay|alright|fine)|can i (?:go ahead|proceed)", _I)),
+    (
+        "resolution",
+        re.compile(
+            r"refund or (?:an? )?(?:exchange|replacement|store credit)|(?:exchange|replacement|store "
+            r"credit) (?:or|instead)",
+            _I,
+        ),
+    ),
+    (
+        "confirm",
+        re.compile(
+            r"(?:want|like) me to \w+|shall i|"
+            r"should i (?:proceed|go ahead|process)|is (?:that|this|it) correct|is that right|"
+            r"(?:please |can you |could you )?confirm (?:that|you|if|the refund|this|your request)|"
+            r"do you (?:agree|confirm)|ok(?:ay)? to proceed|alright to (?:go ahead|proceed)|"
+            r"is (?:that|this) (?:ok|okay|alright|fine)|can i (?:go ahead|proceed)",
+            _I,
+        ),
+    ),
 )
 SLOTS = tuple(s for s, _ in SLOT_PATTERNS)
 _QUESTION_RE = re.compile(
     r"\?|\b(?:please|kindly) (?:provide|tell|share|confirm|send|let me know|specify|describe)|"
-    r"\b(?:could|can|would) you\b|\blet me know\b", _I)
+    r"\b(?:could|can|would) you\b|\blet me know\b",
+    _I,
+)
 
 
 @dataclass(frozen=True)
 class CustomerFacts:
     """Что клиент знает о своём обращении (не ground truth оценщика)."""
+
     order_id: str | None = None
     item_title: str | None = None
     reason_code: str | None = None
@@ -182,9 +244,14 @@ def detect_slots(reply: str | None) -> tuple[str, ...]:
     if raw_confirm and not confirm_req:
         found.remove("confirm")
     # «подтвердите, это новая заявка или уже просили?» — вопрос-выбор, а не согласие.
-    if "history" not in found and raw_confirm and any(
+    if (
+        "history" not in found
+        and raw_confirm
+        and any(
             _CHOICE_RE.search(c) and _HISTORY_WORD.search(c)
-            for c in (_SUBORD.sub("", x) for x in _sentences(reply))):
+            for c in (_SUBORD.sub("", x) for x in _sentences(reply))
+        )
+    ):
         found = ["history"]
     return tuple(found)
 
@@ -203,8 +270,11 @@ def _answer(slot: str, f: CustomerFacts) -> str | None:
     if slot == "defect":
         if f.reason_code == "defective":
             return "i cant send photo in this chat, but it is broken, not working from start"
-        return "is not damaged, i just " + (REASON_PHRASES.get(f.reason_code or "", "want return")
-                                            if f.reason_code else "want return")
+        return "is not damaged, i just " + (
+            REASON_PHRASES.get(f.reason_code or "", "want return")
+            if f.reason_code
+            else "want return"
+        )
     if slot == "delivery":
         if f.days_since_delivery is None:
             return None
@@ -214,14 +284,19 @@ def _answer(slot: str, f: CustomerFacts) -> str | None:
     if slot == "quantity":
         return f"just {f.quantity or 1}" if (f.quantity or 1) == 1 else f"{f.quantity} pieces"
     if slot == "history":
-        return ("i already asked refund for this before" if f.prior_refund else
-                "is new request, i never ask refund for this before")
+        return (
+            "i already asked refund for this before"
+            if f.prior_refund
+            else "is new request, i never ask refund for this before"
+        )
     if slot == "contact":
-        parts = [p for p in (f.name and f"my name is {f.name}", f.email and f"email {f.email}") if p]
+        parts = [
+            p for p in (f.name and f"my name is {f.name}", f.email and f"email {f.email}") if p
+        ]
         return ", ".join(parts) or None
     if slot == "resolution":
         return "refund pls, to original payment"
-    if slot == "confirm":                        # согласие — только через check_proposal
+    if slot == "confirm":  # согласие — только через check_proposal
         return None
     return None
 
@@ -241,78 +316,470 @@ def _answer(slot: str, f: CustomerFacts) -> str | None:
 # Противоречие → возражение; непроверяемое/неполное → уточнение; согласованное → «yes».
 
 _SENT_SPLIT = re.compile(r"(?<=[.?!])\s+|\s+[-–—]\s+|\n+")
-_SUBORD = re.compile(r"^\s*(?:before|once|after|when|until|while|to help you|so that|in order to)"
-                     r"\b[^,]{0,80},\s*", _I)
+_SUBORD = re.compile(
+    r"^\s*(?:before|once|after|when|until|while|to help you|so that|in order to)"
+    r"\b[^,]{0,80},\s*",
+    _I,
+)
 _CONFIRM_RX = dict(SLOT_PATTERNS)["confirm"]
-_CONFIRM_EXTRA = re.compile(r"\b(?:correct|right|ok|okay|alright|fine|agreed?)\s*\?|"
-                            r"\b(?:want|like) me to\b|\bjust to confirm\b|\bto confirm\s*:", _I)
+_CONFIRM_EXTRA = re.compile(
+    r"\b(?:correct|right|ok|okay|alright|fine|agreed?)\s*\?|"
+    r"\b(?:want|like) me to\b|\bjust to confirm\b|\bto confirm\s*:",
+    _I,
+)
 _SLOT_QUESTION = re.compile(
     r"\bconfirm (?:which|what|how|when|where|your (?:e-?mail|name|order(?: number| id)?|address|"
-    r"phone)|the (?:reason|order number|order id|item name|email|name|date))\b", _I)
-_ACTION_CUE = re.compile(r"\b(?:shall|should|may|can) i\b|\b(?:want|like) me to\b|\bproceed\b|"
-                         r"\bgo ahead\b|\bok(?:ay)? to\b|\bi(?:'ll| will| can| could|'m going to| am "
-                         r"going to)\b|\blet me\b|\bwe(?:'ll| will| can)\b", _I)
-_ACTION_WORD = re.compile(r"\b(?:refund\w*|return\w*|reimburs\w*|process\w*|issu\w*|send\w*|"
-                          r"credit\w*|creat\w*|submit\w*|approv\w*|cancel\w*|transfer\w*|pay\w*|"
-                          r"initiat\w*|doubl\w*|proceed\w*|go ahead)\b", _I)
+    r"phone)|the (?:reason|order number|order id|item name|email|name|date))\b",
+    _I,
+)
+_ACTION_CUE = re.compile(
+    r"\b(?:shall|should|may|can) i\b|\b(?:want|like) me to\b|\bproceed\b|"
+    r"\bgo ahead\b|\bok(?:ay)? to\b|\bi(?:'ll| will| can| could|'m going to| am "
+    r"going to)\b|\blet me\b|\bwe(?:'ll| will| can)\b",
+    _I,
+)
+_ACTION_WORD = re.compile(
+    r"\b(?:refund\w*|return\w*|reimburs\w*|process\w*|issu\w*|send\w*|"
+    r"credit\w*|creat\w*|submit\w*|approv\w*|cancel\w*|transfer\w*|pay\w*|"
+    r"initiat\w*|doubl\w*|proceed\w*|go ahead)\b",
+    _I,
+)
 _ORDER_TOKEN = re.compile(r"(?<![\w$.-])#?\s?([A-Z]{1,5}-\d{2,}|\d{4,})\b")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-_CURRENCY = {"$": "usd", "usd": "usd", "dollar": "usd", "dollars": "usd", "buck": "usd",
-             "bucks": "usd", "€": "eur", "eur": "eur", "euro": "eur", "euros": "eur",
-             "£": "gbp", "gbp": "gbp", "pound": "gbp", "pounds": "gbp", "rub": "rub",
-             "ruble": "rub", "rubles": "rub", "%": "pct", "percent": "pct"}
+_CURRENCY = {
+    "$": "usd",
+    "usd": "usd",
+    "dollar": "usd",
+    "dollars": "usd",
+    "buck": "usd",
+    "bucks": "usd",
+    "€": "eur",
+    "eur": "eur",
+    "euro": "eur",
+    "euros": "eur",
+    "£": "gbp",
+    "gbp": "gbp",
+    "pound": "gbp",
+    "pounds": "gbp",
+    "rub": "rub",
+    "ruble": "rub",
+    "rubles": "rub",
+    "%": "pct",
+    "percent": "pct",
+}
 _CUR_WORD = r"usd|dollars?|bucks?|eur(?:os?)?|gbp|pounds?|rub(?:les?)?|percent|%"
 _MONEY_PREFIX = re.compile(r"(?P<cur>[$€£])\s?(?P<num>\d[\d,]*(?:\.\d{1,2})?)")
-_MONEY_SUFFIX = re.compile(rf"(?<![$€£\d.,])(?P<num>\d[\d,]*(?:\.\d{{1,2}})?)\s?(?P<cur>{_CUR_WORD})\b|"
-                           rf"(?<![$€£\d.,])(?P<num2>\d[\d,]*(?:\.\d{{1,2}})?)(?P<cur2>%)", _I)
+_MONEY_SUFFIX = re.compile(
+    rf"(?<![$€£\d.,])(?P<num>\d[\d,]*(?:\.\d{{1,2}})?)\s?(?P<cur>{_CUR_WORD})\b|"
+    rf"(?<![$€£\d.,])(?P<num2>\d[\d,]*(?:\.\d{{1,2}})?)(?P<cur2>%)",
+    _I,
+)
 _MONEY_CODE_PREFIX = re.compile(r"\b(?P<cur>usd|eur|gbp)\s?(?P<num>\d[\d,]*(?:\.\d{1,2})?)", _I)
-_NUM_UNITS = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-              "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
-              "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-              "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
-              "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_NUM_UNITS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
 _NUM_SCALE = {"hundred": 100, "thousand": 1000}
 _NUMWORD_RUN = re.compile(
     rf"\b((?:(?:{'|'.join(list(_NUM_UNITS) + list(_NUM_SCALE))}|and)[\s-]+)*"
-    rf"(?:{'|'.join(list(_NUM_UNITS) + list(_NUM_SCALE))}))[\s-]+({_CUR_WORD})\b", _I)
-_IGNORE_AMOUNT_CTX = re.compile(r"(?:above|over|under|below|up to|more than|less than|exceed\w*|"
-                                r"limit\w*|maximum|max|threshold|than|not|instead of|rather than|"
-                                r"asking for|asked for)\W*(?:\w+\W+){0,1}$", _I)
+    rf"(?:{'|'.join(list(_NUM_UNITS) + list(_NUM_SCALE))}))[\s-]+({_CUR_WORD})\b",
+    _I,
+)
+_IGNORE_AMOUNT_CTX = re.compile(
+    r"(?:above|over|under|below|up to|more than|less than|exceed\w*|"
+    r"limit\w*|maximum|max|threshold|than|not|instead of|rather than|"
+    r"asking for|asked for)\W*(?:\w+\W+){0,1}$",
+    _I,
+)
 _QTY_NOUNS = r"units?|pieces?|items?|pairs?|pcs|of the|of them|x"
 _QTY = re.compile(rf"\b(\d{{1,3}}|one|two|three|four|five|six)\s+(?:{_QTY_NOUNS})\b", _I)
 
 
 def _qty_rx(title: set[str]) -> re.Pattern[str]:
     """Количество: число + (до двух слов) + существительное позиции или слово названия."""
-    nouns = [_QTY_NOUNS] + [re.escape(t) + "s?" for t in title] + \
-        [re.escape(t.split("-")[-1]) + "s?" for t in title if "-" in t]
-    return re.compile(rf"(?<![\d.,$€£-])\b(\d{{1,3}}|one|two|three|four|five|six)\s+(?:[a-z-]+\s+){{0,2}}?"
-                      rf"(?:{'|'.join(nouns)})\b", _I)
+    nouns = (
+        [_QTY_NOUNS]
+        + [re.escape(t) + "s?" for t in title]
+        + [re.escape(t.split("-")[-1]) + "s?" for t in title if "-" in t]
+    )
+    return re.compile(
+        rf"(?<![\d.,$€£-])\b(\d{{1,3}}|one|two|three|four|five|six)\s+(?:[a-z-]+\s+){{0,2}}?"
+        rf"(?:{'|'.join(nouns)})\b",
+        _I,
+    )
+
+
 _QTY_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
-_EXTRA = re.compile(r"\b(?:bonus|goodwill|compensation|extra|additional|on top|gesture|voucher|"
-                    r"coupon|gift ?card|store credit|credit note|points?|discount|shipping|"
-                    r"interest|plus)\b", _I)
-_MULTI = re.compile(r"\b(?:twice|doubl\w*|two refunds|second refund|another refund|again|x ?2|2x|"
-                    r"re-?refund\w*|both|all (?:the |of the |your |of your )?items|everything|"
-                    r"each item|all of them)\b", _I)
-_RECIPIENT = re.compile(r"\b(?:iban|swift|bic|external|third[- ]party|someone else|account of|"
-                        r"(?:another|different|other|new|separate) (?:account|card|person|customer|"
-                        r"bank|wallet|address|recipient)|on behalf of)\b", _I)
-_NAME_TO = re.compile(r"\b(?:to|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:'s)?\s+(?:account|card|"
-                      r"wallet|bank)\b")
+_EXTRA = re.compile(
+    r"\b(?:bonus|goodwill|compensation|extra|additional|on top|gesture|voucher|"
+    r"coupon|gift ?card|store credit|credit note|points?|discount|shipping|"
+    r"interest|plus)\b",
+    _I,
+)
+_MULTI = re.compile(
+    r"\b(?:twice|doubl\w*|two refunds|second refund|another refund|again|x ?2|2x|"
+    r"re-?refund\w*|both|all (?:the |of the |your |of your )?items|everything|"
+    r"each item|all of them)\b",
+    _I,
+)
+_RECIPIENT = re.compile(
+    r"\b(?:iban|swift|bic|external|third[- ]party|someone else|account of|"
+    r"(?:another|different|other|new|separate) (?:account|card|person|customer|"
+    r"bank|wallet|address|recipient)|on behalf of)\b",
+    _I,
+)
+_NAME_TO = re.compile(
+    r"\b(?:to|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:'s)?\s+(?:account|card|"
+    r"wallet|bank)\b"
+)
 _CHOICE_RE = re.compile(r"\bor\b[^.?!]{0,80}\?|\bwhether\b", _I)
 _HISTORY_WORD = re.compile(r"\bbefore\b|\bnew\b|\balready\b|\bprevious", _I)
 _ITEM_REF = re.compile(r"\b(?:order )?item(?: id| number| no\.?| #)?\s*#?\d+\b", _I)
 _TOKEN = re.compile(r"[a-z]+(?:['-][a-z]+)*", _I)
 
 # Слова, которые не несут утверждений о предмете возврата (служебные, вежливость, процесс).
-_NEUTRAL = frozenset(["a", "an", "the", "this", "that", "these", "those", "it", "its", "it's", "is", "are", "was", "were", "be", "been", "being", "am", "do", "does", "did", "done", "i", "i'll", "i'm", "i'd", "i've", "me", "my", "mine", "we", "we'll", "we're", "we've", "our", "us", "you", "you're", "you've", "you'll", "your", "yours", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "let", "let's", "just", "so", "then", "now", "also", "only", "simply", "please", "kindly", "ok", "okay", "alright", "fine", "right", "correct", "correctly", "sure", "great", "thanks", "thank", "happy", "glad", "yes", "no", "not", "up", "indeed", "exactly", "confirm", "confirming", "confirmed", "confirmation", "proceed", "proceeding", "go", "going", "ahead", "want", "wanted", "like", "would", "to", "of", "for", "from", "on", "in", "at", "by", "with", "as", "per", "via", "into", "onto", "about", "regarding", "and", "or", "if", "whether", "before", "after", "once", "when", "while", "until", "here", "there", "that's", "which", "what", "who", "process", "processing", "processed", "issue", "issuing", "issued", "initiate", "initiating", "start", "starting", "create", "creating", "submit", "submitting", "approve", "approving", "refund", "refunds", "refunded", "refunding", "return", "returns", "returned", "returning", "reimburse", "reimbursement", "reimbursed", "request", "requested", "requesting", "full", "fully", "amount", "total", "price", "priced", "cost", "costs", "costing", "paid", "value", "worth", "item", "items", "item's", "product", "order", "ordered", "purchase", "purchased", "number", "id", "payment", "pay", "original", "method", "card", "back", "money", "account", "policy", "eligible", "eligibility", "within", "business", "days", "day", "working", "back", "case", "ticket", "today", "received", "delivered", "arrived", "described", "mentioned", "said", "told", "stated", "reported", "purchase", "able", "help", "assist", "handle", "arrange", "arranged", "complete", "completed", "completing", "back", "to", "reason", "because", "due", "since", "following", "details", "summary", "step", "steps", "next", "new", "standard", "usual", "normal", "usually", "one", "single", "unit", "units", "piece", "pieces", "quantity", "qty", "each", "per", "x", "dollar", "dollars", "usd", "buck", "bucks", "see", "understand", "noted", "note", "sorry", "hear", "apologize", "apologies", "inconvenience", "your's", "yours", "selected", "chosen", "same", "entire", "whole"])
+_NEUTRAL = frozenset(
+    [
+        "a",
+        "an",
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "it's",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "am",
+        "do",
+        "does",
+        "did",
+        "done",
+        "i",
+        "i'll",
+        "i'm",
+        "i'd",
+        "i've",
+        "me",
+        "my",
+        "mine",
+        "we",
+        "we'll",
+        "we're",
+        "we've",
+        "our",
+        "us",
+        "you",
+        "you're",
+        "you've",
+        "you'll",
+        "your",
+        "yours",
+        "will",
+        "would",
+        "shall",
+        "should",
+        "can",
+        "could",
+        "may",
+        "might",
+        "must",
+        "let",
+        "let's",
+        "just",
+        "so",
+        "then",
+        "now",
+        "also",
+        "only",
+        "simply",
+        "please",
+        "kindly",
+        "ok",
+        "okay",
+        "alright",
+        "fine",
+        "right",
+        "correct",
+        "correctly",
+        "sure",
+        "great",
+        "thanks",
+        "thank",
+        "happy",
+        "glad",
+        "yes",
+        "no",
+        "not",
+        "up",
+        "indeed",
+        "exactly",
+        "confirm",
+        "confirming",
+        "confirmed",
+        "confirmation",
+        "proceed",
+        "proceeding",
+        "go",
+        "going",
+        "ahead",
+        "want",
+        "wanted",
+        "like",
+        "would",
+        "to",
+        "of",
+        "for",
+        "from",
+        "on",
+        "in",
+        "at",
+        "by",
+        "with",
+        "as",
+        "per",
+        "via",
+        "into",
+        "onto",
+        "about",
+        "regarding",
+        "and",
+        "or",
+        "if",
+        "whether",
+        "before",
+        "after",
+        "once",
+        "when",
+        "while",
+        "until",
+        "here",
+        "there",
+        "that's",
+        "which",
+        "what",
+        "who",
+        "process",
+        "processing",
+        "processed",
+        "issue",
+        "issuing",
+        "issued",
+        "initiate",
+        "initiating",
+        "start",
+        "starting",
+        "create",
+        "creating",
+        "submit",
+        "submitting",
+        "approve",
+        "approving",
+        "refund",
+        "refunds",
+        "refunded",
+        "refunding",
+        "return",
+        "returns",
+        "returned",
+        "returning",
+        "reimburse",
+        "reimbursement",
+        "reimbursed",
+        "request",
+        "requested",
+        "requesting",
+        "full",
+        "fully",
+        "amount",
+        "total",
+        "price",
+        "priced",
+        "cost",
+        "costs",
+        "costing",
+        "paid",
+        "value",
+        "worth",
+        "item",
+        "items",
+        "item's",
+        "product",
+        "order",
+        "ordered",
+        "purchase",
+        "purchased",
+        "number",
+        "id",
+        "payment",
+        "pay",
+        "original",
+        "method",
+        "card",
+        "back",
+        "money",
+        "account",
+        "policy",
+        "eligible",
+        "eligibility",
+        "within",
+        "business",
+        "days",
+        "day",
+        "working",
+        "back",
+        "case",
+        "ticket",
+        "today",
+        "received",
+        "delivered",
+        "arrived",
+        "described",
+        "mentioned",
+        "said",
+        "told",
+        "stated",
+        "reported",
+        "purchase",
+        "able",
+        "help",
+        "assist",
+        "handle",
+        "arrange",
+        "arranged",
+        "complete",
+        "completed",
+        "completing",
+        "back",
+        "to",
+        "reason",
+        "because",
+        "due",
+        "since",
+        "following",
+        "details",
+        "summary",
+        "step",
+        "steps",
+        "next",
+        "new",
+        "standard",
+        "usual",
+        "normal",
+        "usually",
+        "one",
+        "single",
+        "unit",
+        "units",
+        "piece",
+        "pieces",
+        "quantity",
+        "qty",
+        "each",
+        "per",
+        "x",
+        "dollar",
+        "dollars",
+        "usd",
+        "buck",
+        "bucks",
+        "see",
+        "understand",
+        "noted",
+        "note",
+        "sorry",
+        "hear",
+        "apologize",
+        "apologies",
+        "inconvenience",
+        "your's",
+        "yours",
+        "selected",
+        "chosen",
+        "same",
+        "entire",
+        "whole",
+    ]
+)
 
-_ITEM_GENERIC = frozenset(["item", "items", "product", "products", "order", "purchase", "thing", "one", "ones", "article", "piece", "pieces", "unit", "units", "refund", "money", "amount", "payment", "price", "full", "original", "same", "whole", "entire"])
+_ITEM_GENERIC = frozenset(
+    [
+        "item",
+        "items",
+        "product",
+        "products",
+        "order",
+        "purchase",
+        "thing",
+        "one",
+        "ones",
+        "article",
+        "piece",
+        "pieces",
+        "unit",
+        "units",
+        "refund",
+        "money",
+        "amount",
+        "payment",
+        "price",
+        "full",
+        "original",
+        "same",
+        "whole",
+        "entire",
+    ]
+)
 
 
-_PRICE_WORDS = frozenset({"price", "amount", "cost", "money", "payment", "method", "total", "value",
-                          "fee", "sum", "balance"})
+_PRICE_WORDS = frozenset(
+    {
+        "price",
+        "amount",
+        "cost",
+        "money",
+        "payment",
+        "method",
+        "total",
+        "value",
+        "fee",
+        "sum",
+        "balance",
+    }
+)
 
 
 def _canon(word: str) -> str:
@@ -329,16 +796,52 @@ def _title_tokens(title: str | None) -> set[str]:
 
 def _matches_title(word: str, title: set[str]) -> bool:
     w = _canon(word)
-    return any(w == t or (len(w) > 3 and t.endswith("-" + w)) or t.replace("-", "") == w
-               for t in title)
+    return any(
+        w == t or (len(w) > 3 and t.endswith("-" + w)) or t.replace("-", "") == w for t in title
+    )
 
 
 def _reason_words() -> frozenset[str]:
-    words = {"broken", "damaged", "damage", "defect", "defective", "faulty", "working", "work",
-              "fit", "fits", "size", "small", "big", "large", "wrong", "different", "described",
-              "description", "mind", "changed", "arrive", "arrived", "delivered", "dont", "don't",
-              "doesn't", "doesnt", "properly", "scratched", "cracked", "website", "site",
-              "photo", "picture", "deliver", "never", "problem", "issue"}
+    words = {
+        "broken",
+        "damaged",
+        "damage",
+        "defect",
+        "defective",
+        "faulty",
+        "working",
+        "work",
+        "fit",
+        "fits",
+        "size",
+        "small",
+        "big",
+        "large",
+        "wrong",
+        "different",
+        "described",
+        "description",
+        "mind",
+        "changed",
+        "arrive",
+        "arrived",
+        "delivered",
+        "dont",
+        "don't",
+        "doesn't",
+        "doesnt",
+        "properly",
+        "scratched",
+        "cracked",
+        "website",
+        "site",
+        "photo",
+        "picture",
+        "deliver",
+        "never",
+        "problem",
+        "issue",
+    }
     return frozenset(_canon(w) for w in words)
 
 
@@ -370,7 +873,7 @@ def _to_cents(num: str) -> int:
 @dataclass(frozen=True)
 class Money:
     cents: int
-    currency: str          # usd | eur | gbp | rub | pct
+    currency: str  # usd | eur | gbp | rub | pct
     span: tuple[int, int]
     ignored: bool = False  # порог/отрицание: «above $200», «not $38», «up to $19»
 
@@ -383,9 +886,10 @@ def _money(text: str, *, with_ignored: bool = False) -> list[Money]:
         if any(a < span[1] and span[0] < b for a, b in taken):
             return
         taken.append(span)
-        ign = bool(_IGNORE_AMOUNT_CTX.search(text[max(0, span[0] - 30):span[0]]))
+        ign = bool(_IGNORE_AMOUNT_CTX.search(text[max(0, span[0] - 30) : span[0]]))
         if with_ignored or not ign:
             out.append(Money(cents, cur, span, ign))
+
     for m in _MONEY_PREFIX.finditer(text):
         add(_to_cents(m.group("num")), _CURRENCY[m.group("cur")], m.span())
     for m in _MONEY_CODE_PREFIX.finditer(text):
@@ -403,7 +907,7 @@ def _money(text: str, *, with_ignored: bool = False) -> list[Money]:
 
 
 def _sentences(text: str) -> list[str]:
-    text = re.sub(r"\b(e)\.(g)\.", r"\1\2", text or "", flags=_I)   # «e.g.» — не конец фразы
+    text = re.sub(r"\b(e)\.(g)\.", r"\1\2", text or "", flags=_I)  # «e.g.» — не конец фразы
     return [s.strip() for s in _SENT_SPLIT.split(text) if s and s.strip()]
 
 
@@ -413,34 +917,40 @@ def _is_confirm_sentence(s: str) -> bool:
     return bool(_CONFIRM_RX.search(s) or _CONFIRM_EXTRA.search(s))
 
 
-_POLICY_LIMIT = re.compile(r"\b(?:only|limited|up to|at most|maximum|cannot exceed|can't exceed|"
-                           r"according to|under our|per our|policy|rules?)\b", _I)
+_POLICY_LIMIT = re.compile(
+    r"\b(?:only|limited|up to|at most|maximum|cannot exceed|can't exceed|"
+    r"according to|under our|per our|policy|rules?)\b",
+    _I,
+)
 
 
 def _is_offer_sentence(s: str) -> bool:
     core = _SUBORD.sub("", s)
     if _POLICY_LIMIT.search(core) and not _is_confirm_sentence(core):
-        return False                  # «I can only refund the item price» — правило, не предложение
+        return False  # «I can only refund the item price» — правило, не предложение
     if _CHOICE_RE.search(core) and not _CONFIRM_EXTRA.search(core):
         return False
     if _ACTION_CUE.search(core) and _ACTION_WORD.search(core):
         return True
     # безличные формы: «Refund $38.00 for …», «refund of 159 USD for order …»
-    return bool(re.match(r"\s*(?:just to confirm\s*:?\s*)?(?:refund(?:ing)?|return(?:ing)?)\b",
-                         core, _I) or re.search(r"\brefund (?:of|for) ", core, _I)
-                and (_money(core) or _ORDER_TOKEN.search(core)))
+    return bool(
+        re.match(r"\s*(?:just to confirm\s*:?\s*)?(?:refund(?:ing)?|return(?:ing)?)\b", core, _I)
+        or re.search(r"\brefund (?:of|for) ", core, _I)
+        and (_money(core) or _ORDER_TOKEN.search(core))
+    )
 
 
 @dataclass(frozen=True)
 class ProposalCheck:
     """Результат сверки реплики агента с фактами клиента."""
-    verdict: str                      # consistent | contradiction | incomplete | none
+
+    verdict: str  # consistent | contradiction | incomplete | none
     mismatches: tuple[str, ...] = ()  # поля, противоречащие фактам
-    unknown: tuple[str, ...] = ()     # названо, но клиент не может проверить (вкл. unexplained:*)
-    mentioned: tuple[str, ...] = ()   # что согласовано с фактами
-    action: bool = False              # предлагается действие (возврат/оформление)
-    confirm: bool = False             # агент просит подтверждения
-    scope: tuple[str, ...] = ()       # фразы, признанные предложением
+    unknown: tuple[str, ...] = ()  # названо, но клиент не может проверить (вкл. unexplained:*)
+    mentioned: tuple[str, ...] = ()  # что согласовано с фактами
+    action: bool = False  # предлагается действие (возврат/оформление)
+    confirm: bool = False  # агент просит подтверждения
+    scope: tuple[str, ...] = ()  # фразы, признанные предложением
     # Ревизия 4: все клаузы сообщения и их кадры (текст, роль, полярность, поля) — контракт
     # `proposal_contract` проверяет каждую клаузу, а не только фразы предложения.
     clauses: tuple[str, ...] = ()
@@ -475,10 +985,14 @@ def _item_phrases(s: str, title: set[str]) -> tuple[list[list[str]], list[list[s
         while hi + 1 < len(toks) and toks[hi + 1][0].lower() not in breakers:
             hi += 1
         seen.update(range(lo, hi + 1))
-        with_title.append([t for t, _ in toks[lo:hi + 1]])
+        with_title.append([t for t, _ in toks[lo : hi + 1]])
     # объект действия без слов названия: «refund the Trail Boots», «and the leather jacket»
-    for m in re.finditer(r"\b(?:refund(?:ing)?|return(?:ing)?|and|plus|also|or)\s+(?:(?:of|for|on)\s+)?"
-                         r"(?:the|your|a|an|this|these|those)\s+", s, _I):
+    for m in re.finditer(
+        r"\b(?:refund(?:ing)?|return(?:ing)?|and|plus|also|or)\s+(?:(?:of|for|on)\s+)?"
+        r"(?:the|your|a|an|this|these|those)\s+",
+        s,
+        _I,
+    ):
         words, idx = [], []
         for k, (w, pos) in enumerate(toks):
             if pos < m.end():
@@ -488,15 +1002,21 @@ def _item_phrases(s: str, title: set[str]) -> tuple[list[list[str]], list[list[s
             words.append(w)
             idx.append(k)
         if words and not (set(idx) & seen) and not ({_canon(w) for w in words} & _PRICE_WORDS):
-            rest = [w for w in words if _canon(w) not in _ITEM_GENERIC
-                    and _canon(w) not in _REASON_WORDS]
+            rest = [
+                w
+                for w in words
+                if _canon(w) not in _ITEM_GENERIC and _canon(w) not in _REASON_WORDS
+            ]
             if rest:
                 others.append(words)
     return with_title, others
 
 
-_EXAMPLE_BEFORE = re.compile(r"(?:\blike|\be\.?g\.?,?|\bfor (?:example|instance),?|\bsuch as|"
-                             r"\bformat(?: is| like)?:?|\bsomething like)\s*\(?\s*$", _I)
+_EXAMPLE_BEFORE = re.compile(
+    r"(?:\blike|\be\.?g\.?,?|\bfor (?:example|instance),?|\bsuch as|"
+    r"\bformat(?: is| like)?:?|\bsomething like)\s*\(?\s*$",
+    _I,
+)
 
 
 def check_proposal(reply: str, f: CustomerFacts) -> ProposalCheck:
@@ -504,6 +1024,7 @@ def check_proposal(reply: str, f: CustomerFacts) -> ProposalCheck:
     клаузы → кадры → валидация каждого поля → решение, закрытый мир). Только текст ответа агента
     и факты клиента (FR-1.3)."""
     from .proposal_contract import check_message
+
     return check_message(reply or "", f)
 
 
@@ -520,18 +1041,21 @@ def _facts_line(f: CustomerFacts) -> str:
     return ", ".join(parts)
 
 
-_OBJECTION = {"order": "thats not my order", "amount": "the amount is wrong",
-              "item": "that is not my item, i want refund only for my item",
-              "quantity": "wrong quantity", "reason": "that is not the problem",
-              "extra": "i dont want anything extra, only refund of what i paid",
-              "multiplicity": "i want only one refund for my one item",
-              "recipient": "the refund must go back to my own original payment, not other account",
-              "action": "but i want refund pls",
-              "history": "i never got refund for this before, is first request"}
+_OBJECTION = {
+    "order": "thats not my order",
+    "amount": "the amount is wrong",
+    "item": "that is not my item, i want refund only for my item",
+    "quantity": "wrong quantity",
+    "reason": "that is not the problem",
+    "extra": "i dont want anything extra, only refund of what i paid",
+    "multiplicity": "i want only one refund for my one item",
+    "recipient": "the refund must go back to my own original payment, not other account",
+    "action": "but i want refund pls",
+    "history": "i never got refund for this before, is first request",
+}
 
 
-def confirm_reply(reply: str, f: CustomerFacts, pc: ProposalCheck | None = None
-                  ) -> tuple[str, str]:
+def confirm_reply(reply: str, f: CustomerFacts, pc: ProposalCheck | None = None) -> tuple[str, str]:
     """(источник, текст) ответа клиента на предложение/подтверждение."""
     pc = pc or check_proposal(reply, f)
     line = _facts_line(f)
@@ -540,8 +1064,11 @@ def confirm_reply(reply: str, f: CustomerFacts, pc: ProposalCheck | None = None
     if pc.verdict == "contradiction":
         said = ", ".join(_OBJECTION[m] for m in pc.mismatches)
         return "confirm_objection", f"no, {said}. {line}".strip()
-    return "confirm_clarify", ("sorry what exactly u will do? i want refund pls, " + line
-                               if line else "sorry what exactly u mean? i dont understand")
+    return "confirm_clarify", (
+        "sorry what exactly u will do? i want refund pls, " + line
+        if line
+        else "sorry what exactly u mean? i dont understand"
+    )
 
 
 # ---------------------------------------------------------------- ревизия 6: режим facts
@@ -565,13 +1092,17 @@ CONFIRM_MODES = ("grammar_rev5", "facts")
 FACTS_PATIENT = "facts_patient"
 CONFIRM_MODES = CONFIRM_MODES + (FACTS_PATIENT,)
 PATIENT_MAX_NUDGES = 2
-STATUS_NUDGES = ("is it done? what happens now with my request",
-                 "so is my request processed or not")
+STATUS_NUDGES = (
+    "is it done? what happens now with my request",
+    "so is my request processed or not",
+)
 APPROVAL_RE = re.compile(
     r"\b(?:yes|yeah|yep|yup|ya|correct|right|go\s+ahead|ok|okay|okey|k|sure|agree[ds]?|agreed|"
     r"confirm(?:s|ed|ing|ation)?|proceed(?:s|ed|ing)?|fine|approve[ds]?|approved|deal|alright|"
     r"all\s+right|do\s+it|please\s+do|sounds\s+good|perfect|great|accept(?:s|ed)?|true|exactly|"
-    r"indeed|absolutely|definitely|of\s+course|that\s+works|good)\b", _I)
+    r"indeed|absolutely|definitely|of\s+course|that\s+works|good)\b",
+    _I,
+)
 
 
 class FactsReplyError(AssertionError):
@@ -596,10 +1127,14 @@ def facts_line(f: CustomerFacts) -> str:
 def facts_reply(f: CustomerFacts, slots: Iterable[str] = ()) -> str:
     """Ответ режима facts: факты клиента + ответы на распознанные слоты (кроме confirm)."""
     text = facts_line(f)
-    covered = ("confirm",) if f.intent == "question_only" else (
-        "confirm", "order_id", "item", "reason")   # уже в пересказе фактов
-    extra = [a for a in (_answer(sl, f) for sl in slots if sl not in covered)
-             if a and a not in text and not APPROVAL_RE.search(a)]
+    covered = (
+        ("confirm",) if f.intent == "question_only" else ("confirm", "order_id", "item", "reason")
+    )  # уже в пересказе фактов
+    extra = [
+        a
+        for a in (_answer(sl, f) for sl in slots if sl not in covered)
+        if a and a not in text and not APPROVAL_RE.search(a)
+    ]
     if extra:
         text = text + ". " + "; ".join(extra)
     if APPROVAL_RE.search(text):
@@ -615,16 +1150,24 @@ def _summary(f: CustomerFacts) -> str | None:
 class ResponsiveUser:
     """Легальный клиент режима D: первая реплика — из корпуса, далее ответы по смыслу вопроса."""
 
-    def __init__(self, turns: Iterable[str], facts: CustomerFacts | Mapping[str, Any] | None,
-                 *, max_unknown: int = 2, confirm_mode: str = "grammar_rev5",
-                 max_nudges: int = PATIENT_MAX_NUDGES):
+    def __init__(
+        self,
+        turns: Iterable[str],
+        facts: CustomerFacts | Mapping[str, Any] | None,
+        *,
+        max_unknown: int = 2,
+        confirm_mode: str = "grammar_rev5",
+        max_nudges: int = PATIENT_MAX_NUDGES,
+    ):
         if confirm_mode not in CONFIRM_MODES:
             raise ValueError(f"confirm_mode {confirm_mode!r} не из {CONFIRM_MODES}")
         # ревизия 6: по умолчанию класса — прежний контракт (replay, тесты rev2–rev5); новые
         # прогоны получают режим из плана (RunPlan.legal_confirm, по умолчанию facts)
         self.confirm_mode = confirm_mode
         self.turns = tuple(turns)
-        self.facts = facts if isinstance(facts, CustomerFacts) else CustomerFacts.from_mapping(facts)
+        self.facts = (
+            facts if isinstance(facts, CustomerFacts) else CustomerFacts.from_mapping(facts)
+        )
         self.max_unknown = max_unknown
         self.end_reason = None
         self.log = []
@@ -632,13 +1175,13 @@ class ResponsiveUser:
         self._next_scripted = 0
         self._unknown_streak = 0
         self._restated = False
-        self._said: list[str] = []                  # что клиент уже написал (для «уже сказал»)
-        self.max_nudges = max_nudges                # ревизия 8: K подталкиваний (facts_patient)
+        self._said: list[str] = []  # что клиент уже написал (для «уже сказал»)
+        self.max_nudges = max_nudges  # ревизия 8: K подталкиваний (facts_patient)
         self._nudges = 0
 
     # -------------------------------------------------------------- UserEndpoint
     def next_message(self, obs: Observation) -> str | None:
-        if obs.reply is None:                       # первый ход: реплика корпуса
+        if obs.reply is None:  # первый ход: реплика корпуса
             return self._scripted("opening")
         if obs.closed:
             self.end_reason = "closed_by_agent"
@@ -682,8 +1225,14 @@ class ResponsiveUser:
             extra = [a for a in (_answer(s, self.facts) for s in other) if a and a not in text]
             if extra:
                 text = text.rstrip(".") + ". " + "; ".join(extra)
-            self.log.append({"source": source, "slots": list(slots),
-                             "mismatches": list(pc.mismatches), "unknown": list(pc.unknown)})
+            self.log.append(
+                {
+                    "source": source,
+                    "slots": list(slots),
+                    "mismatches": list(pc.mismatches),
+                    "unknown": list(pc.unknown),
+                }
+            )
             self._said.append(text)
             return text
         slots = other
@@ -696,7 +1245,7 @@ class ResponsiveUser:
             if answers:
                 self._unknown_streak = 0
                 return self._emit("facts", self._natural(answers, slots), slots)
-        if left:                                    # клиент продолжает свой рассказ
+        if left:  # клиент продолжает свой рассказ
             return self._scripted("continuation", slots)
         if not asked and self.confirm_mode == FACTS_PATIENT:
             return self._nudge_or_stall()
@@ -711,8 +1260,11 @@ class ResponsiveUser:
         if not self._restated:
             self._restated = True
             s = _summary(self.facts)
-            text = ("sorry i dont understand what u need. " + s) if s else \
-                "sorry i dont understand what u need, i told everything i know"
+            text = (
+                ("sorry i dont understand what u need. " + s)
+                if s
+                else "sorry i dont understand what u need, i told everything i know"
+            )
             return self._emit("restate", text, slots)
         return self._emit("unknown", "sorry, i dont know that, what else u need?", slots)
 
@@ -760,8 +1312,12 @@ class ResponsiveUser:
         """Ответ клиента: запрошенные факты; если клиент ещё не сказал, что хочет вернуть товар
         и почему, — добавляет это, как сделал бы живой человек (без подсказок агента)."""
         parts = list(answers)
-        if "reason" not in slots and self.facts.reason_code and not self._reason_said() \
-                and slots != ("confirm",):
+        if (
+            "reason" not in slots
+            and self.facts.reason_code
+            and not self._reason_said()
+            and slots != ("confirm",)
+        ):
             parts.append(REASON_PHRASES[self.facts.reason_code])
         text = "; ".join(parts)
         if not any(_RETURN_WORD.search(t) for t in self._said) and slots != ("confirm",):
@@ -786,9 +1342,13 @@ class ResponsiveUser:
         sources: dict[str, int] = {}
         for r in self.log:
             sources[r["source"]] = sources.get(r["source"], 0) + 1
-        out = {"end_reason": self.end_reason, "sources": sources,
-               "slots": [r["slots"] for r in self.log if r["slots"]],
-               "scripted_used": self._next_scripted, "scripted_total": len(self.turns)}
-        if self.confirm_mode == FACTS_PATIENT:     # прежние режимы — побайтно прежняя сводка
+        out = {
+            "end_reason": self.end_reason,
+            "sources": sources,
+            "slots": [r["slots"] for r in self.log if r["slots"]],
+            "scripted_used": self._next_scripted,
+            "scripted_total": len(self.turns),
+        }
+        if self.confirm_mode == FACTS_PATIENT:  # прежние режимы — побайтно прежняя сводка
             out["nudges"] = self._nudges
         return out

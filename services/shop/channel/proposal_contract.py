@@ -60,48 +60,269 @@ from . import legal_user as lu
 _I = re.IGNORECASE
 
 # ------------------------------------------------------------------ словари категорий
-NEGATOR_WORDS = frozenset(["not", "never", "no", "cannot", "can't", "cant", "won't", "wont", "don't", "dont", "doesn't", "doesnt", "didn't", "didnt", "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt", "weren't", "shouldn't", "wouldn't", "couldn't", "mustn't", "unable", "deny", "denied", "denying", "decline", "declined", "declining", "reject", "rejected", "rejecting", "refuse", "refused", "refusing", "impossible", "ineligible", "nor", "without"])
-_NEG = re.compile(r"\b(?:not|never|no|cannot|can't|cant|won't|wont|nor|without|unable|"
-                  r"impossible|ineligible|deny|denied|denying|declin\w*|reject\w*|refus\w*|"
-                  r"\w+n't|dont|doesnt|didnt|isnt|arent|wasnt)\b", _I)
-MULTI_WORDS = frozenset(["twice", "double", "doubled", "again", "another", "second", "both", "everything", "re-refund", "rerefund", "additionally"])
+NEGATOR_WORDS = frozenset(
+    [
+        "not",
+        "never",
+        "no",
+        "cannot",
+        "can't",
+        "cant",
+        "won't",
+        "wont",
+        "don't",
+        "dont",
+        "doesn't",
+        "doesnt",
+        "didn't",
+        "didnt",
+        "isn't",
+        "isnt",
+        "aren't",
+        "arent",
+        "wasn't",
+        "wasnt",
+        "weren't",
+        "shouldn't",
+        "wouldn't",
+        "couldn't",
+        "mustn't",
+        "unable",
+        "deny",
+        "denied",
+        "denying",
+        "decline",
+        "declined",
+        "declining",
+        "reject",
+        "rejected",
+        "rejecting",
+        "refuse",
+        "refused",
+        "refusing",
+        "impossible",
+        "ineligible",
+        "nor",
+        "without",
+    ]
+)
+_NEG = re.compile(
+    r"\b(?:not|never|no|cannot|can't|cant|won't|wont|nor|without|unable|"
+    r"impossible|ineligible|deny|denied|denying|declin\w*|reject\w*|refus\w*|"
+    r"\w+n't|dont|doesnt|didnt|isnt|arent|wasnt)\b",
+    _I,
+)
+MULTI_WORDS = frozenset(
+    [
+        "twice",
+        "double",
+        "doubled",
+        "again",
+        "another",
+        "second",
+        "both",
+        "everything",
+        "re-refund",
+        "rerefund",
+        "additionally",
+    ]
+)
 _MULTI = re.compile(
     r"\b(?:twice|doubl\w*|two refunds|second|another|again|x ?2|2x|re-?refund\w*|once more|"
     r"one more|additional refund|both|all (?:the |of the |your |of your )?items|everything|"
-    r"each item|all of them)\b", _I)
-EXTRA_WORDS = frozenset(["bonus", "goodwill", "compensation", "extra", "additional", "voucher", "coupon", "gift", "discount", "shipping", "interest", "plus", "credit-note", "points", "fee", "fees", "charge", "charges"])
-_EXTRA_ALT = (r"bonus|goodwill|compensation|extra|additional|on top|gesture|voucher|coupon|"
-              r"gift ?card|store credit|credit note|points?|discount|shipping|interest|plus|fees?|"
-              r"charges?|minus|deduct\w*|restocking")
+    r"each item|all of them)\b",
+    _I,
+)
+EXTRA_WORDS = frozenset(
+    [
+        "bonus",
+        "goodwill",
+        "compensation",
+        "extra",
+        "additional",
+        "voucher",
+        "coupon",
+        "gift",
+        "discount",
+        "shipping",
+        "interest",
+        "plus",
+        "credit-note",
+        "points",
+        "fee",
+        "fees",
+        "charge",
+        "charges",
+    ]
+)
+_EXTRA_ALT = (
+    r"bonus|goodwill|compensation|extra|additional|on top|gesture|voucher|coupon|"
+    r"gift ?card|store credit|credit note|points?|discount|shipping|interest|plus|fees?|"
+    r"charges?|minus|deduct\w*|restocking"
+)
 _EXTRA = re.compile(rf"\b(?:{_EXTRA_ALT})\b", _I)
-THIRD_PARTY_WORDS = frozenset(["brother", "sister", "wife", "husband", "friend", "mother", "father", "mom", "dad", "son", "daughter", "colleague", "partner", "boss", "someone", "somebody", "another", "other", "different", "external", "third", "his", "her", "their", "him", "them's", "them", "they", "iban", "swift", "escrow", "merchant"])
+THIRD_PARTY_WORDS = frozenset(
+    [
+        "brother",
+        "sister",
+        "wife",
+        "husband",
+        "friend",
+        "mother",
+        "father",
+        "mom",
+        "dad",
+        "son",
+        "daughter",
+        "colleague",
+        "partner",
+        "boss",
+        "someone",
+        "somebody",
+        "another",
+        "other",
+        "different",
+        "external",
+        "third",
+        "his",
+        "her",
+        "their",
+        "him",
+        "them's",
+        "them",
+        "they",
+        "iban",
+        "swift",
+        "escrow",
+        "merchant",
+    ]
+)
 # Третьи лица в вопросах (ревизия 5): без «they/them» — в вопросах о доставке они означают товар;
 # them/they — третьи лица только во фразе получателя (`_recipient_phrases`).
-_QUESTION_THIRD = re.compile(r"\b(?:brother|sister|wife|husband|friend|mother|father|mom|dad|son|"
-                             r"daughter|colleague|partner|boss|someone|somebody|neighbou?r|cousin|"
-                             r"relative|other person|another person|third[- ]party)(?:'s)?\b", _I)
+_QUESTION_THIRD = re.compile(
+    r"\b(?:brother|sister|wife|husband|friend|mother|father|mom|dad|son|"
+    r"daughter|colleague|partner|boss|someone|somebody|neighbou?r|cousin|"
+    r"relative|other person|another person|third[- ]party)(?:'s)?\b",
+    _I,
+)
 _HISTORY = re.compile(
     r"\balready\b[^.?!;]{0,30}\b(?:refund|return|reimburs|credit|process|issu|paid)\w*|"
     r"\b(?:refunded|returned|reimbursed|credited)\b[^.?!;]{0,20}\b(?:before|previously|earlier|"
-    r"in the past)\b|\bprevious(?:ly)? (?:refund|return)\w*\b", _I)
-_TRANSFER = re.compile(r"\b(?:refund\w*|send|sent|sending|go|goes|going|went|transfer\w*|"
-                       r"credit\w*|deposit\w*|pay|paid|paying|payout|issu\w*|reimburs\w*|"
-                       r"rout\w*|wir\w*|money|funds?)\b", _I)
-_RECIP_STOP = frozenset(["within", "in", "by", "after", "once", "and", "so", "as", "from", "for", "if", "when", "before", "until", "via", "today", "now", "shortly", "soon", "which", "that", "who", "where", "while", "because", "since", "but", "or", "with"])
-_RECIP_OK = frozenset(["your", "you", "yours", "own", "original", "initial", "same", "payment", "method", "card", "account", "bank", "the", "a", "an", "used", "purchase", "order", "source", "back"])
-_RECIP_START = frozenset(["your", "you", "yours", "the", "a", "an", "my", "his", "her", "their", "another", "other", "different", "someone", "somebody", "account", "card", "bank", "wallet", "paypal", "them", "they", "him"])
-_CUSTOMER_SUBJECT = re.compile(r"^\W*(?:(?:if|when|once|unless|since|because|as)\s+)?"
-                               r"(?:you|you'll|you're|you've|your)\b", _I)
+    r"in the past)\b|\bprevious(?:ly)? (?:refund|return)\w*\b",
+    _I,
+)
+_TRANSFER = re.compile(
+    r"\b(?:refund\w*|send|sent|sending|go|goes|going|went|transfer\w*|"
+    r"credit\w*|deposit\w*|pay|paid|paying|payout|issu\w*|reimburs\w*|"
+    r"rout\w*|wir\w*|money|funds?)\b",
+    _I,
+)
+_RECIP_STOP = frozenset(
+    [
+        "within",
+        "in",
+        "by",
+        "after",
+        "once",
+        "and",
+        "so",
+        "as",
+        "from",
+        "for",
+        "if",
+        "when",
+        "before",
+        "until",
+        "via",
+        "today",
+        "now",
+        "shortly",
+        "soon",
+        "which",
+        "that",
+        "who",
+        "where",
+        "while",
+        "because",
+        "since",
+        "but",
+        "or",
+        "with",
+    ]
+)
+_RECIP_OK = frozenset(
+    [
+        "your",
+        "you",
+        "yours",
+        "own",
+        "original",
+        "initial",
+        "same",
+        "payment",
+        "method",
+        "card",
+        "account",
+        "bank",
+        "the",
+        "a",
+        "an",
+        "used",
+        "purchase",
+        "order",
+        "source",
+        "back",
+    ]
+)
+_RECIP_START = frozenset(
+    [
+        "your",
+        "you",
+        "yours",
+        "the",
+        "a",
+        "an",
+        "my",
+        "his",
+        "her",
+        "their",
+        "another",
+        "other",
+        "different",
+        "someone",
+        "somebody",
+        "account",
+        "card",
+        "bank",
+        "wallet",
+        "paypal",
+        "them",
+        "they",
+        "him",
+    ]
+)
+_CUSTOMER_SUBJECT = re.compile(
+    r"^\W*(?:(?:if|when|once|unless|since|because|as)\s+)?"
+    r"(?:you|you'll|you're|you've|your)\b",
+    _I,
+)
 _AGENT_PRONOUN = re.compile(r"\b(?:i|i'm|i'll|i've|i'd|we|we'll|we're|we've|we'd)\b", _I)
-_NEG_COURTESY = re.compile(r"\b(?:don't|dont|do not)\s+(?:worry|hesitate)\b|\bno (?:worries|"
-                           r"problem)\b|\bnot a problem\b|\bno need to worry\b", _I)
-_REASON_AFTER_NEG = re.compile(r"^\W*(?:\w+\W+){0,2}?(?:working|work|works|function\w*|"
-                               r"fit|fits|arriv\w*|deliver\w*|as described|like (?:on )?the|"
-                               r"what (?:i|you) ordered)\b", _I)
+_NEG_COURTESY = re.compile(
+    r"\b(?:don't|dont|do not)\s+(?:worry|hesitate)\b|\bno (?:worries|"
+    r"problem)\b|\bnot a problem\b|\bno need to worry\b",
+    _I,
+)
+_REASON_AFTER_NEG = re.compile(
+    r"^\W*(?:\w+\W+){0,2}?(?:working|work|works|function\w*|"
+    r"fit|fits|arriv\w*|deliver\w*|as described|like (?:on )?the|"
+    r"what (?:i|you) ordered)\b",
+    _I,
+)
 _EXTRA_AFTER_NEG = re.compile(rf"^\W*(?:\w+\W+){{0,2}}?(?:{_EXTRA_ALT})\b", _I)
 # Ограничение суммы правилом — не отказ: «refunds cannot exceed the item price».
-_LIMIT_AFTER_NEG = re.compile(r"^\W*(?:be\s+)?(?:exceed\w*|more|higher|greater|over|above|larger)\b",
-                              _I)
+_LIMIT_AFTER_NEG = re.compile(
+    r"^\W*(?:be\s+)?(?:exceed\w*|more|higher|greater|over|above|larger)\b", _I
+)
 # Исправление суммы: «its price is $19.00 (not $38.00)».
 _MONEY_AFTER_NEG = re.compile(r"^\W*(?:\w+\W+)?[$€£]?\d", _I)
 # Отказ: глагол отказа или отрицатель, за которым в пределах 3 слов идёт глагол действия.
@@ -110,28 +331,192 @@ _NO_ACTION = re.compile(r"\bno\s+(?:refund|return|reimbursement|money back)\w*\b
 _NEG_SCOPE_END = re.compile(r"[,.;:!?]|\b(?:and|but|plus|also|then|so)\b", _I)
 # Объект «for/of the X»: заглавное слово, не входящее в название товара клиента, — чужой товар
 # («It is for the Leather jacket»); строчные неизвестные слова остаются остатком (уточнение).
-_OBJECT = re.compile(r"\b(?:for|of|about|regarding|on|is|are)\s+(?:the|your|a|an|this|that|these|"
-                     r"those)\s+((?:[A-Za-z][\w'-]*\s+){0,3}[A-Za-z][\w'-]*)")
-_BARE_CONFIRM = re.compile(r"\b(?:please |kindly )?(?:(?:can|could|would) you (?:please )?)?"
-                           r"confirm\s*(?:[?.!,]|$)|\bis it (?:ok|okay|alright|fine|correct)\b", _I)
+_OBJECT = re.compile(
+    r"\b(?:for|of|about|regarding|on|is|are)\s+(?:the|your|a|an|this|that|these|"
+    r"those)\s+((?:[A-Za-z][\w'-]*\s+){0,3}[A-Za-z][\w'-]*)"
+)
+_BARE_CONFIRM = re.compile(
+    r"\b(?:please |kindly )?(?:(?:can|could|would) you (?:please )?)?"
+    r"confirm\s*(?:[?.!,]|$)|\bis it (?:ok|okay|alright|fine|correct)\b",
+    _I,
+)
 _CLAUSE_SPLIT = re.compile(
     r"\s*;\s*|,?\s+\b(?:but|however|although|though)\b,?\s*|"
     r",\s*and\s+(?=(?:what|which|how|when|where|why|could|can|would|please|also|is|do)\b)|"
-    r"\s+\band also\b\s*", _I)
+    r"\s+\band also\b\s*",
+    _I,
+)
 
 # Нейтральный словарь ревизии 4: служебные слова, вежливость, процесс. С ревизии 5 он НЕ даёт «yes»
 # (решение — по шаблонам клауз, см. ниже); используется для разбора товара и диагностики остатка.
 # Ревизия 5: убраны слова со смыслом (they, them, less, lower, below, under, over, above, more,
 # higher, greater, than, all, away, send/sent/sending, credited, transferred).
 # «ay» — остаток «okay» после вырезания шаблона подтверждения «is that ok».
-NEUTRAL = frozenset((lu._NEUTRAL - {"not", "no"}) | frozenset(["understand", "understood", "frustrated", "frustrating", "frustration", "hear", "heard", "help", "helping", "determine", "meets", "meet", "meeting", "requirement", "requirements", "verify", "verified", "verifying", "check", "checked", "checking", "review", "reviewed", "reviewing", "ensure", "indeed", "specific", "specifically", "official", "shop", "shop's", "store", "rule", "rules", "criteria", "criterion", "valid", "information", "info", "provide", "provided", "else", "anything", "further", "question", "questions", "contact", "contacting", "reach", "reaching", "out", "hi", "hello", "dear", "regards", "best", "have", "has", "had", "get", "got", "receive", "receiving", "soon", "possible", "asap", "know", "goes", "concern", "concerned", "experience", "experienced", "trouble", "matter", "look", "looked", "looking", "quickly", "promptly", "shortly", "certainly", "absolutely", "course", "any", "that's", "there's", "here's", "ready", "reflect", "reflected", "appear", "appears", "usually", "typically", "take", "takes", "note", "welcome", "assistance", "support", "team", "bit", "moment", "patience", "apologise", "apology", "thank-you", "according", "actual", "ask", "asked", "asking", "asks", "exceed", "exceeds", "exceeding", "need", "needs", "needed", "manual", "limit", "limited", "limits", "maximum", "max", "its", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "st", "nd", "rd", "th", "you'd", "good", "news", "based", "ay"]))
+NEUTRAL = frozenset(
+    (lu._NEUTRAL - {"not", "no"})
+    | frozenset(
+        [
+            "understand",
+            "understood",
+            "frustrated",
+            "frustrating",
+            "frustration",
+            "hear",
+            "heard",
+            "help",
+            "helping",
+            "determine",
+            "meets",
+            "meet",
+            "meeting",
+            "requirement",
+            "requirements",
+            "verify",
+            "verified",
+            "verifying",
+            "check",
+            "checked",
+            "checking",
+            "review",
+            "reviewed",
+            "reviewing",
+            "ensure",
+            "indeed",
+            "specific",
+            "specifically",
+            "official",
+            "shop",
+            "shop's",
+            "store",
+            "rule",
+            "rules",
+            "criteria",
+            "criterion",
+            "valid",
+            "information",
+            "info",
+            "provide",
+            "provided",
+            "else",
+            "anything",
+            "further",
+            "question",
+            "questions",
+            "contact",
+            "contacting",
+            "reach",
+            "reaching",
+            "out",
+            "hi",
+            "hello",
+            "dear",
+            "regards",
+            "best",
+            "have",
+            "has",
+            "had",
+            "get",
+            "got",
+            "receive",
+            "receiving",
+            "soon",
+            "possible",
+            "asap",
+            "know",
+            "goes",
+            "concern",
+            "concerned",
+            "experience",
+            "experienced",
+            "trouble",
+            "matter",
+            "look",
+            "looked",
+            "looking",
+            "quickly",
+            "promptly",
+            "shortly",
+            "certainly",
+            "absolutely",
+            "course",
+            "any",
+            "that's",
+            "there's",
+            "here's",
+            "ready",
+            "reflect",
+            "reflected",
+            "appear",
+            "appears",
+            "usually",
+            "typically",
+            "take",
+            "takes",
+            "note",
+            "welcome",
+            "assistance",
+            "support",
+            "team",
+            "bit",
+            "moment",
+            "patience",
+            "apologise",
+            "apology",
+            "thank-you",
+            "according",
+            "actual",
+            "ask",
+            "asked",
+            "asking",
+            "asks",
+            "exceed",
+            "exceeds",
+            "exceeding",
+            "need",
+            "needs",
+            "needed",
+            "manual",
+            "limit",
+            "limited",
+            "limits",
+            "maximum",
+            "max",
+            "its",
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+            "st",
+            "nd",
+            "rd",
+            "th",
+            "you'd",
+            "good",
+            "news",
+            "based",
+            "ay",
+        ]
+    )
+)
 
 
 def lexicon_conflicts() -> dict[str, list[str]]:
     """Слова опасных категорий, попавшие в нейтральный словарь (должно быть пусто)."""
     out = {}
-    for name, words in (("negator", NEGATOR_WORDS), ("multiplicity", MULTI_WORDS),
-                        ("extra", EXTRA_WORDS), ("third_party", THIRD_PARTY_WORDS)):
+    for name, words in (
+        ("negator", NEGATOR_WORDS),
+        ("multiplicity", MULTI_WORDS),
+        ("extra", EXTRA_WORDS),
+        ("third_party", THIRD_PARTY_WORDS),
+    ):
         bad = sorted(w for w in NEUTRAL if w in words or lu._canon(w) in words)
         if bad:
             out[name] = bad
@@ -142,12 +527,12 @@ def lexicon_conflicts() -> dict[str, list[str]]:
 @dataclass(frozen=True)
 class Clause:
     text: str
-    role: str                                   # confirm | slot_question | commitment | statement
-    polarity: str                               # positive | negative
-    fields: tuple[tuple[str, str, str], ...]    # (поле, ok|mismatch|unknown, деталь)
-    residue: tuple[str, ...] = ()               # диагностика rev4 (слова вне NEUTRAL), не решение
-    template: str | None = None                 # ревизия 5: шаблон клаузы или None
-    normalized: tuple[str, ...] = ()            # ревизия 5: токены клаузы после замены полей метками
+    role: str  # confirm | slot_question | commitment | statement
+    polarity: str  # positive | negative
+    fields: tuple[tuple[str, str, str], ...]  # (поле, ok|mismatch|unknown, деталь)
+    residue: tuple[str, ...] = ()  # диагностика rev4 (слова вне NEUTRAL), не решение
+    template: str | None = None  # ревизия 5: шаблон клаузы или None
+    normalized: tuple[str, ...] = ()  # ревизия 5: токены клаузы после замены полей метками
 
     def by_verdict(self, v: str) -> list[str]:
         return [f for f, vv, _ in self.fields if vv == v]
@@ -177,14 +562,17 @@ _NON_CONFIRM_SLOTS = tuple((s, rx) for s, rx in lu.SLOT_PATTERNS if s != "confir
 
 def clause_role(c: str) -> str:
     core = lu._SUBORD.sub("", c)
-    if lu._is_confirm_sentence(c) or (_BARE_CONFIRM.search(c) and not lu._SLOT_QUESTION.search(c)
-                                      and not lu._CHOICE_RE.search(c)):
+    if lu._is_confirm_sentence(c) or (
+        _BARE_CONFIRM.search(c) and not lu._SLOT_QUESTION.search(c) and not lu._CHOICE_RE.search(c)
+    ):
         return "confirm"
     if any(rx.search(c) for _, rx in _NON_CONFIRM_SLOTS) and (
-            c.rstrip().endswith("?") or lu._QUESTION_RE.search(c) or lu._SLOT_QUESTION.search(c)):
+        c.rstrip().endswith("?") or lu._QUESTION_RE.search(c) or lu._SLOT_QUESTION.search(c)
+    ):
         return "slot_question"
-    if lu._ACTION_WORD.search(core) and (lu._ACTION_CUE.search(core) or lu._is_offer_sentence(c)
-                                         or _NEG.search(core)):
+    if lu._ACTION_WORD.search(core) and (
+        lu._ACTION_CUE.search(core) or lu._is_offer_sentence(c) or _NEG.search(core)
+    ):
         return "commitment"
     return "statement"
 
@@ -199,10 +587,10 @@ def _orders_in(s: str) -> list[str]:
             continue
         if any(a <= m.start(1) < b for a, b in money_spans):
             continue
-        if re.search(r"(?:ending|ends with|last \w+ digits)\s*(?:in\s*)?$", s[:m.start(1)], _I):
-            continue                              # «card ending 4242» — не заказ
-        if lu._EXAMPLE_BEFORE.search(s[:m.start()]):
-            continue                              # «(like O-12345)» — образец формата
+        if re.search(r"(?:ending|ends with|last \w+ digits)\s*(?:in\s*)?$", s[: m.start(1)], _I):
+            continue  # «card ending 4242» — не заказ
+        if lu._EXAMPLE_BEFORE.search(s[: m.start()]):
+            continue  # «(like O-12345)» — образец формата
         out.append(o)
     return out
 
@@ -213,13 +601,14 @@ def _benign_negation_spans(c: str) -> list[tuple[int, int, str]]:
     for m in _NEG.finditer(c):
         if any(a <= m.start() < b for a, b, _ in spans):
             continue
-        after = c[m.end():]
+        after = c[m.end() :]
         ex = _EXTRA_AFTER_NEG.match(after)
-        if ex:                                             # «no extra charges», «without fees»
+        if ex:  # «no extra charges», «without fees»
             # область отказа — до знака препинания или союза, вводящего новое утверждение
             stop = _NEG_SCOPE_END.search(after, ex.end())
-            spans.append((m.start(), m.end() + (stop.start() if stop else len(after)),
-                          "negated_extra"))
+            spans.append(
+                (m.start(), m.end() + (stop.start() if stop else len(after)), "negated_extra")
+            )
             continue
         if _LIMIT_AFTER_NEG.match(after):
             spans.append((m.start(), m.end() + _LIMIT_AFTER_NEG.match(after).end(), "limit"))
@@ -228,8 +617,8 @@ def _benign_negation_spans(c: str) -> list[tuple[int, int, str]]:
             spans.append((m.start(), m.end(), "correction"))
             continue
         rs = _REASON_AFTER_NEG.match(after)
-        before = " ".join(lu._TOKEN.findall(c[:m.start()])[-4:])
-        if rs and not _AGENT_PRONOUN.search(before):      # «your t-shirt is not working»
+        before = " ".join(lu._TOKEN.findall(c[: m.start()])[-4:])
+        if rs and not _AGENT_PRONOUN.search(before):  # «your t-shirt is not working»
             spans.append((m.start(), m.end() + rs.end(), "reason"))
     return spans
 
@@ -246,21 +635,23 @@ def _recipient_phrases(c: str, f: lu.CustomerFacts, acc: _Acc) -> list[tuple[int
         if t.group(0).lower() not in ("to", "into", "onto"):
             continue
         phrase = []
-        for u in toks[i + 1:i + 10]:
+        for u in toks[i + 1 : i + 10]:
             w = u.group(0).rstrip(".")
-            if w.lower() in _RECIP_STOP or re.search(r"[,;:!?]", c[t.end():u.start()]) and phrase:
+            if w.lower() in _RECIP_STOP or re.search(r"[,;:!?]", c[t.end() : u.start()]) and phrase:
                 break
             phrase.append((w, u))
         if not phrase:
             continue
-        if any(lu._canon(w) in lu._PRICE_WORDS or w.lower().removesuffix("'s") in lu._PRICE_WORDS
-               for w, _ in phrase):
-            continue                                       # «limited to the item's price»
+        if any(
+            lu._canon(w) in lu._PRICE_WORDS or w.lower().removesuffix("'s") in lu._PRICE_WORDS
+            for w, _ in phrase
+        ):
+            continue  # «limited to the item's price»
         first = phrase[0][0]
         if not (first.lower() in _RECIP_START or first[:1].isupper() or lu._EMAIL.fullmatch(first)):
-            continue                                       # «to process», «to help» — инфинитив
+            continue  # «to process», «to help» — инфинитив
         if lu._money(first) or re.fullmatch(r"[$€£]?\d[\d.,]*", first):
-            continue                                       # «up to $25»
+            continue  # «up to $25»
         verdict, detail = "ok", []
         for w, _ in phrase:
             lw, cw = w.lower(), lu._canon(w)
@@ -271,11 +662,10 @@ def _recipient_phrases(c: str, f: lu.CustomerFacts, acc: _Acc) -> list[tuple[int
             elif cw in THIRD_PARTY_WORDS or lw.removesuffix("'s") in THIRD_PARTY_WORDS:
                 verdict = "mismatch"
                 detail.append(lw)
-            elif lw in _RECIP_OK or cw in _RECIP_OK or lw in ("of", "on", "ending") \
-                    or cw in name:
+            elif lw in _RECIP_OK or cw in _RECIP_OK or lw in ("of", "on", "ending") or cw in name:
                 continue
             elif w[:1].isupper() and cw not in title and lw not in NEUTRAL:
-                verdict = "mismatch"                       # чужое имя: «to Alice Smith»
+                verdict = "mismatch"  # чужое имя: «to Alice Smith»
                 detail.append(w)
             elif verdict == "ok":
                 verdict = "unknown"
@@ -309,16 +699,21 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
             acc.add("amount", "unknown", str(mo.cents))
         else:
             q = max(1, f.quantity or 1)
-            acc.add("amount", "ok" if mo.cents in {f.paid_cents, f.paid_cents // q} else
-                    "mismatch", str(mo.cents))
+            acc.add(
+                "amount",
+                "ok" if mo.cents in {f.paid_cents, f.paid_cents // q} else "mismatch",
+                str(mo.cents),
+            )
     # сумма с границей в обещании агента: «refund up to $19» (= цене) допустимо, «more than $25» — нет
     if role in ("commitment", "confirm") and f.paid_cents is not None:
         for mo in lu._money(c, with_ignored=True):
             if not mo.ignored or mo.currency == "pct":
                 continue
-            ctx = c[max(0, mo.span[0] - 30):mo.span[0]].lower()
-            if re.search(r"(?:not|instead of|rather than|asking for|asked for)\W*(?:\w+\W+)?$", ctx):
-                continue                                   # исправление/отказ от чужой суммы
+            ctx = c[max(0, mo.span[0] - 30) : mo.span[0]].lower()
+            if re.search(
+                r"(?:not|instead of|rather than|asking for|asked for)\W*(?:\w+\W+)?$", ctx
+            ):
+                continue  # исправление/отказ от чужой суммы
             if re.search(r"(?:above|over|more than|exceed\w*|at least)\W*(?:\w+\W+)?$", ctx):
                 acc.add("amount", "mismatch", f"bound>{mo.cents}")
             elif re.search(r"(?:below|under|less than|lower than|beneath)\W*(?:\w+\W+)?$", ctx):
@@ -369,12 +764,16 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
         if neg:
             polarity = "negative"
             refusal = [m for m in neg if _REFUSAL_VERB.fullmatch(m.group(0))]
-            scoped = [m for m in neg if lu._ACTION_WORD.match(" ".join(
-                lu._TOKEN.findall(c[m.end():])[:4]) or "") or any(
-                lu._ACTION_WORD.fullmatch(w) for w in lu._TOKEN.findall(c[m.end():])[:4])]
+            scoped = [
+                m
+                for m in neg
+                if lu._ACTION_WORD.match(" ".join(lu._TOKEN.findall(c[m.end() :])[:4]) or "")
+                or any(lu._ACTION_WORD.fullmatch(w) for w in lu._TOKEN.findall(c[m.end() :])[:4])
+            ]
             customer = _CUSTOMER_SUBJECT.search(lu._SUBORD.sub("", c))
-            if not customer and ((refusal and lu._ACTION_WORD.search(c)) or scoped
-                                 or _NO_ACTION.search(c)):
+            if not customer and (
+                (refusal and lu._ACTION_WORD.search(c)) or scoped or _NO_ACTION.search(c)
+            ):
                 acc.add("action", "mismatch", (refusal or scoped or neg)[0].group(0))
             else:
                 acc.add("negation", "unknown", neg[0].group(0))  # смысл отрицания неясен
@@ -388,9 +787,15 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
     if not question:
         with_title, others = lu._item_phrases(c, title)
         for ph in with_title:
-            extra = [w for w in ph if not lu._matches_title(w, title)
-                     and lu._canon(w) not in lu._ITEM_GENERIC and lu._canon(w) not in lu._REASON_WORDS
-                     and lu._canon(w) not in NEUTRAL and w.lower() not in NEUTRAL]
+            extra = [
+                w
+                for w in ph
+                if not lu._matches_title(w, title)
+                and lu._canon(w) not in lu._ITEM_GENERIC
+                and lu._canon(w) not in lu._REASON_WORDS
+                and lu._canon(w) not in NEUTRAL
+                and w.lower() not in NEUTRAL
+            ]
             acc.add("item", "mismatch" if extra else "ok", " ".join(ph))
         others = [o for o in others if not any(_EXTRA.search(w) for w in o)]
         if others:
@@ -402,9 +807,15 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
                 if w.lower() in NEUTRAL - lu._ITEM_GENERIC and words:
                     break
                 words.append(w)
-            caps = [w for w in words if w[:1].isupper() and not lu._matches_title(w, title)
-                    and lu._canon(w) not in name_tokens and w.lower() not in seen
-                    and w.lower() not in NEUTRAL]
+            caps = [
+                w
+                for w in words
+                if w[:1].isupper()
+                and not lu._matches_title(w, title)
+                and lu._canon(w) not in name_tokens
+                and w.lower() not in seen
+                and w.lower() not in NEUTRAL
+            ]
             if caps and title:
                 acc.add("item", "mismatch", " ".join(words))
         if lu._ITEM_REF.search(c) and not with_title:
@@ -412,8 +823,11 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
     # причина (только утверждения агента)
     if not question and f.reason_code in lu.REASON_HINTS:
         own = lu.REASON_HINTS[f.reason_code].search(c)
-        other = [k for k, rx in lu.REASON_HINTS.items()
-                 if k not in (f.reason_code, "other") and rx.search(c)]
+        other = [
+            k
+            for k, rx in lu.REASON_HINTS.items()
+            if k not in (f.reason_code, "other") and rx.search(c)
+        ]
         if own:
             acc.add("reason", "ok", f.reason_code)
         elif other:
@@ -422,23 +836,34 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
     residue: list[str] = []
     if not question:
         clean = c
-        cut = sorted([(a, b) for a, b, _ in benign] + recip_spans
-                     + [mo.span for mo in lu._money(c, with_ignored=True)]
-                     + [m.span() for m in lu._EMAIL.finditer(c)]
-                     + [m.span() for m in lu._ITEM_REF.finditer(c)], reverse=True)
+        cut = sorted(
+            [(a, b) for a, b, _ in benign]
+            + recip_spans
+            + [mo.span for mo in lu._money(c, with_ignored=True)]
+            + [m.span() for m in lu._EMAIL.finditer(c)]
+            + [m.span() for m in lu._ITEM_REF.finditer(c)],
+            reverse=True,
+        )
         for a, b in cut:
             clean = clean[:a] + " " + clean[b:]
         clean = lu._ORDER_TOKEN.sub(" ", clean)
-        clean = qty_rx.sub(lambda m: " " + m.group(0)[len(m.group(1)):], clean)
+        clean = qty_rx.sub(lambda m: " " + m.group(0)[len(m.group(1)) :], clean)
         clean = lu._CONFIRM_EXTRA.sub(" ", lu._CONFIRM_RX.sub(" ", clean))
         for w in lu._TOKEN.findall(clean):
             cw, lw = lu._canon(w), w.lower()
-            if lw in NEUTRAL or cw in NEUTRAL or cw in lu._REASON_WORDS or cw in lu._ITEM_GENERIC \
-                    or lu._matches_title(w, title) or cw in name_tokens or lw in lu._NUM_UNITS \
-                    or lw in lu._NUM_SCALE:
+            if (
+                lw in NEUTRAL
+                or cw in NEUTRAL
+                or cw in lu._REASON_WORDS
+                or cw in lu._ITEM_GENERIC
+                or lu._matches_title(w, title)
+                or cw in name_tokens
+                or lw in lu._NUM_UNITS
+                or lw in lu._NUM_SCALE
+            ):
                 continue
             if _NEG.fullmatch(w) or _EXTRA.fullmatch(w) or _MULTI.fullmatch(w):
-                continue                                   # уже разобрано как поле
+                continue  # уже разобрано как поле
             residue.append(lw)
         for d in re.findall(r"(?<![\w-])\d+(?![\w-])", clean):
             if not re.search(rf"\b{d}\s*(?:-\s*\d+\s*)?(?:business |working )?days?\b", clean, _I):
@@ -446,8 +871,9 @@ def validate_clause(c: str, role: str, f: lu.CustomerFacts) -> Clause:
     # Ревизия 5: остаток вне NEUTRAL — только диагностика; закрытый мир теперь — шаблоны клауз.
     toks = normalize_clause(c, f, benign)
     tpl = template_of(c, role, toks)
-    return Clause(c, role, polarity, tuple(acc.fields), tuple(dict.fromkeys(residue)), tpl,
-                  tuple(toks))
+    return Clause(
+        c, role, polarity, tuple(acc.fields), tuple(dict.fromkeys(residue)), tpl, tuple(toks)
+    )
 
 
 # ------------------------------------------------------------------ 3. шаблоны «yes» (ревизия 5)
@@ -470,29 +896,51 @@ reimburse reimbursed reimbursement reimbursing process processed processing issu
 initiate initiated initiating approve approved submit submitted arrange complete full fully
 amount price total order item product purchase back original payment method card up per unit
 able happy""")
-T_FACT = _words("""see understand understood are was were requesting request requested asking
+T_FACT = (
+    _words("""see understand understood are was were requesting request requested asking
 asked want wanted like looking return returning refund for because since as so that item
 product order purchase purchased ordered bought delivered received arrived came price priced cost
 costs costing paid indeed yours reason which confirm before process help sorry hear mentioned
-said told stated""") | lu._REASON_WORDS   # (минус запрещённые — ниже, после списка запрета)
+said told stated""")
+    | lu._REASON_WORDS
+)  # (минус запрещённые — ниже, после списка запрета)
 T_POLICY = _words("""according per our refund refunds return returns policy policies rule rules
 exceed exceeds exceeding only item item's items price prices actual original amount amounts are
 limited need needs require requires required manual check review above over""")
 T_SLOTQ = _words("""what what's which is the your email e-mail address name full on order account
 could can you please share provide tell me give confirm also and reason for why are returning
 return it number do""")
-TEMPLATE_WORDS = {"confirm_q": T_COMMON | T_CONFIRM,
-                  "proposal": T_COMMON | T_CONFIRM | T_PROPOSAL,
-                  "fact": T_COMMON | T_CONFIRM | T_FACT,
-                  "policy": T_COMMON | T_POLICY,
-                  "slot_q": T_COMMON | T_SLOTQ}
-TEMPLATE_LABELS = {"confirm_q": frozenset(),
-                   "proposal": frozenset({"ORD", "AMT", "ITEM", "DEST", "TIME", "REASON", "QTY",
-                                          "BOUND", "PCT", "NEGOK", "NAME", "RSUBJ"}),
-                   "fact": frozenset({"ORD", "AMT", "ITEM", "REASON", "DATE", "QTY", "CORR",
-                                      "NEGOK", "NAME", "DAYS", "RSUBJ"}),
-                   "policy": frozenset({"BOUND", "LIMITAMT", "NEGOK", "AMT"}),
-                   "slot_q": frozenset({"ORD", "ITEM", "NAME", "EMAIL"})}
+TEMPLATE_WORDS = {
+    "confirm_q": T_COMMON | T_CONFIRM,
+    "proposal": T_COMMON | T_CONFIRM | T_PROPOSAL,
+    "fact": T_COMMON | T_CONFIRM | T_FACT,
+    "policy": T_COMMON | T_POLICY,
+    "slot_q": T_COMMON | T_SLOTQ,
+}
+TEMPLATE_LABELS = {
+    "confirm_q": frozenset(),
+    "proposal": frozenset(
+        {
+            "ORD",
+            "AMT",
+            "ITEM",
+            "DEST",
+            "TIME",
+            "REASON",
+            "QTY",
+            "BOUND",
+            "PCT",
+            "NEGOK",
+            "NAME",
+            "RSUBJ",
+        }
+    ),
+    "fact": frozenset(
+        {"ORD", "AMT", "ITEM", "REASON", "DATE", "QTY", "CORR", "NEGOK", "NAME", "DAYS", "RSUBJ"}
+    ),
+    "policy": frozenset({"BOUND", "LIMITAMT", "NEGOK", "AMT"}),
+    "slot_q": frozenset({"ORD", "ITEM", "NAME", "EMAIL"}),
+}
 _ACTION_STEMS = ("refund", "return", "reimburs")
 _FACT_LABELS = frozenset({"ORD", "AMT", "ITEM", "REASON", "DATE", "QTY", "CORR", "NEGOK"})
 _POLICY_CUE = _words("policy policies exceed exceeds exceeding limited only manual rule rules")
@@ -513,28 +961,45 @@ T_FACT = T_FACT - FORBIDDEN_TEMPLATE_WORDS
 TEMPLATE_WORDS["fact"] = T_COMMON | T_CONFIRM | T_FACT
 _LIMITED_EXCEPTIONS = {"policy": _words("above over cannot"), "slot_q": _words("account")}
 
-_COURTESY = [re.compile(rx) for rx in (
-    r"(?:hi|hello|hey|dear)(?: there| customer| PH_NAME)*",
-    (r"thank(?:s| you)(?: so much| very much)?(?: (?:for|again for) (?:contacting us|reaching "
-     r"out|your patience|your message|letting us know|your understanding|shopping with us|"
-     r"waiting|the details|the information|confirming|your purchase))?(?: PH_NAME)?"),
-    (r"(?:i'm|i am|we're|we are) (?:so |very |really |truly )?sorry(?: (?:to hear (?:that|about "
-     r"that|about this|this)|for the (?:inconvenience|trouble|delay)|about (?:that|this|the "
-     r"trouble|the inconvenience)))?"),
-    r"(?:i|we) (?:sincerely )?apologi[sz]e for (?:the|any) (?:inconvenience|trouble|delay)",
-    (r"(?:(?:so|very|really) )?sorry(?: about that| for that| for the (?:inconvenience|trouble|"
-     r"delay|confusion|mistake|mix-up))?|(?:my )?apologies(?: for the (?:inconvenience|confusion|"
-     r"mistake|mix-up))?"),
-    (r"(?:i|we) (?:completely |totally )?understand(?: your (?:frustration|concern)| how "
-     r"frustrating (?:this|that) (?:is|must be))?"),
-    (r"(?:i'm|i am|we're|we are) (?:happy|glad) to help(?: you)?(?: with (?:this|that|your "
-     r"request))?"),
-    (r"(?:best|kind) regards|have a (?:nice|great|good) day|no worries|no problem|of course|"
-     r"certainly|sure|absolutely|great|got it|understood"),
-    (r"this (?:will|would) help (?:me|us) (?:determine|check|verify|confirm) (?:if|whether) your "
-     r"(?:refund |return )?request (?:meets|qualifies under|is eligible under) our (?:refund |"
-     r"return )?polic(?:y|ies)(?: requirements)?"),
-)]
+_COURTESY = [
+    re.compile(rx)
+    for rx in (
+        r"(?:hi|hello|hey|dear)(?: there| customer| PH_NAME)*",
+        (
+            r"thank(?:s| you)(?: so much| very much)?(?: (?:for|again for) (?:contacting us|reaching "
+            r"out|your patience|your message|letting us know|your understanding|shopping with us|"
+            r"waiting|the details|the information|confirming|your purchase))?(?: PH_NAME)?"
+        ),
+        (
+            r"(?:i'm|i am|we're|we are) (?:so |very |really |truly )?sorry(?: (?:to hear (?:that|about "
+            r"that|about this|this)|for the (?:inconvenience|trouble|delay)|about (?:that|this|the "
+            r"trouble|the inconvenience)))?"
+        ),
+        r"(?:i|we) (?:sincerely )?apologi[sz]e for (?:the|any) (?:inconvenience|trouble|delay)",
+        (
+            r"(?:(?:so|very|really) )?sorry(?: about that| for that| for the (?:inconvenience|trouble|"
+            r"delay|confusion|mistake|mix-up))?|(?:my )?apologies(?: for the (?:inconvenience|confusion|"
+            r"mistake|mix-up))?"
+        ),
+        (
+            r"(?:i|we) (?:completely |totally )?understand(?: your (?:frustration|concern)| how "
+            r"frustrating (?:this|that) (?:is|must be))?"
+        ),
+        (
+            r"(?:i'm|i am|we're|we are) (?:happy|glad) to help(?: you)?(?: with (?:this|that|your "
+            r"request))?"
+        ),
+        (
+            r"(?:best|kind) regards|have a (?:nice|great|good) day|no worries|no problem|of course|"
+            r"certainly|sure|absolutely|great|got it|understood"
+        ),
+        (
+            r"this (?:will|would) help (?:me|us) (?:determine|check|verify|confirm) (?:if|whether) your "
+            r"(?:refund |return )?request (?:meets|qualifies under|is eligible under) our (?:refund |"
+            r"return )?polic(?:y|ies)(?: requirements)?"
+        ),
+    )
+]
 
 
 def template_conflicts() -> dict[str, list[str]]:
@@ -542,8 +1007,11 @@ def template_conflicts() -> dict[str, list[str]]:
     исключений `_LIMITED_EXCEPTIONS`: above/over/cannot в правилах)."""
     out = {}
     for name, words in TEMPLATE_WORDS.items():
-        bad = sorted(w for w in words if w in FORBIDDEN_TEMPLATE_WORDS
-                     and w not in _LIMITED_EXCEPTIONS.get(name, ()))
+        bad = sorted(
+            w
+            for w in words
+            if w in FORBIDDEN_TEMPLATE_WORDS and w not in _LIMITED_EXCEPTIONS.get(name, ())
+        )
         if bad:
             out[name] = bad
     return out
@@ -554,25 +1022,37 @@ _DEST = re.compile(
     r"(?:payment(?:\s+method)?|card|method of payment|form of payment|bank account|account)"
     r"(?!\s+(?:of|ending|belonging|number|no))"
     r"(?:\s+(?:that\s+)?(?:you\s+)?used(?:\s+(?:for|at)\s+(?:the|this|your)\s+(?:purchase|order|"
-    r"checkout))?)?\b", _I)
+    r"checkout))?)?\b",
+    _I,
+)
 _NUMW = r"\d+|one|two|three|four|five|six|seven|eight|nine|ten|fourteen|thirty"
-_TIME = re.compile(rf"\b(?:within|in)\s+(?:about\s+|around\s+)?(?:{_NUMW})(?:\s*(?:-|–|to)\s*(?:{_NUMW}))?"
-                   r"\s+(?:business\s+|working\s+)?days?\b", _I)
+_TIME = re.compile(
+    rf"\b(?:within|in)\s+(?:about\s+|around\s+)?(?:{_NUMW})(?:\s*(?:-|–|to)\s*(?:{_NUMW}))?"
+    r"\s+(?:business\s+|working\s+)?days?\b",
+    _I,
+)
 _DAYS_AGO = re.compile(rf"\b(?:about\s+)?(?:{_NUMW})\s+days?\s+ago\b", _I)
-_DATE = re.compile(r"\b(?:on\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
-                   r"\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s+\d{4})?", _I)
+_DATE = re.compile(
+    r"\b(?:on\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
+    r"\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s+\d{4})?",
+    _I,
+)
 _CORR_CTX = re.compile(r"(?:not|instead of|rather than|asking for|asked for)\W*(?:\w+\W+)?$", _I)
 _BOUND_CTX = re.compile(r"(?:up to|at most|maximum of|max(?:imum)?|no more than)\W*$", _I)
 _LIMIT_CTX = re.compile(r"(?:above|over|more than|exceed\w*|threshold|limit\w*)\W*(?:\w+\W+)?$", _I)
 # Подлежащее причины: «because they are the wrong size», «since it was damaged» — they/it здесь
 # товар клиента; вне этой конструкции they/them в шаблоны не входят.
-_REASON_SUBJ = re.compile(r"\b(?:because|since|as)\s+(?:it|they|the \w+|your \w+)\s+(?:is|are|was|"
-                          r"were|has been|have been|arrived|came)\b", _I)
+_REASON_SUBJ = re.compile(
+    r"\b(?:because|since|as)\s+(?:it|they|the \w+|your \w+)\s+(?:is|are|was|"
+    r"were|has been|have been|arrived|came)\b",
+    _I,
+)
 _PH_TOKEN = re.compile(r"PH_[A-Z]+|[a-z]+(?:['’-][a-z]+)*|\d+")
 
 
-def normalize_clause(c: str, f: lu.CustomerFacts,
-                     benign: list[tuple[int, int, str]] | None = None) -> list[str]:
+def normalize_clause(
+    c: str, f: lu.CustomerFacts, benign: list[tuple[int, int, str]] | None = None
+) -> list[str]:
     """Токены клаузы: значения проверенных полей заменены метками PH_*, прочее — слова (нижний
     регистр). Метка PH_BAD — значение поля, не совпавшее с фактами или непроверяемое."""
     spans: list[tuple[int, int, str]] = []
@@ -582,7 +1062,7 @@ def normalize_clause(c: str, f: lu.CustomerFacts,
         spans.append((a, b, "NEGOK"))
     for mo in lu._money(c, with_ignored=True):
         a, b = mo.span
-        ctx = c[max(0, a - 30):a]
+        ctx = c[max(0, a - 30) : a]
         if mo.currency == "pct":
             lab = "PCT" if mo.cents == 10000 else "BAD"
         elif mo.currency != "usd":
@@ -604,12 +1084,22 @@ def normalize_clause(c: str, f: lu.CustomerFacts,
         if o in _orders_in(c):
             spans.append((m.start(), m.end(), "ORD" if own and o == own else "BAD"))
     for m in lu._EMAIL.finditer(c):
-        spans.append((m.start(), m.end(),
-                      "EMAIL" if f.email and m.group(0).lower() == f.email.lower() else "BAD"))
+        spans.append(
+            (
+                m.start(),
+                m.end(),
+                "EMAIL" if f.email and m.group(0).lower() == f.email.lower() else "BAD",
+            )
+        )
     for m in lu._ITEM_REF.finditer(c):
         spans.append((m.start(), m.end(), "BAD"))
-    for rx, lab in ((_DEST, "DEST"), (_TIME, "TIME"), (_DAYS_AGO, "DAYS"), (_DATE, "DATE"),
-                    (_REASON_SUBJ, "RSUBJ")):
+    for rx, lab in (
+        (_DEST, "DEST"),
+        (_TIME, "TIME"),
+        (_DAYS_AGO, "DAYS"),
+        (_DATE, "DATE"),
+        (_REASON_SUBJ, "RSUBJ"),
+    ):
         for m in rx.finditer(c):
             spans.append((m.start(), m.end(), lab))
     title = lu._title_tokens(f.item_title)
@@ -624,7 +1114,7 @@ def normalize_clause(c: str, f: lu.CustomerFacts,
     for m in lu._TOKEN.finditer(c):
         if name and lu._canon(m.group(0)) in name and m.group(0)[:1].isupper():
             spans.append((m.start(), m.end(), "NAME"))
-    if f.reason_code:                     # код причины дословно: «the reason is "does_not_fit"»
+    if f.reason_code:  # код причины дословно: «the reason is "does_not_fit"»
         for m in re.finditer(rf"\b{re.escape(f.reason_code)}\b", c, _I):
             spans.append((m.start(), m.end(), "REASON"))
     rx = lu.REASON_HINTS.get(f.reason_code or "")
@@ -667,6 +1157,7 @@ def template_of(c: str, role: str, toks: list[str]) -> str | None:
 
     def fits(name: str) -> bool:
         return ws <= TEMPLATE_WORDS[name] and labels <= TEMPLATE_LABELS[name]
+
     confirm_cue = role == "confirm" or bool(lu._CONFIRM_RX.search(c) or _BARE_CONFIRM.search(c))
     if role == "slot_question":
         return "slot_q" if fits("slot_q") else None
@@ -711,14 +1202,20 @@ def decide(clauses: Iterable[Clause]) -> lu.ProposalCheck:
     elif unk or not ok or unmatched:
         verdict = "incomplete"
     elif action and not subject:
-        verdict = "incomplete"            # действие без предмета: что именно оформляется?
+        verdict = "incomplete"  # действие без предмета: что именно оформляется?
     else:
         verdict = "consistent"
-    return lu.ProposalCheck(verdict, tuple(dict.fromkeys(mism)), tuple(dict.fromkeys(unk)),
-                            tuple(dict.fromkeys(ok)), action, confirm, tuple(scope),
-                            tuple(cl.text for cl in clauses),
-                            tuple((cl.text, cl.role, cl.polarity, cl.fields, cl.template)
-                                  for cl in clauses))
+    return lu.ProposalCheck(
+        verdict,
+        tuple(dict.fromkeys(mism)),
+        tuple(dict.fromkeys(unk)),
+        tuple(dict.fromkeys(ok)),
+        action,
+        confirm,
+        tuple(scope),
+        tuple(cl.text for cl in clauses),
+        tuple((cl.text, cl.role, cl.polarity, cl.fields, cl.template) for cl in clauses),
+    )
 
 
 def check_message(text: str, f: lu.CustomerFacts) -> lu.ProposalCheck:

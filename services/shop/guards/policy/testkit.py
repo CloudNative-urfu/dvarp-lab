@@ -68,9 +68,15 @@ class NaiveRefundAgent:
         if item is None:
             return "All items of this order already have a refund request."
         reason = "defective" if _DEFECT_RE.search(text) else "does_not_fit"
-        f = self._call("finalize_case", {
-            "decision": "create_refund", "order_item_id": item["order_item_id"],
-            "amount_cents": item["price_cents"] * item["qty"], "reason_code": reason})
+        f = self._call(
+            "finalize_case",
+            {
+                "decision": "create_refund",
+                "order_item_id": item["order_item_id"],
+                "amount_cents": item["price_cents"] * item["qty"],
+                "reason_code": reason,
+            },
+        )
         if not f.ok:
             return "Sorry, I could not complete this request."
         extra = f" Note on your order: {notes[0]}" if notes else ""
@@ -101,9 +107,16 @@ class EpisodeKit:
     def order(self, customer: str, arch: str) -> str:
         return self.mgr.spec.accounts[customer]["orders"][arch]
 
-    def episode(self, *, arch: str = "recent", history: Iterable[str] = (),
-                note: str | None = None, traffic: str = "legal",
-                log: EventLog | None = None, customer: str | None = None) -> Episode:
+    def episode(
+        self,
+        *,
+        arch: str = "recent",
+        history: Iterable[str] = (),
+        note: str | None = None,
+        traffic: str = "legal",
+        log: EventLog | None = None,
+        customer: str | None = None,
+    ) -> Episode:
         self._n += 1
         eid = f"ep{self._n:03d}"
         db = self.mgr.prepare(eid)
@@ -112,9 +125,17 @@ class EpisodeKit:
         conn = connect(db)
         try:
             now = conn.execute("SELECT value FROM meta WHERE key='now'").fetchone()[0]
-            fx: dict[str, Any] = {"tickets": [{
-                "id": self.TICKET, "customer_id": me, "order_id": oid, "opened_at": now,
-                "history": [{"body": h} for h in history]}]}
+            fx: dict[str, Any] = {
+                "tickets": [
+                    {
+                        "id": self.TICKET,
+                        "customer_id": me,
+                        "order_id": oid,
+                        "opened_at": now,
+                        "history": [{"body": h} for h in history],
+                    }
+                ]
+            }
             if note is not None:
                 fx["order_notes"] = [{"order_id": oid, "note": note}]
             apply_fixture(conn, fx)
@@ -128,8 +149,16 @@ class EpisodeKit:
 
 
 class Episode:
-    def __init__(self, kit: EpisodeKit, eid: str, db: Path, log: EventLog, ex: Executor,
-                 session: Session, order_id: str):
+    def __init__(
+        self,
+        kit: EpisodeKit,
+        eid: str,
+        db: Path,
+        log: EventLog,
+        ex: Executor,
+        session: Session,
+        order_id: str,
+    ):
         self.kit, self.eid, self.db, self.log, self.ex = kit, eid, db, log, ex
         self.session, self.order_id = session, order_id
 
@@ -145,6 +174,10 @@ class Episode:
             conn.close()
 
     def events(self, component: str | None = None, kind: str | None = None) -> list[dict]:
-        return [e for e in self.log.events if e.get("episode_id") == self.eid
-                and (component is None or e["component"] == component)
-                and (kind is None or e["kind"] == kind)]
+        return [
+            e
+            for e in self.log.events
+            if e.get("episode_id") == self.eid
+            and (component is None or e["component"] == component)
+            and (kind is None or e["kind"] == kind)
+        ]

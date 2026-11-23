@@ -33,8 +33,10 @@ from .arrivals import DEFAULT_MEAN_GAP, DEFAULT_W_A
 from .model import DEFAULT_SLA_MINUTES, OPERATOR_LEVELS, SERVICE_MODES, QueueError
 
 QUEUE_MODEL_VERSION = "queue-analytic-1"
-NON_CLAIMS = ("customer abandonment is not modelled (patient customers in M/M/1 and M/M/c)",
-              "the queue is a model, not a live operator")
+NON_CLAIMS = (
+    "customer abandonment is not modelled (patient customers in M/M/1 and M/M/c)",
+    "the queue is a model, not a live operator",
+)
 
 
 def erlang_c(servers: int, load: float) -> float:
@@ -59,15 +61,19 @@ def mmc(lam: float, service_minutes: float, servers: int, sla_minutes: float) ->
         if not (math.isfinite(v) and v > 0):
             raise QueueError(f"{name}: положительное число, получено {v!r}")
     rho = lam * service_minutes / servers
-    out = {"model": "M/M/1" if servers == 1 else "M/M/c (Erlang C)", "operators": servers,
-           "service_minutes": float(service_minutes), "lambda_Q_per_min": lam, "rho": rho,
-           "stable": rho < 1.0}
+    out = {
+        "model": "M/M/1" if servers == 1 else "M/M/c (Erlang C)",
+        "operators": servers,
+        "service_minutes": float(service_minutes),
+        "lambda_Q_per_min": lam,
+        "rho": rho,
+        "stable": rho < 1.0,
+    }
     if rho >= 1.0:
         return {**out, "P_wait": None, "W_q": None, "P_wq_gt_sla": None}
     pw = erlang_c(servers, lam * service_minutes)
     gap = servers / service_minutes - lam
-    return {**out, "P_wait": pw, "W_q": pw / gap,
-            "P_wq_gt_sla": pw * math.exp(-gap * sla_minutes)}
+    return {**out, "P_wait": pw, "W_q": pw / gap, "P_wq_gt_sla": pw * math.exp(-gap * sla_minutes)}
 
 
 def assumptions(plan: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -79,14 +85,21 @@ def assumptions(plan: Mapping[str, Any] | None = None) -> dict[str, Any]:
     w_a = float(p.get("w_a", DEFAULT_W_A))
     lam_l = 1.0 / gap
     lam_total = lam_l / (1.0 - w_a)
-    return {"version": QUEUE_MODEL_VERSION, "lambda_total_per_min": lam_total,
-            "w_A": w_a, "lambda_L_per_min": lam_l, "lambda_A_per_min": lam_total * w_a,
-            "service_minutes": SERVICE_MODES[p.get("service_mode", "base")],
-            "operators": int(p.get("operators", 1)),
-            "sla_minutes": float(p.get("sla_minutes", DEFAULT_SLA_MINUTES)),
-            "grid": {"service_minutes": sorted(SERVICE_MODES.values()),
-                     "operators": list(OPERATOR_LEVELS)},
-            "non_claims": list(NON_CLAIMS)}
+    return {
+        "version": QUEUE_MODEL_VERSION,
+        "lambda_total_per_min": lam_total,
+        "w_A": w_a,
+        "lambda_L_per_min": lam_l,
+        "lambda_A_per_min": lam_total * w_a,
+        "service_minutes": SERVICE_MODES[p.get("service_mode", "base")],
+        "operators": int(p.get("operators", 1)),
+        "sla_minutes": float(p.get("sla_minutes", DEFAULT_SLA_MINUTES)),
+        "grid": {
+            "service_minutes": sorted(SERVICE_MODES.values()),
+            "operators": list(OPERATOR_LEVELS),
+        },
+        "non_claims": list(NON_CLAIMS),
+    }
 
 
 def cell_key(service_minutes: float, operators: int) -> str:
@@ -103,10 +116,18 @@ def queue_block(e_legal: float, e_attack: float, a: Mapping[str, Any]) -> dict[s
     for s, k in cells:
         c = mmc(lam_q, s, k, a["sla_minutes"])
         ok = c["stable"]
-        grid[cell_key(s, k)] = {**c, "Q_L": e_legal * c["W_q"] if ok else None,
-                                "P_sla_L": e_legal * c["P_wq_gt_sla"] if ok else None}
-    return {"E_L": e_legal, "E_A": e_attack, "lambda_Q_per_min": lam_q,
-            "base": cell_key(a["service_minutes"], a["operators"]), "grid": grid}
+        grid[cell_key(s, k)] = {
+            **c,
+            "Q_L": e_legal * c["W_q"] if ok else None,
+            "P_sla_L": e_legal * c["P_wq_gt_sla"] if ok else None,
+        }
+    return {
+        "E_L": e_legal,
+        "E_A": e_attack,
+        "lambda_Q_per_min": lam_q,
+        "base": cell_key(a["service_minutes"], a["operators"]),
+        "grid": grid,
+    }
 
 
 def self_check() -> None:
@@ -116,10 +137,10 @@ def self_check() -> None:
         rho = lam * s
         c = mmc(lam, s, 1, 60.0)
         assert math.isclose(c["P_wait"], rho)
-        assert math.isclose(c["W_q"], rho / (1 / s - lam))             # M/M/1: ρ/(μ − λ)
+        assert math.isclose(c["W_q"], rho / (1 / s - lam))  # M/M/1: ρ/(μ − λ)
         assert math.isclose(c["P_wq_gt_sla"], rho * math.exp(-(1 / s - lam) * 60.0))
-    assert math.isclose(erlang_c(2, 1.0), 1 / 3)                       # c = 2, a = 1
-    assert math.isclose(mmc(1.0, 1.0, 2, 1.0)["W_q"], 1 / 3)           # Lq = 2ρ³/(1 − ρ²), ρ = ½
-    assert math.isclose(erlang_c(3, 2.0), 4 / 9)                       # c = 3, a = 2: 4/9
+    assert math.isclose(erlang_c(2, 1.0), 1 / 3)  # c = 2, a = 1
+    assert math.isclose(mmc(1.0, 1.0, 2, 1.0)["W_q"], 1 / 3)  # Lq = 2ρ³/(1 − ρ²), ρ = ½
+    assert math.isclose(erlang_c(3, 2.0), 4 / 9)  # c = 3, a = 2: 4/9
     assert not mmc(0.125, 8.0, 1, 60.0)["stable"] and mmc(0.125, 8.0, 2, 60.0)["stable"]
     assert mmc(0.0, 8.0, 1, 60.0)["W_q"] == 0.0

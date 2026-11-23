@@ -34,18 +34,25 @@ MAX_REPLY_CHARS = 4000
 STATUSES = ("user_ended", "defender_closed", "protocol_violation", "user_error", "defender_error")
 # Нарушения протокола пользовательской стороной (NFR-2.11: превышение лимита — нарушение,
 # а не успешный отказ).
-VIOLATIONS = ("turn_limit_exceeded", "non_text_message", "empty_message", "oversize_message",
-              "control_characters")
+VIOLATIONS = (
+    "turn_limit_exceeded",
+    "non_text_message",
+    "empty_message",
+    "oversize_message",
+    "control_characters",
+)
 
 # Закрытый словарь research-сигнала (§4.2: «факт эскалации или метка проверяющего кода»).
 # Значение — проверка допустимости.
-RESEARCH_FEEDBACK_KEYS: Mapping[str, tuple[Any, ...]] = MappingProxyType({
-    "escalated": (True, False),
-    "clarification_requested": (True, False),
-    "guard_signal": ("allow", "flag", "block", "score", None),
-    "policy_action": ("continue", "isolate", "clarify", "escalate", "terminate", None),
-    "exec_status": ("ok", "refused", None),
-})
+RESEARCH_FEEDBACK_KEYS: Mapping[str, tuple[Any, ...]] = MappingProxyType(
+    {
+        "escalated": (True, False),
+        "clarification_requested": (True, False),
+        "guard_signal": ("allow", "flag", "block", "score", None),
+        "policy_action": ("continue", "isolate", "clarify", "escalate", "terminate", None),
+        "exec_status": ("ok", "refused", None),
+    }
+)
 
 
 class ChannelError(RuntimeError):
@@ -98,7 +105,7 @@ class SessionResult:
     user_turns: int
     defender_turns: int
     violation: str | None
-    transcript: tuple[tuple[str, str], ...]   # (direction, text) в порядке доставки
+    transcript: tuple[tuple[str, str], ...]  # (direction, text) в порядке доставки
 
     @property
     def research_mode(self) -> bool:

@@ -43,8 +43,9 @@ from .usage_estimate import estimate_completion, estimate_prompt
 class Backend(Protocol):
     name: str  # stub | openai_compatible
 
-    def generate(self, messages: Sequence[Message], tools: Sequence[ToolSpec], *,
-                 max_tokens: int) -> Completion: ...
+    def generate(
+        self, messages: Sequence[Message], tools: Sequence[ToolSpec], *, max_tokens: int
+    ) -> Completion: ...
 
     def model_spec(self, role: str) -> ModelSpec: ...
 
@@ -55,8 +56,9 @@ class Backend(Protocol):
 Transport = Callable[[str, Mapping[str, str], bytes, float], "tuple[int, bytes]"]
 
 
-def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
-                     timeout_s: float) -> tuple[int, bytes]:
+def urllib_transport(
+    url: str, headers: Mapping[str, str], body: bytes, timeout_s: float
+) -> tuple[int, bytes]:
     req = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
@@ -97,19 +99,27 @@ class OpenAICompatibleBackend:
     def __repr__(self) -> str:
         return f"OpenAICompatibleBackend({self.settings.model!r} @ {self.settings.base_url})"
 
-    def build_body(self, messages: Sequence[Message], tools: Sequence[ToolSpec],
-                   max_tokens: int) -> dict:
+    def build_body(
+        self, messages: Sequence[Message], tools: Sequence[ToolSpec], max_tokens: int
+    ) -> dict:
         s = self.settings
-        body: dict[str, Any] = {**s.extra_body, "model": s.model, "messages": [m.to_openai() for m in messages],
-                                "temperature": s.temperature, "seed": s.seed,
-                                "max_tokens": max_tokens, "stream": False}
+        body: dict[str, Any] = {
+            **s.extra_body,
+            "model": s.model,
+            "messages": [m.to_openai() for m in messages],
+            "temperature": s.temperature,
+            "seed": s.seed,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
         if tools:
             body["tools"] = [t.to_openai() for t in tools]
             body["tool_choice"] = "auto"
         return body
 
-    def generate(self, messages: Sequence[Message], tools: Sequence[ToolSpec], *,
-                 max_tokens: int) -> Completion:
+    def generate(
+        self, messages: Sequence[Message], tools: Sequence[ToolSpec], *, max_tokens: int
+    ) -> Completion:
         s = self.settings
         body = json.dumps(self.build_body(messages, tools, max_tokens)).encode("utf-8")
         headers = {"Content-Type": "application/json", **s.auth_headers()}
@@ -137,15 +147,24 @@ class OpenAICompatibleBackend:
         if isinstance(p, int) and isinstance(c, int) and p >= 0 and c >= 0:
             usage = Usage(p, c, "reported")
         else:
-            usage = Usage(estimate_prompt(messages, tools), estimate_completion(content, calls),
-                          "estimated")
+            usage = Usage(
+                estimate_prompt(messages, tools), estimate_completion(content, calls), "estimated"
+            )
         details = usage_raw.get("completion_tokens_details") or {}
         rt = details.get("reasoning_tokens") if isinstance(details, dict) else None
         provider = data.get("provider")
-        return Completion(content, calls, finish, usage, str(data.get("model") or s.model),
-                          self.name, latency, data.get("system_fingerprint"),
-                          rt if isinstance(rt, int) and rt >= 0 else 0,
-                          provider if isinstance(provider, str) else None)
+        return Completion(
+            content,
+            calls,
+            finish,
+            usage,
+            str(data.get("model") or s.model),
+            self.name,
+            latency,
+            data.get("system_fingerprint"),
+            rt if isinstance(rt, int) and rt >= 0 else 0,
+            provider if isinstance(provider, str) else None,
+        )
 
     def model_spec(self, role: str) -> ModelSpec:
         return self.settings.model_spec(role)
@@ -153,12 +172,15 @@ class OpenAICompatibleBackend:
 
 # --- детерминированная заглушка -------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class StubRequest:
     messages: tuple[Message, ...]
     tools: tuple[ToolSpec, ...]
     seed: int
-    request_key: str  # хеш (seed, сообщения, инструменты) — источник детерминированной вариативности
+    request_key: (
+        str  # хеш (seed, сообщения, инструменты) — источник детерминированной вариативности
+    )
 
     def last(self, role: str = "user") -> str:
         for m in reversed(self.messages):
@@ -199,17 +221,25 @@ class StubBackend:
 
     name = "stub"
 
-    def __init__(self, profile: Mapping[str, Any], responder: Responder | None = None, *,
-                 model_name: str = "lab-stub", seed: int = 0):
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        responder: Responder | None = None,
+        *,
+        model_name: str = "lab-stub",
+        seed: int = 0,
+    ):
         self.profile = json.loads(json.dumps(dict(profile)))  # глубокая копия, только JSON
         self.responder = responder or RuleResponder(self.profile)
         self.model_name = model_name
         self.seed = seed
-        self.version = hash_obj({"profile": self.profile, "responder": _source_sha(self.responder),
-                                 "seed": seed})
+        self.version = hash_obj(
+            {"profile": self.profile, "responder": _source_sha(self.responder), "seed": seed}
+        )
 
-    def generate(self, messages: Sequence[Message], tools: Sequence[ToolSpec], *,
-                 max_tokens: int) -> Completion:
+    def generate(
+        self, messages: Sequence[Message], tools: Sequence[ToolSpec], *, max_tokens: int
+    ) -> Completion:
         msgs, tls = tuple(messages), tuple(tools)
         key = hash_obj({"m": [m.to_openai() for m in msgs], "t": [t.to_openai() for t in tls]})
         reply = self.responder(StubRequest(msgs, tls, self.seed, key))
@@ -232,8 +262,7 @@ class StubBackend:
         return Completion(content, tuple(calls), finish, usage, self.model_name, self.name, 0.0)
 
     def model_spec(self, role: str) -> ModelSpec:
-        return ModelSpec(name=self.model_name, role=role, params_b=0.0,
-                         revision=self.version)
+        return ModelSpec(name=self.model_name, role=role, params_b=0.0, revision=self.version)
 
 
 class RuleResponder:
@@ -249,8 +278,10 @@ class RuleResponder:
     """
 
     def __init__(self, profile: Mapping[str, Any]):
-        self.rules = [dict(r, _re=re.compile(r["match"], re.IGNORECASE | re.DOTALL))
-                      for r in profile.get("rules", ())]
+        self.rules = [
+            dict(r, _re=re.compile(r["match"], re.IGNORECASE | re.DOTALL))
+            for r in profile.get("rules", ())
+        ]
         self.default = profile.get("default", "Sorry, I can not help with that.")
 
     def __call__(self, req: StubRequest) -> StubReply:
@@ -268,8 +299,10 @@ class RuleResponder:
             text = text.format(**groups) if groups else text
             calls: tuple[tuple[str, dict], ...] = ()
             if r.get("tool"):
-                args = {k: (v.format(**groups) if isinstance(v, str) else v)
-                        for k, v in r.get("args", {}).items()}
+                args = {
+                    k: (v.format(**groups) if isinstance(v, str) else v)
+                    for k, v in r.get("args", {}).items()
+                }
                 calls = ((r["tool"], args),)
             return StubReply(text, calls)
         return StubReply(self.default)

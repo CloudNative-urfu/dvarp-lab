@@ -97,6 +97,7 @@ EPISODE_MUTABLE_TABLES = (
     "manual_reviews",
     "info_requests",
     "ops_ledger",
+    "payouts",
 )
 # Column names that must not exist in the synthetic shop DB.
 FORBIDDEN_COLUMN_FRAGMENTS = ("card", "iban", "ssn", "passport", "phone", "address", "cvv", "pan")
@@ -494,13 +495,26 @@ _TABLE_BY_NAME = {t.name: t for t in TABLES}
 
 
 def _as_engine(target: str | Engine | Path) -> Engine:
-    """Engine from an Engine, SQLAlchemy URL or bare file path (sqlite)."""
+    """Engine from an Engine, SQLAlchemy URL or bare file path (sqlite).
+
+    File/postgres engines are cached by URL: the ported protection code opens many short-lived
+    connections, and an uncached engine would leak file descriptors. In-memory sqlite engines
+    are never cached (each must stay a separate database).
+    """
     if isinstance(target, Engine):
         return target
     url = str(target)
     if "://" not in url:
         url = f"sqlite:///{url}"
-    return make_engine(url)
+    if url in ("sqlite://", "sqlite:///:memory:"):
+        return make_engine(url)
+    eng = _engines.get(url)
+    if eng is None:
+        eng = _engines[url] = make_engine(url)
+    return eng
+
+
+_engines: dict[str, Engine] = {}
 
 
 def make_engine(url: str, *, echo: bool = False) -> Engine:

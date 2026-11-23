@@ -102,10 +102,13 @@ def _onnx():
     so = ort.SessionOptions()
     so.intra_op_num_threads = int(lock["runtime"]["intra_op_num_threads"])
     sess = ort.InferenceSession(str(mdir / "model.onnx"), so, providers=["CPUExecutionProvider"])
-    _SESSION.update(sess=sess, tok=tok, names={i.name for i in sess.get_inputs()},
-                    inj=next(int(k) for k, v in cfg["id2label"].items()
-                             if v.upper() == "INJECTION"),
-                    runtime=f"onnxruntime {ort.__version__}")
+    _SESSION.update(
+        sess=sess,
+        tok=tok,
+        names={i.name for i in sess.get_inputs()},
+        inj=next(int(k) for k, v in cfg["id2label"].items() if v.upper() == "INJECTION"),
+        runtime=f"onnxruntime {ort.__version__}",
+    )
     return _SESSION
 
 
@@ -115,8 +118,10 @@ def onnx_score(text: str) -> tuple[float, float, float]:
     s = _onnx()
     w0, c0 = time.perf_counter(), time.process_time()
     enc = s["tok"].encode(text or " ")
-    feed = {"input_ids": np.array([enc.ids], dtype=np.int64),
-            "attention_mask": np.array([enc.attention_mask], dtype=np.int64)}
+    feed = {
+        "input_ids": np.array([enc.ids], dtype=np.int64),
+        "attention_mask": np.array([enc.attention_mask], dtype=np.int64),
+    }
     if "token_type_ids" in s["names"]:
         feed["token_type_ids"] = np.zeros_like(feed["input_ids"])
     logits = s["sess"].run(None, {k: v for k, v in feed.items() if k in s["names"]})[0][0]
@@ -130,8 +135,19 @@ def _record(text: str, score: float, cpu_ms: float, lat_ms: float) -> None:
     if not path:
         return
     with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"key": text_key(text), "text": text, "score": score,
-                             "cpu_ms": cpu_ms, "latency_ms": lat_ms}, ensure_ascii=False) + "\n")
+        fh.write(
+            json.dumps(
+                {
+                    "key": text_key(text),
+                    "text": text,
+                    "score": score,
+                    "cpu_ms": cpu_ms,
+                    "latency_ms": lat_ms,
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
 
 
 @register
@@ -142,8 +158,10 @@ class DebertaInjectionAdapter(GuardPlugin):
     stages = ("input", "context")
     deployment = "self_hosted"
     license = "apache-2.0"
-    origin = ("protectai/deberta-v3-base-prompt-injection-v2 @ 90c9989b (HF), ONNX export; "
-              "AgentDojo's BERT-detector defense class (case/docs/methodology/agentdojo.md)")
+    origin = (
+        "protectai/deberta-v3-base-prompt-injection-v2 @ 90c9989b (HF), ONNX export; "
+        "AgentDojo's BERT-detector defense class (case/docs/methodology/agentdojo.md)"
+    )
     enabled_by_default = False
     default_params = {"threshold": 0.5, "flag_signal": "flag"}
 
@@ -168,12 +186,20 @@ class DebertaInjectionAdapter(GuardPlugin):
             hit = tuple(i for i, s in scored if s >= self.params["threshold"])
             top = max(s for _, s in scored)
             if hit:
-                return GuardSignal(self.params["flag_signal"], score=top, targets=hit,
-                                   labels=("prompt_injection",),
-                                   reasons=(f"deberta-pi-v2: INJECTION p={top:.3f}",))
+                return GuardSignal(
+                    self.params["flag_signal"],
+                    score=top,
+                    targets=hit,
+                    labels=("prompt_injection",),
+                    reasons=(f"deberta-pi-v2: INJECTION p={top:.3f}",),
+                )
             return GuardSignal("allow", score=top, reasons=(f"deberta-pi-v2: SAFE p={top:.3f}",))
         s = self._score(inp.text or "", rt)
         if s >= self.params["threshold"]:
-            return GuardSignal(self.params["flag_signal"], score=s, labels=("prompt_injection",),
-                               reasons=(f"deberta-pi-v2: INJECTION p={s:.3f}",))
+            return GuardSignal(
+                self.params["flag_signal"],
+                score=s,
+                labels=("prompt_injection",),
+                reasons=(f"deberta-pi-v2: INJECTION p={s:.3f}",),
+            )
         return GuardSignal("allow", score=s, reasons=(f"deberta-pi-v2: SAFE p={s:.3f}",))
