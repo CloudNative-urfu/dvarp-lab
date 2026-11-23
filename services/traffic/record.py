@@ -62,10 +62,16 @@ class ChatModel:
     """
 
     def __init__(
-        self, recorder: Recorder, *, complete: Complete | None = None, base_url: str | None = None
+        self,
+        recorder: Recorder,
+        *,
+        complete: Complete | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
     ):
         self.recorder = recorder
-        self._complete = complete or _openai_complete(base_url or "")
+        self._complete = complete or _openai_complete(base_url or "", model, api_key)
 
     def reply(self, role: str, messages: Messages) -> str:
         response = self._complete(messages)
@@ -73,11 +79,17 @@ class ChatModel:
         return response
 
 
-def _openai_complete(base_url: str) -> Complete:
+def _openai_complete(
+    base_url: str, model: str | None = None, api_key: str | None = None
+) -> Complete:
+    """OpenAI-совместимый вызов: тело с полем model + Bearer-ключ (прокси AITunnel и т.п.)."""
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
     def complete(messages: Messages) -> str:
         r = httpx.post(
             base_url.rstrip("/") + "/chat/completions",
-            json={"messages": messages},
+            json={"model": model or "unknown", "messages": messages},
+            headers=headers,
             timeout=600.0,
         )
         r.raise_for_status()

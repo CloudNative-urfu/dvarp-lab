@@ -38,10 +38,11 @@ def check_config(
             and isinstance(value, str)
             and (urlparse(value).hostname or "") not in LOCAL_HOSTS
         ]
-    roster = load_roster()
-    for spec in agents:
-        if spec.name not in roster:
-            problems.append(f"модель {spec.name} ({spec.role}) отсутствует в ростере")
+    if not allow_remote:
+        roster = load_roster()
+        for spec in agents:
+            if spec.name not in roster:
+                problems.append(f"модель {spec.name} ({spec.role}) отсутствует в ростере")
     return problems
 
 

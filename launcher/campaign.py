@@ -43,12 +43,18 @@ def default_services() -> dict[str, Svc]:
     }
 
 
-def _model_spec(name: str | None, role: str) -> ModelSpec:
-    """Модель по имени; None/без имени — первая модель роли из ростера (дефолт кампании)."""
+def _model_spec(name: str | None, role: str, allow_remote: bool = False) -> ModelSpec:
+    """Модель по имени; None/без имени — первая модель роли из ростера.
+
+    allow_remote: имя может отсутствовать в ростере (проверка через прокси) —
+    тогда честный model_spec с пометкой remote-verification.
+    """
     roster = load_roster()
     if not name:
         spec = next(m for m in roster.values() if m.role == role)
         name = spec.name
+    if allow_remote and name not in roster:
+        return ModelSpec(name, role, params_b=None, revision="remote-verification")
     return resolve(name, role, roster)
 
 
@@ -97,7 +103,7 @@ def run_campaign(
     done = 0
     for cell in cells:
         cfg, seed = cell["config"], cell["seed"]
-        agent = _model_spec(cell["agent_model"], "agent")
+        agent = _model_spec(cell["agent_model"], "agent", allow_remote=remote)
         config = json.loads(
             (Path(__file__).resolve().parents[1] / "frozen" / "configs" / f"{cfg}.json").read_text()
         )

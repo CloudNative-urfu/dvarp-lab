@@ -1,5 +1,6 @@
-"""Remote-LLM: обход локальности, пины в сырых данных, пропуск в метриках."""
+"""Remote-LLM: обход локальности, пины в сырых данных, пропуск в метриках, клиент прокси."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from lab import nominal
@@ -52,6 +53,82 @@ def test_campaign_remote_pin_in_manifest_and_records(tmp_path, monkeypatch):
     assert traffic_body["remote_llm"] is True and attack_body["remote_llm"] is True
 
 
+def test_remote_model_outside_roster_gets_verification_spec(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path / "runs"))
+
+    class FakeSvc:
+        def post(self, path, json=None):
+            if path == "/snapshot":
+                return {"snapshot_id": "s1"}
+            if path == "/run-episode":
+                return {"outcome": "budget_exhausted", "turns": 1, "attempts": 1}
+            return {"ok": True}
+
+    manifest = run_campaign(
+        {
+            "configs": {"mode": "point", "point": "g0"},
+            "styles": {"mode": "point", "point": "patient"},
+            "tactics": {"mode": "point", "point": "direct_task"},
+            "agent_models": {"mode": "point", "point": "openai/gpt-4o-mini"},
+            "episodes": {"mode": "point", "point": 1},
+            "seeds": {"mode": "point", "point": 0},
+            "budget": 2,
+            "allow_remote_llm": True,
+        },
+        services={k: FakeSvc() for k in ("shop", "traffic", "attack", "metrics")},
+    )
+    cell = manifest["cells"][0]
+    assert cell["agent_model"] == {
+        "name": "openai/gpt-4o-mini",
+        "role": "agent",
+        "params_b": None,
+        "revision": "remote-verification",
+    }
+
+
+def test_openai_complete_sends_model_and_bearer(monkeypatch):
+    import services.traffic.record as rec
+
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured.update({"url": url, "json": json, "headers": headers})
+        return FakeResponse()
+
+    monkeypatch.setattr(rec.httpx, "post", fake_post)
+    complete = rec._openai_complete(
+        "https://api.aitunnel.ru/v1", model="openai/gpt-4o-mini", api_key="sk-test"
+    )
+    assert complete([{"role": "user", "content": "hi"}]) == "ok"
+    assert captured["json"]["model"] == "openai/gpt-4o-mini"
+    assert captured["headers"]["Authorization"] == "Bearer sk-test"
+    assert captured["url"].endswith("/chat/completions")
+
+
+def test_shop_agent_remote_env_bypass(tmp_path, monkeypatch):
+    from services.shop.llm.settings import LLMSettings
+
+    env = {
+        "RESEARCH_LLM_BASE_URL": "https://api.aitunnel.ru/v1",
+        "RESEARCH_LLM_MODEL": "openai/gpt-4o-mini",
+        "RESEARCH_LLM_PARAMS_B": "100",
+        "RESEARCH_LLM_API_KEY": "sk-test",
+        "LAB_ALLOW_REMOTE_LLM": "1",
+    }
+    s = LLMSettings.from_env(env)
+    assert s.base_url == "https://api.aitunnel.ru/v1"
+    assert s.has_api_key and s.auth_headers()["Authorization"] == "Bearer sk-test"
+    with pytest.raises(Exception, match="не адрес локального контура"):
+        LLMSettings.from_env({k: v for k, v in env.items() if k != "LAB_ALLOW_REMOTE_LLM"})
+
+
 def test_metrics_skips_remote_records(tmp_path, monkeypatch):
     monkeypatch.setenv("LAB_RAW_DB_URL", f"sqlite:///{tmp_path}/raw.db")
     monkeypatch.setenv("LAB_METRICS_DB_URL", f"sqlite:///{tmp_path}/metrics.db")
@@ -82,6 +159,7 @@ def test_metrics_skips_remote_records(tmp_path, monkeypatch):
                 },
             )
             assert fclient.post("/record", json=r).status_code == 200
+
     n_attack = lambda: [
         r["value"] for r in client.get("/metrics/g0").json()["results"] if r["metric"] == "n_attack"
     ]

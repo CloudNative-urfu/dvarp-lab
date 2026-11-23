@@ -87,7 +87,15 @@ def run_episode(
         **({"remote_llm": True} if remote_llm else {}),
     }
     if customer_complete or customer_base_url:
-        model = ChatModel(recorder, complete=customer_complete, base_url=customer_base_url)
+        import os
+
+        model = ChatModel(
+            recorder,
+            complete=customer_complete,
+            base_url=customer_base_url,
+            model=os.environ.get("LAB_CUSTOMER_LLM_MODEL"),
+            api_key=os.environ.get("LAB_CUSTOMER_LLM_API_KEY"),
+        )
         customer = LlmCustomer(style, case, model, derive_seed(seed, episode_id, "customer"))
     else:
         customer = StubCustomer(style, lambda t: render(t, case), derive_seed(seed, episode_id))

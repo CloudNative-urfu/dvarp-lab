@@ -49,7 +49,15 @@ def run_attack(
     recorder = Recorder(filter_svc, episode_id, "attack", attacker_model)
     recorder.raw_extra = {"config_name": config_name}
     if attacker_complete or attacker_base_url:
-        model = ChatModel(recorder, complete=attacker_complete, base_url=attacker_base_url)
+        import os
+
+        model = ChatModel(
+            recorder,
+            complete=attacker_complete,
+            base_url=attacker_base_url,
+            model=os.environ.get("LAB_ATTACKER_LLM_MODEL"),
+            api_key=os.environ.get("LAB_ATTACKER_LLM_API_KEY"),
+        )
         attacker = LlmAttacker(tactic_name, prompt, model, style=style)
     else:
         attacker = StubAttacker(prompt, derive_seed(seed, episode_id, "attacker"))

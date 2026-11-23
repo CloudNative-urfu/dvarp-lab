@@ -84,7 +84,7 @@ def axis_universe(axis: str) -> list[Any]:
     raise ValueError(f"неизвестная перечислимая ось {axis!r}")
 
 
-def resolve_axis(axis: str, spec: dict[str, Any] | None) -> list[Any]:
+def resolve_axis(axis: str, spec: dict[str, Any] | None, allow_remote: bool = False) -> list[Any]:
     """spec: {"mode": point|range|all|all_limited|set, ...} или None = all (enum) / point(1) (numeric)."""
     spec = dict(spec) if spec else None
     if axis in NUMERIC_AXES:
@@ -118,6 +118,8 @@ def resolve_axis(axis: str, spec: dict[str, Any] | None) -> list[Any]:
     if mode == "point":
         v = spec["point"]
         if v not in universe:
+            if allow_remote and axis.endswith("_models"):
+                return [v]  # remote-верификация: имя модели из прокси, не из ростера
             raise ValueError(f"{axis}: {v!r} отсутствует в frozen ({len(universe)} значений)")
         return [v]
     if mode == "set":
@@ -183,12 +185,13 @@ def resolve_campaign(spec: dict[str, Any]) -> Campaign:
     pairs = None
     if spec.get("scenario_pairs"):
         pairs = [(p["style"], p["tactic"]) for p in spec["scenario_pairs"]]
-    attacker = resolve_axis("attacker_models", spec.get("attacker_models"))
+    remote = bool(spec.get("allow_remote_llm"))
+    attacker = resolve_axis("attacker_models", spec.get("attacker_models"), allow_remote=remote)
     return Campaign(
         configs=resolve_axis("configs", spec.get("configs")),
         styles=resolve_axis("styles", spec.get("styles")),
         tactics=resolve_axis("tactics", spec.get("tactics")),
-        agent_models=resolve_axis("agent_models", spec.get("agent_models")),
+        agent_models=resolve_axis("agent_models", spec.get("agent_models"), allow_remote=remote),
         attacker_models=attacker or [None],
         episodes=resolve_axis("episodes", spec.get("episodes")),
         seeds=resolve_axis("seeds", spec.get("seeds")),

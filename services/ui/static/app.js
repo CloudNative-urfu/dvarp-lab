@@ -39,7 +39,11 @@ function axisCtl(kind, values) {
     return s;
   };
   if (kind === "point") {
-    if (Array.isArray(values)) wrap.appendChild(sel(values, values[0]));
+    if (Array.isArray(values) && $("#remote-llm").checked && (META.agent_models.includes(values[0]) || META.attacker_models.includes(values[0]))) {
+      const t = document.createElement("input"); t.type = "text"; t.className = "mono";
+      t.placeholder = "имя модели у прокси"; t.value = "openai/gpt-4o-mini";
+      wrap.appendChild(t);
+    } else if (Array.isArray(values)) wrap.appendChild(sel(values, values[0]));
     else { const i = document.createElement("input"); i.type = "number"; i.className = "mono"; i.value = values; wrap.appendChild(i); }
   } else if (kind === "range") {
     const a = Array.isArray(values) ? sel(values, values[0]) : numInput(1);
@@ -70,6 +74,7 @@ function renderAxes() {
   }
 }
 document.querySelectorAll("#run-form .mode").forEach((s) => s.addEventListener("change", renderAxes));
+$("#remote-llm").addEventListener("change", renderAxes);
 
 function specFromForm() {
   const ENUM = { configs: META.configs, styles: META.styles, tactics: META.tactics,
@@ -89,8 +94,11 @@ function specFromForm() {
       continue;
     }
     if (mode === "point") {
-      const v = numeric ? +c.querySelector("input").value : c.querySelector("select").value;
-      spec[axis] = { mode: "point", point: v };
+      if (numeric) spec[axis] = { mode: "point", point: +c.querySelector("input").value };
+      else {
+        const sel = c.querySelector("select");
+        spec[axis] = { mode: "point", point: sel ? sel.value : c.querySelector("input").value };
+      }
     } else if (mode === "range") {
       const a = c.children[0], b = c.children[2];
       spec[axis] = numeric
