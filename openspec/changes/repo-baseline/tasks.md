@@ -18,3 +18,5 @@
 - [x] gitignore `local-sources/` (ссылочный клон прототипа) исключён из git
 
 - [x] dev-stack `scripts/dev.py` — все сервисы + консоль одной командой; default probe-модели и фикс сида в campaign
+
+- [x] agents-doc `AGENTS.md` — точка входа агентов: контекст, запуск, дисциплина; roadmap исследования в мануале

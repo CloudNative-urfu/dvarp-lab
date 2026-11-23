@@ -120,3 +120,26 @@ traffic, attack, filter, metrics и консоль ui на 9410 (порты 9410
 #### Scenario: Full stack from one command
 - **WHEN** `uv run python scripts/dev.py` запущен
 - **THEN** все сервисы и консоль подняты, смок проходим без ручных шагов
+
+## ADDED Requirements
+
+### Requirement: AGENTS.md entry point
+`AGENTS.md` SHALL быть точкой входа для ИИ-агентов: порядок чтения контекста
+(мануал → архитектура → api → схема → frozen), запуск и проверки, дисциплина
+коммитов (Conventional Commits на английском, openspec-трейс и pre-commit
+обязательны, пуш — только после явной приёмки владельцем), roadmap
+исследования в мануале.
+
+#### Scenario: Agent discipline
+- **WHEN** агент готовит коммит
+- **THEN** pre-commit (ruff + openspec validate) и pytest пройдены; пуш
+  только после приёмки владельцем
+
+### Requirement: Research roadmap in manual
+Мануал SHALL содержать roadmap исследования: стенд → live-подключение
+моделей → пилот → прегрегистрация → кампания → статья; «открытые места»
+актуализируются по мере закрытия.
+
+#### Scenario: Roadmap state
+- **WHEN** читатель сверяет состояние исследования
+- **THEN** текущая стадия и открытые места видны в мануале
