@@ -24,3 +24,17 @@
 #### Scenario: Tamper detected
 - **WHEN** строка журнала перезаписана, удалена или переставлена
 - **THEN** `verify_chain` возвращает дефект; целая цепочка даёт пустой список
+
+## ADDED Requirements
+
+### Requirement: Reproducibility primitives
+`services/shop/repro.py` SHALL предоставлять примитивы воспроизводимости:
+`canonical_json` (каноническая сериализация), `strip_volatile` (исключение
+волатильных измерений: ts, wall_ms, cpu_ms, gpu_ms…), `trajectory_fingerprint`
+(отпечаток траектории без временных меток) и `plan_contract` (контракт плана
+прогона). Повтор эпизода с тем же сидом SHALL давать совпадающие отпечатки
+(NFR-2.2/2.3).
+
+#### Scenario: Trajectory fingerprint stable
+- **WHEN** эпизод повторён с тем же сидом
+- **THEN** отпечаток траектории совпадает: волатильные измерения исключены

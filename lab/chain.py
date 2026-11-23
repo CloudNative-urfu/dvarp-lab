@@ -18,6 +18,11 @@ def _line_hash(seq: int, prev: str, payload: object) -> str:
 GENESIS = "0" * 64
 
 
+def line_hash(seq: int, prev: str, payload: object) -> str:
+    """Хеш строки цепочки (та же формула, что внутри Chain.append/verify)."""
+    return _line_hash(seq, prev, payload)
+
+
 class Chain:
     """Append-only журнал с цепочкой хешей поверх JSONL-файла."""
 
