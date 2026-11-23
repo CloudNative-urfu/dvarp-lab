@@ -39,7 +39,11 @@ function axisCtl(kind, values) {
     return s;
   };
   if (kind === "point") {
-    if (Array.isArray(values) && $("#remote-llm").checked && (META.agent_models.includes(values[0]) || META.attacker_models.includes(values[0]))) {
+    if (Array.isArray(values) && values.length === 0) {
+      const t = document.createElement("input"); t.type = "text"; t.className = "mono";
+      t.placeholder = "имя модели"; t.value = "";
+      wrap.appendChild(t);
+    } else if (Array.isArray(values) && $("#remote-llm").checked && (META.agent_models.includes(values[0]) || META.attacker_models.includes(values[0]))) {
       const t = document.createElement("input"); t.type = "text"; t.className = "mono";
       t.placeholder = "имя модели у прокси"; t.value = "openai/gpt-4o-mini";
       wrap.appendChild(t);
@@ -69,7 +73,7 @@ function renderAxes() {
     ctl.innerHTML = "";
     const mode = row.querySelector(".mode").value;
     const numeric = axis === "episodes" || axis === "seeds";
-    const values = numeric ? null : ENUM[axis];
+    const values = numeric ? (axis === "seeds" ? 0 : 1) : ENUM[axis];
     ctl.appendChild(axisCtl(mode, values));
   }
 }

@@ -27,3 +27,20 @@ guard требует `confirm: true`), `GET /api/run/status` (живой про�
 #### Scenario: Progress visible
 - **WHEN** прогон идёт
 - **THEN** `/api/run/status` отдаёт стадию, число ячеек и текущую ячейку
+
+## ADDED Requirements
+
+### Requirement: Roster-driven UI defaults
+Консоль SHALL брать модели из ростера `frozen/llm.json` (атакующая модель —
+из роли attacker), числовые оси получать осмысленные дефолты (point-режим)
+и деградировать при пустом ростере: фолбэк на ручной ввод вместо
+пустого/битого списка.
+
+#### Scenario: Attacker from roster
+- **WHEN** форма запуска открывается
+- **THEN** атакующая модель выбирается из ростера; пустой ростер даёт
+  работающий ручной ввод, а не пустой список
+
+#### Scenario: Numeric defaults
+- **WHEN** числовые оси (episodes, seeds) показаны без явных значений
+- **THEN** подставлены point-дефолты осей
