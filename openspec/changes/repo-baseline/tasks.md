@@ -24,3 +24,5 @@
 - [x] env-example `env.example` — шаблон переменных окружения без секретов; таблица архитектуры исправлена
 
 - [x] scheme-v3 `docs/scheme.svg` v3 — фильтрация отделена от расчёта L*, добавлен блок консоли
+
+- [x] provenance `docs/PROVENANCE.md` — карта происхождения подсистем и вклада (sser1to, desmitry, Alexander)

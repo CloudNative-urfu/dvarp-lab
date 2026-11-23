@@ -165,3 +165,16 @@ URL сервисов, БД, LLM-эндпоинты) как шаблон без �
 #### Scenario: Scheme matches mechanics
 - **WHEN** читатель сверяет схему v3 с кодом сервисов
 - **THEN** потоки фильтрации, расчёта метрик и консоли совпадают с кодом
+
+## ADDED Requirements
+
+### Requirement: Provenance map
+`docs/PROVENANCE.md` SHALL вести карту происхождения подсистем: из какого
+среза прототипа перенесён код (d5828df), кто автор подсистемы
+(sser1to, desmitry, Alexander) — из истории dvarp-prototype; вклад
+лабораторных подсистем (filter, launcher, ui, frozen) отделён от перенесённого ядра.
+
+#### Scenario: Attribution traceable
+- **WHEN** читатель открывает PROVENANCE.md
+- **THEN** каждая подсистема имеет источник (срез прототипа или lab-оригинал)
+  и автора по истории
