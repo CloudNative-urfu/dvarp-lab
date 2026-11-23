@@ -168,6 +168,52 @@ async function probe() {
 }
 
 /* ---------- эпизоды ---------- */
+async function loadEpisodePicker() {
+  const eps = (await api.get("/api/episodes")).episodes || [];
+  const sel = $("#ep-select");
+  sel.innerHTML = "";
+  for (const e of eps) {
+    const o = document.createElement("option");
+    o.value = e.episode_id;
+    o.textContent = `${e.episode_id} · ${e.config_name} · ${e.channels.join("+")} · ${e.n_turns} ходов`;
+    sel.appendChild(o);
+  }
+  if (!eps.length) sel.innerHTML = '<option value="">прогонов пока нет</option>';
+}
+async function showEpisode() {
+  const id = ($("#ep-select").value || $("#ep-id").value).trim();
+  if (!id) return;
+  const t = await api.get(`/api/text/${encodeURIComponent(id)}`);
+  $("#episode-view").innerHTML = (t.turns || []).map((x) =>
+    `<div class="bubble ${x.channel}"><div class="who">ход ${x.turn} · ${term(x.channel)}</div>${escapeHtml(x.text)}</div>`
+  ).join("") || "нет ходов";
+}
+const TERM_RU = {
+  "L_star": "Точка окупаемости — доля атакующего трафика, при которой защита перестаёт окупаться: правее — защита приносит убыток",
+  "break_even": "Статус окупаемости конфигурации защиты относительно эталонного конфига",
+  "detection": "Матрица ошибок детекции: TP — атаки пойманы, FP — ложные срабатывания на чистом трафике, FN — пропущенные атаки, TN — чистые прохождения",
+  "detection_tpr": "TPR — доля атак, которую защита поймала",
+  "detection_fpr": "FPR — доля чистых обращений, ошибочно заблокированных",
+  "detection_precision": "Точность детекции: доля верных срабатываний среди всех",
+  "w_A": "Доля атакующего трафика в прогоне",
+  "w_L": "Доля легального трафика в прогоне",
+  "E": "Доля обращений, ушедших в эскалацию оператору",
+  "R": "Доля неоправданных отказов легальным клиентам",
+  "V": "Доля нарушений: атак добившихся исполнения",
+  "n_attack": "Число атакующих эпизодов",
+  "n_legal": "Число легальных эпизодов",
+  "budget_exhausted": "Атака исчерпала бюджет ходов, не добившись результата",
+  "refund_granted": "Возврат создан — атака удалась",
+  "refused": "Агент отказал — защита сработала",
+  "escalated": "Передано оператору ручной очереди",
+  "turn_limit": "Диалог оборван лимитом ходов",
+  "attacker_stopped": "Атакующий сам остановился (DONE)",
+  "closed": "Агент закрыл диалог",
+  "seed": "Сид = «мир»: вариант детерминированных данных магазина и кейса",
+  "config": "Конфигурация защиты: набор гвардрейлов и политика",
+};
+const term = (t) => (TERM_RU[t] ? `<span class="term" data-ru="${TERM_RU[t]}">${t}</span>` : t);
+
 const OUTCOME_BADGE = (o) => {
   const bad = ["refund_granted", "violation"];
   const ok = ["refused", "closed", "attacker_stopped"];
@@ -175,41 +221,53 @@ const OUTCOME_BADGE = (o) => {
   const cls = bad.includes(o) ? "bad" : ok.includes(o) ? "ok" : warn.includes(o) ? "warn" : "";
   return `<span class="badge ${cls}">${o || "—"}</span>`;
 };
-async function showEpisode() {
-  const id = $("#ep-id").value.trim();
-  if (!id) return;
-  const t = await api.get(`/api/text/${encodeURIComponent(id)}`);
-  $("#episode-view").innerHTML = (t.turns || []).map((x) =>
-    `<div class="bubble ${x.channel}"><div class="who">ход ${x.turn} · ${x.channel}</div>${escapeHtml(x.text)}</div>`
-  ).join("") || "нет ходов";
-}
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /* ---------- метрики ---------- */
 async function computeMetrics() {
-  const r = await api.post("/api/compute", { config_name: $("#m-config").value.trim(), include_probe: $("#m-probe").checked });
+  const r = await api.post("/api/compute", {
+    config_name: $("#m-config").value.trim() || null,
+    include_probe: $("#m-probe").checked,
+    include_remote: $("#m-remote").checked,
+  });
   $("#m-out").textContent = `пересчитано: ${r.computed}`;
   await showMetrics();
 }
 async function showMetrics() {
-  const m = await api.get(`/api/metrics/${encodeURIComponent($("#m-config").value.trim())}`);
-  const byModel = {};
-  for (const r of m.results || []) (byModel[JSON.stringify(r.model_spec)] ||= []).push(r);
-  const rows = [];
-  for (const [ms, rs] of Object.entries(byModel)) {
-    const spec = JSON.parse(ms);
-    rows.push(`<tr><th colspan="4">модель: ${escapeHtml(spec.name || "—")} (${spec.role || "?"}, ${spec.params_b || "?"}B)</th></tr>`);
-    for (const r of rs) {
-      let v = r.value;
-      if (r.metric === "detection") v = `TP ${v.TP} · FP ${v.FP} · FN ${v.FN} · TN ${v.TN} (TPR ${(v.TPR * 100).toFixed(0)}%)`;
-      if (r.metric === "break_even") v = `<span class="badge ${v.status === "breakeven" ? "warn" : "info"}">${v.status}</span> L*=${v.L_star ?? "—"}`;
-      if (typeof v === "number") v = (+v.toFixed(4)).toString();
-      if (v === null) v = "—";
-      rows.push(`<tr><td>${r.metric}</td><td>${v}</td><td class="mono">${new Date(r.computed_at).toLocaleTimeString()}</td></tr>`);
-    }
+  const cfgs = (await api.get("/api/metric-configs")).configs || [];
+  if (!cfgs.length) { $("#m-toc").classList.add("hidden"); $("#metrics-view").innerHTML = "нет прогонов"; return; }
+  const toc = $("#m-toc");
+  toc.classList.remove("hidden");
+  toc.innerHTML = cfgs.map((c) => `<a href="#cfg-${c}" data-cfg="${c}">${c}</a>`).join("");
+  toc.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
+    toc.querySelectorAll("a").forEach((x) => x.classList.toggle("active", x === a));
+    document.getElementById(`cfg-${a.dataset.cfg}`)?.scrollIntoView({ behavior: "smooth" });
+  }));
+  const all = await Promise.all(cfgs.map((c) => api.get(`/api/metrics/${encodeURIComponent(c)}`)));
+  const blocks = [];
+  for (const m of all) {
+    const byModel = {};
+    for (const r of m.results || []) (byModel[JSON.stringify(r.model_spec)] ||= []).push(r);
+    const modelBlocks = Object.entries(byModel).map(([ms, rs]) => {
+      const spec = JSON.parse(ms);
+      const get = (k) => rs.find((x) => x.metric === k)?.value;
+      const det = get("detection") || {};
+      const be = get("break_even") || {};
+      return `<table>
+        <tr><th>${term("n_attack")}</th><th>${term("n_legal")}</th><th>${term("V")}</th><th>${term("E")}</th><th>${term("R")}</th></tr>
+        <tr><td>${get("n_attack") ?? "—"}</td><td>${get("n_legal") ?? "—"}</td><td>${fmt(get("V"))}</td><td>${fmt(get("E"))}</td><td>${fmt(get("R"))}</td></tr>
+        <tr><th>${term("detection")}</th><th>${term("detection_tpr")}</th><th>${term("detection_fpr")}</th><th colspan="2">${term("break_even")}</th></tr>
+        <tr><td>TP ${det.TP ?? "—"} · FP ${det.FP ?? "—"} · FN ${det.FN ?? "—"} · TN ${det.TN ?? "—"}</td>
+            <td>${fmt(det.TPR)}</td><td>${fmt(det.FPR)}</td>
+            <td colspan="2"><span class="badge ${be.status === "breakeven" ? "warn" : "info"}">${be.status || "—"}</span> L* ${be.L_star ?? "—"} (${be.L_star_min ?? "—"}…${be.L_star_max ?? "—"})</td></tr>
+      </table><div class="hint">модель: ${escapeHtml(spec.name || "—")} · роль ${spec.role || "?"} · ${(spec.params_b ?? "?") + "B"} · ${new Date(rs[0].computed_at).toLocaleString()}</div>`;
+    });
+    blocks.push(`<div class="card cfg-card" id="cfg-${m.config_name}">
+      <h2 class="mono">${m.config_name}</h2>${modelBlocks.join("")}</div>`);
   }
-  $("#metrics-view").innerHTML = rows.length ? `<table>${rows.join("")}</table>` : "нет данных";
+  $("#metrics-view").innerHTML = blocks.join("") || "нет прогонов";
 }
+const fmt = (v) => (typeof v === "number" ? (+v.toFixed(4)).toString() : v ?? "—");
 
 /* ---------- история ---------- */
 async function loadHistory() {
@@ -279,8 +337,11 @@ async function init() {
   $("#btn-run").addEventListener("click", () => startRun().catch((e) => ($("#volume-out").textContent = e.message)));
   $("#btn-probe").addEventListener("click", () => probe().catch((e) => ($("#probe-out").textContent = e.message)));
   $("#btn-episode").addEventListener("click", () => showEpisode().catch((e) => ($("#episode-view").textContent = e.message)));
+  document.querySelectorAll('#tab-episodes .tab, #tabs .tab').forEach(() => {});
+  document.querySelector('#tabs .tab[data-tab="episodes"]').addEventListener("click", loadEpisodePicker);
   $("#btn-compute").addEventListener("click", () => computeMetrics().catch((e) => ($("#m-out").textContent = e.message)));
   $("#btn-metrics").addEventListener("click", () => showMetrics().catch((e) => ($("#metrics-view").textContent = e.message)));
+  document.querySelector('#tabs .tab[data-tab="metrics"]').addEventListener("click", showMetrics);
   startPolling();
 }
 init();

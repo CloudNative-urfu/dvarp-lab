@@ -157,6 +157,16 @@ def text(episode_id: str) -> dict:
     return _svc(FILTER_URL).get(f"/text/{episode_id}")
 
 
+@app.get("/api/episodes")
+def episodes_list() -> dict:
+    return _svc(FILTER_URL).get("/episodes")
+
+
+@app.get("/api/metric-configs")
+def metric_configs() -> dict:
+    return _svc(METRICS_URL).get("/configs")
+
+
 @app.get("/api/chain")
 def chain() -> dict:
     return _svc(FILTER_URL).get("/chain/verify")

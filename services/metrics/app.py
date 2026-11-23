@@ -221,6 +221,13 @@ def compute_endpoint(body: ComputeIn) -> dict:
     }
 
 
+@app.get("/configs")
+def configs_with_data() -> dict:
+    """Конфигурации, по которым реально есть прогоны (стабильный порядок)."""
+    names = sorted({e.config for e in _read_episodes()})
+    return {"configs": names}
+
+
 @app.get("/metrics/{config_name}")
 def metrics(config_name: str) -> dict:
     init_metrics_db()

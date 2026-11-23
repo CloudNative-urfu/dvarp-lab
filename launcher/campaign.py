@@ -158,7 +158,15 @@ def run_campaign(
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
-            cell_result["episodes"].append({"episode": i, "legal": legal, "attack": attacked})
+            cell_result["episodes"].append(
+                {
+                    "episode": i,
+                    "legal_episode_id": f"{run_id}-L{i}-{cell['style']}-s{seed}",
+                    "attack_episode_id": f"{run_id}-A{i}-{cell['tactic']}-s{seed}",
+                    "legal": legal,
+                    "attack": attacked,
+                }
+            )
             done += 1
             report(
                 {

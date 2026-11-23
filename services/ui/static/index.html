@@ -108,7 +108,8 @@
     </div>
     <div class="card">
       <div class="row">
-        <label>Эпизод <input id="ep-id" class="mono" placeholder="run-L0-patient-s0"></label>
+        <label>Эпизод <select id="ep-select" class="mono" style="min-width:340px"><option value="">— загрузка…</option></select></label>
+        <label>или id <input id="ep-id" class="mono" placeholder="вручную" style="width:180px"></label>
         <button id="btn-episode" class="btn primary">Показать</button>
       </div>
       <div id="episode-view" class="episode-view hint">выберите эпизод</div>
@@ -120,18 +121,20 @@
     <div class="page-head">
       <span class="eyebrow">Движок</span>
       <h1 class="display">Метрики</h1>
-      <p class="lede">Расчёт по формулам канона поверх сырой БД — в любое время.</p>
+      <p class="lede">Расчёт по формулам канона поверх сырой БД — в любое время. Ниже — карточки
+      конфигураций, по которым есть прогоны; оглавление-чекпоинты ведут к карточке.</p>
     </div>
     <div class="card">
       <div class="row">
-        <label>Конфиг <input id="m-config" class="mono" value="g0"></label>
         <label class="check"><input id="m-probe" type="checkbox"> включая probe</label>
+        <label class="check"><input id="m-remote" type="checkbox"> включая remote-LLM</label>
         <button id="btn-compute" class="btn primary">Пересчитать</button>
-        <button id="btn-metrics" class="btn ghost">Показать</button>
+        <button id="btn-metrics" class="btn ghost">Обновить</button>
         <span id="m-out" class="hint"></span>
       </div>
-      <div id="metrics-view" class="hint">нет данных</div>
     </div>
+    <nav id="m-toc" class="toc hidden"></nav>
+    <div id="metrics-view" class="hint">нет прогонов</div>
   </section>
 
   <!-- ==================== HISTORY ==================== -->

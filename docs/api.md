@@ -44,7 +44,9 @@
 - `POST /record` `{episode_id, channel, turn, text, model_spec, raw: {...}, snapshot: {...}}`
   → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная строка
   формируется из raw.llm_calls (запрос→ответ).
-- `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты.
+- `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты;
+- `GET /episodes` → `{episodes: [{episode_id, config_name, channels, n_turns}]}` —
+  список эпизодов сырой БД без текстов (для выбора в консоли).
 - `GET /chain/verify` → `{defects: []}`.
 
 ## metrics_svc (порт 9415)
@@ -52,7 +54,9 @@
 - `POST /compute` `{config_name: str, model_spec?: model_spec}` → `{computed: n}` —
   пересчёт метрик (L*, break-even, detection) из read-only доступа к сырой БД
   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
-- `GET /metrics/{config_name}` → агрегаты по config × model.
+- `GET /metrics/{config_name}` → агрегаты по config × model;
+- `GET /configs` → `{configs: [...]}` — конфигурации, по которым есть прогоны
+  (для оглавления-чекпоинтов в консоли).
 
 ## launcher (CLI + модуль кампании)
 

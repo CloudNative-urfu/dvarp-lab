@@ -7,3 +7,7 @@
 - [x] tests-ui `tests/test_ui.py` — инвариант «только читатель/вызыватель»
 
 - [x] roster-fix Атакующая модель в форме — из ростера frozen/llm.json; числовые оси — point-дефолты; фолбэк пустого ростера на ручной ввод
+
+- [x] reference-endpoints filter GET /episodes, metrics GET /configs — справочные read-only (tests/test_reference_endpoints.py)
+- [x] metric-toc Оглавление-чекпоинты метрик, карточки по конфигам, выбор эпизода
+- [x] term-tooltips Русские сноски терминов — тултипы при наведении

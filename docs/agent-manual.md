@@ -86,6 +86,9 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
 8a. **UI/probe**: консоль (`services/ui`, 9410) — только читатель/вызыватель,
     ноль расчётов; запуск — те же `run_campaign/probe`, что у CLI. Probe-атаки
     (`raw.probe=true`) по умолчанию исключены из метрик — не убирай фильтр.
+    Выбор эпизодов и метрик — через справочные read-only эндпоинты
+    (`filter /episodes`, `metrics /configs`); оглавление-чекпоинты метрик —
+    клик к карточке конфига; русские сноски терминов — тултипы при наведении.
 8c. **Remote LLM**: флаг `allow_remote_llm` (спека/CLI `--allow-remote-llm`,
     галочка в UI) — обход локальности эндпоинтов ТОЛЬКО для проверки
     работоспособности (прокси AITunnel и т.п.), никогда для статьи. Guard

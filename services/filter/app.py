@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from lab.chain import GENESIS
 
 from . import store
+from .models import Turn
 
 
 @asynccontextmanager
@@ -82,6 +83,25 @@ def text(episode_id: str) -> dict:
         "episode_id": episode_id,
         "turns": [{"turn": r.turn, "channel": r.channel, "text": r.text} for r in rows],
     }
+
+
+@app.get("/episodes")
+def episodes() -> dict:
+    """Список эпизодов сырой БД: id, конфиг, каналы, число ходов (без текстов)."""
+    store.init_db()
+    with Session(store.engine()) as session:
+        rows = (
+            session.query(Turn.episode_id, Turn.config_name, Turn.channel).order_by(Turn.id).all()
+        )
+    seen: dict[str, dict] = {}
+    for episode_id, config_name, channel in rows:
+        item = seen.setdefault(
+            episode_id, {"episode_id": episode_id, "config_name": config_name, "channels": []}
+        )
+        if channel not in item["channels"]:
+            item["channels"].append(channel)
+        item["n_turns"] = item.get("n_turns", 0) + 1
+    return {"episodes": list(seen.values())}
 
 
 @app.get("/chain/verify")

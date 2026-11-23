@@ -132,3 +132,25 @@ th { color: var(--c-text-3); font-weight: 500; }
 
 .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; }
 .kv b { color: var(--c-text-2); font-weight: 500; }
+
+.toc { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.toc a {
+  background: var(--c-surface-2); color: var(--c-text-2);
+  border: 1px solid var(--c-line-strong); border-radius: var(--r-pill);
+  padding: 4px 14px; cursor: pointer; font-size: 13px; text-decoration: none;
+}
+.toc a:hover, .toc a.active { background: var(--c-accent-quiet); color: var(--c-accent-strong); border-color: var(--c-accent-line); }
+.cfg-card h2 { font-size: 20px; margin: 0 0 4px; }
+.term {
+  border-bottom: 1px dashed var(--c-accent-line);
+  cursor: help; position: relative;
+}
+.term:hover::after {
+  content: attr(data-ru);
+  position: absolute; left: 0; top: 130%;
+  background: var(--c-surface-3); color: var(--c-text);
+  border: 1px solid var(--c-accent-line); border-radius: var(--r-md);
+  padding: 8px 12px; width: 300px; z-index: 5;
+  font-size: 12px; line-height: 1.4;
+  box-shadow: var(--shadow-pop);
+}
