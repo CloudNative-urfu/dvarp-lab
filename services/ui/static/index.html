@@ -67,6 +67,12 @@
       <div class="row">
         <label>Бюджет атаки <input id="budget" type="number" value="8" min="1"></label>
         <label class="check"><input id="compute" type="checkbox"> пересчитать метрики после</label>
+        <label class="check"><input id="remote-llm" type="checkbox"> <span class="badge bad">Remote LLM — только проверка, не для статьи</span></label>
+      </div>
+      <div class="row">
+        <span class="hint">пресеты:</span>
+        <button id="preset-smoke" class="btn ghost">Smoke</button>
+        <button id="preset-pilot" class="btn ghost">Пилот</button>
       </div>
       <div class="row actions">
         <button id="btn-volume" class="btn ghost">Объём</button>
@@ -82,6 +88,7 @@
         <label>Тактика <select id="probe-tactic"></select></label>
         <label>Бюджет <input id="probe-budget" type="number" value="8" min="1"></label>
         <label>Сид <input id="probe-seed" type="number" placeholder="auto"></label>
+        <label class="check"><input id="probe-remote" type="checkbox"> <span class="badge bad">remote</span></label>
       </div>
       <div class="row actions"><button id="btn-probe" class="btn ghost">Probe</button><span id="probe-out" class="hint mono"></span></div>
     </div>

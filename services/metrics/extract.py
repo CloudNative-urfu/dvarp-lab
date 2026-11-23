@@ -36,13 +36,16 @@ class Episode:
     detected: bool
     run_id: str | None = None
     seed: int | None = None
+    remote: bool = False
 
 
 def _model_key(model_spec: dict[str, Any]) -> str:
     return json.dumps(model_spec, sort_keys=True, ensure_ascii=False)
 
 
-def episodes_of(session: Session, include_probe: bool = False) -> list[Episode]:
+def episodes_of(
+    session: Session, include_probe: bool = False, include_remote: bool = False
+) -> list[Episode]:
     """Collapse raw turns into episodes (one row per episode_id × config × model_spec).
 
     Probe episodes (raw.probe, single ad-hoc attacks without the paired leg) are
@@ -72,11 +75,15 @@ def episodes_of(session: Session, include_probe: bool = False) -> list[Episode]:
         verdict = raw.get("verdict")
         if verdict:
             ep["verdict"] = verdict
+        if raw.get("remote_llm"):
+            ep["remote"] = True
         for opt in ("run_id", "seed"):
             if opt in raw:
                 ep[opt] = raw[opt]
     out = []
     for key, ep in sorted(by_key.items()):
+        if not include_remote and ep.get("remote"):
+            continue  # remote-LLM прогоны — верификация, не данные статьи
         signals = ep["signals"]
         detected = any(signals.get(s, 0) > 0 for s in formulas.DETECT_SIGNALS)
         verdict = ep.get("verdict") or {}
@@ -93,6 +100,7 @@ def episodes_of(session: Session, include_probe: bool = False) -> list[Episode]:
                 detected=detected,
                 run_id=ep.get("run_id"),
                 seed=ep.get("seed"),
+                remote=bool(ep.get("remote")),
             )
         )
     return out

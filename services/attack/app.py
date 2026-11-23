@@ -31,6 +31,7 @@ class RunEpisode(BaseModel):
     style: str | None = None
     run_id: str | None = None
     probe: bool = False
+    remote_llm: bool = False
 
 
 @app.get("/health")
@@ -67,6 +68,7 @@ def run(body: RunEpisode) -> dict:
             body.seed,
             style_name=body.style,
             probe=body.probe,
+            remote_llm=body.remote_llm,
             run_id=body.run_id,
             shop=Svc(SHOP_URL),
             filter_svc=Svc(FILTER_URL),

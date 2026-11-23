@@ -28,6 +28,11 @@ def main() -> None:
     p.add_argument("--tactics-split", default=None, choices=["dev", "holdout"])
     p.add_argument("--compute", action="store_true")
     p.add_argument("--yes", action="store_true", help="подтвердить объём сверх guard")
+    p.add_argument(
+        "--allow-remote-llm",
+        action="store_true",
+        help="обход локальности LLM-эндпоинтов (проверка, не для статьи)",
+    )
     p.add_argument("--spec", default=None, help="путь к JSON-спецификации осей (вместо флагов)")
     args = p.parse_args()
     if args.spec:
@@ -57,6 +62,8 @@ def main() -> None:
             spec["attacker_models"] = {"mode": "point", "point": args.attacker}
         if args.yes:
             spec["confirm"] = True
+        if args.allow_remote_llm:
+            spec["allow_remote_llm"] = True
     try:
         manifest = run_campaign(spec)
     except SystemExit as exc:

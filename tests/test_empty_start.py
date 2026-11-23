@@ -1,7 +1,6 @@
 """Деградация пустого старта: filter создаёт сырую БД на старте, metrics отвечает
 «нет данных» вместо 500, журналы shop возобновляют нумерацию после рестартов."""
 
-
 from fastapi.testclient import TestClient
 
 from services.filter import app as filter_app

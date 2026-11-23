@@ -78,6 +78,7 @@ class ComputeIn(BaseModel):
     config_name: str | None = None
     model_spec: dict[str, Any] | None = None
     include_probe: bool = False
+    include_remote: bool = False
 
 
 def _raw_missing() -> bool:
@@ -89,11 +90,15 @@ def _raw_missing() -> bool:
     return not Path(path).exists()
 
 
-def _read_episodes(include_probe: bool = False) -> list[extract.Episode]:
+def _read_episodes(
+    include_probe: bool = False, include_remote: bool = False
+) -> list[extract.Episode]:
     if _raw_missing():
         return []
     with Session(_raw_engine()) as session:
-        return extract.episodes_of(session, include_probe=include_probe)
+        return extract.episodes_of(
+            session, include_probe=include_probe, include_remote=include_remote
+        )
 
 
 def _reference_rows(
@@ -157,6 +162,7 @@ def compute(
     config_name: str | None = None,
     model_spec: dict | None = None,
     include_probe: bool = False,
+    include_remote: bool = False,
 ) -> int:
     """Recalculate metrics from the raw DB into the metrics DB; returns stored row count.
 
@@ -166,7 +172,7 @@ def compute(
     if _raw_missing():
         init_metrics_db()
         return 0
-    all_eps = _read_episodes(include_probe=include_probe)
+    all_eps = _read_episodes(include_probe=include_probe, include_remote=include_remote)
     groups_all = extract.group(all_eps)
     eps = all_eps
     if model_spec is not None:
@@ -208,7 +214,11 @@ def health() -> dict:
 @app.post("/compute")
 def compute_endpoint(body: ComputeIn) -> dict:
     init_metrics_db()
-    return {"computed": compute(body.config_name, body.model_spec, body.include_probe)}
+    return {
+        "computed": compute(
+            body.config_name, body.model_spec, body.include_probe, body.include_remote
+        )
+    }
 
 
 @app.get("/metrics/{config_name}")

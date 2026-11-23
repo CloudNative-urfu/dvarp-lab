@@ -74,7 +74,11 @@ document.querySelectorAll("#run-form .mode").forEach((s) => s.addEventListener("
 function specFromForm() {
   const ENUM = { configs: META.configs, styles: META.styles, tactics: META.tactics,
                  agent_models: META.agent_models, attacker_models: META.attacker_models };
-  const spec = { budget: +$("#budget").value, compute: $("#compute").checked };
+  const spec = {
+    budget: +$("#budget").value,
+    compute: $("#compute").checked,
+    ...( $("#remote-llm").checked ? { allow_remote_llm: true } : {}),
+  };
   for (const row of document.querySelectorAll("#run-form .axis")) {
     const axis = row.dataset.axis;
     const mode = row.querySelector(".mode").value;
@@ -125,7 +129,9 @@ async function pollStatus() {
   if (s.status === "idle") { el.textContent = "прогон не выполняется"; return; }
   if (s.stage === "episode" || s.status === "running") {
     const pct = s.cells_total ? Math.round(100 * s.cells_done / s.cells_total) : 0;
-    el.innerHTML = `<div>ячейка ${s.cells_done}/${s.cells_total} — эпизодов ${s.episodes_total}</div>
+    const stub = (META.agent_models || []).every((n) => /PLACEHOLDER/i.test(n));
+    el.innerHTML = `<div>ячейка ${s.cells_done}/${s.cells_total} — эпизодов ${s.episodes_total}
+      ${stub ? '<span class="badge warn">stub-режим (модели не подключены)</span>' : ""}</div>
       <div class="bar"><i style="width:${pct}%"></i></div>
       <div class="mono">${JSON.stringify(s.current?.scenario || {})}</div>`;
   } else if (s.status === "done") {
@@ -143,6 +149,7 @@ async function probe() {
     config: $("#probe-config").value, tactic: $("#probe-tactic").value,
     budget: +$("#probe-budget").value,
     seed: $("#probe-seed").value ? +$("#probe-seed").value : null,
+    allow_remote_llm: $("#probe-remote").checked,
   };
   const r = await api.post("/api/probe", body);
   $("#probe-out").textContent = JSON.stringify(r);
@@ -218,6 +225,32 @@ async function loadSystem() {
       : `<span class="badge ok">цепочка цела</span>`;
   } catch { $("#chain-view").innerHTML = '<span class="badge bad">filter недоступен</span>'; }
 }
+
+/* ---------- пресеты ---------- */
+function applyPreset(kind) {
+  const set = (axis, mode, point) => {
+    const row = document.querySelector(`#run-form .axis[data-axis="${axis}"]`);
+    row.querySelector(".mode").value = mode;
+  };
+  for (const axis of ["configs", "styles", "tactics", "agent_models", "attacker_models"]) set(axis, "point");
+  for (const axis of ["episodes", "seeds"]) set(axis, "point");
+  if (kind === "smoke") {
+    $("#budget").value = 6;
+    $("#compute").checked = true;
+  } else if (kind === "pilot") {
+    $("#budget").value = 8;
+    document.querySelector('#run-form .axis[data-axis="tactics"] .mode').value = "all";
+  }
+  renderAxes();
+  if (kind === "pilot") {
+    document.querySelector('#run-form .axis[data-axis="configs"] .mode').value = "point";
+    document.querySelector('#run-form .axis[data-axis="styles"] .mode').value = "point";
+    document.querySelector('#run-form .axis[data-axis="tactics"] .mode').value = "all";
+    renderAxes();
+  }
+}
+$("#preset-smoke").addEventListener("click", () => applyPreset("smoke"));
+$("#preset-pilot").addEventListener("click", () => applyPreset("pilot"));
 
 /* ---------- init ---------- */
 async function init() {

@@ -66,6 +66,7 @@ def run_episode(
     style_name: str,
     seed: int,
     run_id: str | None = None,
+    remote_llm: bool = False,
     *,
     shop: Any,
     db_url: str,
@@ -83,6 +84,7 @@ def run_episode(
         "config_name": config_name,
         "seed": seed,
         **({"run_id": run_id} if run_id else {}),
+        **({"remote_llm": True} if remote_llm else {}),
     }
     if customer_complete or customer_base_url:
         model = ChatModel(recorder, complete=customer_complete, base_url=customer_base_url)

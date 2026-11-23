@@ -9,8 +9,17 @@ from lab.modelspec import FROZEN_DIR, ModelSpec, load_roster
 LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
-def check_config(config_name: str, config: dict, agents: list[ModelSpec]) -> list[str]:
-    """Возвращает список замечаний; пустой список — прогон можно запускать."""
+def check_config(
+    config_name: str,
+    config: dict,
+    agents: list[ModelSpec],
+    allow_remote: bool = False,
+) -> list[str]:
+    """Возвращает список замечаний; пустой список — прогон можно запускать.
+
+    allow_remote=True — обход проверки локальности LLM-эндпоинтов (проверка
+    работоспособности через прокси, НЕ для статьи): остальные проверки остаются.
+    """
     problems: list[str] = []
     configs_dir = FROZEN_DIR / "configs"
     if not (configs_dir / f"{config_name}.json").exists():
@@ -18,7 +27,17 @@ def check_config(config_name: str, config: dict, agents: list[ModelSpec]) -> lis
     known = {p.stem for p in configs_dir.glob("*.json")}
     if known and config_name not in known:
         problems.append(f"конфиг {config_name} не из замороженного набора")
-    problems += _check_llm_endpoints(config)
+    if not allow_remote:
+        problems += _check_llm_endpoints(config)
+    else:
+        problems += [
+            f"{key}={value} — REMOTE LLM (verification only, not article data)"
+            for key, value in _walk(config)
+            if isinstance(key, str)
+            and key.endswith("base_url")
+            and isinstance(value, str)
+            and (urlparse(value).hostname or "") not in LOCAL_HOSTS
+        ]
     roster = load_roster()
     for spec in agents:
         if spec.name not in roster:

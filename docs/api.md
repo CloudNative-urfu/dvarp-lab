@@ -65,7 +65,9 @@
   сид; по умолчанию — один, диапазон = перебор «миров»); режим `all` на них
   запрещён (неограничены);
 - глобально: `budget`, `compute`, `confirm` (подтверждение объёма сверх guard
-  1000), `scenario_pairs` (явные пары style=tactic).
+  1000), `scenario_pairs` (явные пары style=tactic), `allow_remote_llm` (обход
+  локальности LLM — только проверка; пин в манифесте и записях, метрики
+  пропускают, `include_remote` в `/compute`).
 CLI: `python -m launcher --config g0 --episodes 2 --seed 0 --compute` (флаги →
 та же спецификация). Каждая ячейка: `/reset` → `/configure` (номинальная
 проверка + пин model_spec) → `/snapshot` → парные прогоны → `/snapshot/restore`.

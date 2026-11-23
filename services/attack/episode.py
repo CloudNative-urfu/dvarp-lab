@@ -26,6 +26,7 @@ def run_attack(
     seed: int,
     style_name: str | None = None,
     probe: bool = False,
+    remote_llm: bool = False,
     run_id: str | None = None,
     *,
     shop: Any,
@@ -67,6 +68,7 @@ def run_attack(
             "tactic": tactic_name,
             **({"style": style_name} if style_name else {}),
             **({"probe": True} if probe else {}),
+            **({"remote_llm": True} if remote_llm else {}),
             "seed": seed,
             **({"run_id": run_id} if run_id else {}),
         }

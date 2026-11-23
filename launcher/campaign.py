@@ -75,8 +75,10 @@ def run_campaign(
 
     configs = "+".join(camp.configs) if len(camp.configs) <= 2 else "multi"
     run_id = f"{configs}-s{camp.seeds[0]}-{time.strftime('%Y%m%dT%H%M%S')}"
+    remote = bool(spec.get("allow_remote_llm"))
     manifest: dict[str, Any] = {
         "run_id": run_id,
+        "remote_llm": remote,
         "budget": camp.budget,
         "episodes": camp.episodes,
         "axes": {
@@ -99,7 +101,9 @@ def run_campaign(
         config = json.loads(
             (Path(__file__).resolve().parents[1] / "frozen" / "configs" / f"{cfg}.json").read_text()
         )
-        problems = nominal.check_config(cfg, config, [agent])
+        problems = nominal.check_config(
+            cfg, config, [agent], allow_remote=bool(spec.get("allow_remote_llm"))
+        )
         if problems:
             raise SystemExit(
                 f"конфиг {cfg}: номинальная проверка не пройдена:\n" + "\n".join(problems)
@@ -129,6 +133,7 @@ def run_campaign(
                     "style": cell["style"],
                     "seed": derive_seed(seed, cfg, cell["style"], i, "legal"),
                     "run_id": run_id,
+                    **({"remote_llm": True} if remote else {}),
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
@@ -143,6 +148,7 @@ def run_campaign(
                     "seed": derive_seed(seed, cfg, cell["tactic"], i, "attack"),
                     "style": cell["style"],
                     "run_id": run_id,
+                    **({"remote_llm": True} if remote else {}),
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
@@ -187,7 +193,9 @@ def probe(
     config = json.loads(
         (Path(__file__).resolve().parents[1] / "frozen" / "configs" / f"{cfg}.json").read_text()
     )
-    problems = nominal.check_config(cfg, config, [agent])
+    problems = nominal.check_config(
+        cfg, config, [agent], allow_remote=bool(spec.get("allow_remote_llm"))
+    )
     if problems:
         raise SystemExit("номинальная проверка не пройдена:\n" + "\n".join(problems))
     seed = spec.get("seed")
@@ -205,5 +213,6 @@ def probe(
             "seed": derive_seed(seed, cfg, spec["tactic"], 0, "attack"),
             "style": spec.get("style"),
             "probe": True,
+            **({"remote_llm": True} if spec.get("allow_remote_llm") else {}),
         },
     )
