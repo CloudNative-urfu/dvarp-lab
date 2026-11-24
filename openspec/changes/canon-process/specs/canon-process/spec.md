@@ -31,6 +31,27 @@ chore, мелкие docs) отмечаются в tasks.md своего change.
 - **WHEN** в рамках change делается техническая правка
 - **THEN** она отмечается в tasks.md этого change
 
+### Requirement: PR-only integration
+Изменения `main` SHALL попадать только через PR из ветки задачи
+`issue/<N>-<slug>` (N — номер issue), от свежего `main`; прямые пуши в
+`main` SHALL быть запрещены branch protection для всех, включая владельца.
+PR участника SHALL ждать ревью тимлида (axstiz) или назначенного им
+ревьюера; PR тимлида — саморевью (мержит сам). Мерж — squash; заголовок
+PR — Conventional Commit, совпадающий с итоговым коммитом; история
+`main` — линейная.
+
+#### Scenario: Direct push rejected
+- **WHEN** пуш напрямую в `main`
+- **THEN** push отклонён branch protection; работа идёт в ветке задачи
+
+#### Scenario: Team member PR review
+- **WHEN** участник открыл PR
+- **THEN** мерж доступен после аппрува тимлида или назначенного ревьюера
+
+#### Scenario: Lead self-review
+- **WHEN** тимлид открыл собственный PR
+- **THEN** мерж выполняет сам (устное саморевью), по-прежнему через PR
+
 ### Requirement: Canon immutability and request flow
 Канон исследования SHALL жить в репо `CloudNative-urfu/dvarp`
 (`docs/guardrails_requirements.md`, FR-1.x/NFR-2.x) и не SHALL

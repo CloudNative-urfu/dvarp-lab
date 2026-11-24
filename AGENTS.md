@@ -31,6 +31,12 @@ uv run python scripts/smoke.py   # сквозной смок (временные
 - Задачи и ишью: задача ведётся в issue `CloudNative-urfu/dvarp-lab`,
   привязанном к доске **DVARP Board** (`CloudNative-urfu/projects/1`);
   коммиты — только в контексте issue; task без issue не ведётся;
+- **Ветки и PR**: изменения `main` — только через PR из ветки
+  `issue/<N>-<slug>` от свежего `main` (N — номер issue); прямые пуши в
+  `main` запрещены для всех, включая владельца (branch protection);
+  PR участника ждёт ревью тимлида (axstiz) или назначенного им ревьюера;
+  PR тимлида — саморевью (мержит сам). Мерж — squash; заголовок PR —
+  Conventional Commit, совпадающий с итоговым коммитом;
 - **openspec обязателен**: каждый openspec change привязан к своему issue
   (ссылка на issue в proposal). Каждое содержательное изменение коммитится
   вместе с дельтой `openspec/changes/<change-id>/` (proposal, design, tasks,
@@ -43,14 +49,9 @@ uv run python scripts/smoke.py   # сквозной смок (временные
   правка канона — отдельный PR в `dvarp` после решения владельца;
 - Коммиты: Conventional Commits **на английском**, малыми проверенными блоками,
   `git -c commit.gpgsign=false commit`;
-- **Пуш — только после явной приёмки владельцем.** Без просьбы — не пушить;
 - Перед коммитом: `uv run pytest` (или целевой файл); pre-commit hook
   выполняет ruff из nixpkgs (check + format) и `openspec validate --all`
   (ruff из PyPI на NixOS не стартует);
-- **openspec обязателен**: каждое содержательное изменение коммитится вместе
-  с дельтой `openspec/changes/<change-id>/` (proposal, design, tasks, спеки);
-  технические правки (style, chore, мелкие docs) — отметкой в tasks.md
-  своего change;
 - Никаких Dockerfile, CI-workflow, quality-gates, мутационных скриптов —
   только код + pytest + openspec. Код читается как схема (`docs/scheme.svg`),
   лишняя обвязка запрещена;
