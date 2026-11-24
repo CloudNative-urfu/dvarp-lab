@@ -29,6 +29,34 @@ SERVICES = {
 PROCS: list[subprocess.Popen] = []
 
 
+def _load_dotenv(path: Path) -> None:
+    """Загрузка .env в os.environ (KEY=VALUE, кавычки, export, inline-#-комментарии).
+
+    Существующие переменные окружения не перекрываются. Этот uv не грузит .env
+    автоматически при `uv run`, поэтому dev-режим делает это сам.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[len("export ") :].lstrip()
+        key, sep, value = s.partition("=")
+        if not sep:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        else:
+            for i, ch in enumerate(value):
+                if ch == "#" and (i == 0 or value[i - 1] in " \t"):
+                    value = value[:i].rstrip()
+                    break
+        os.environ.setdefault(key.strip(), value)
+
+
 def _env(dev: Path) -> dict[str, str]:
     env = os.environ.copy()
     shop_db = f"sqlite:///{dev}/shop.db"
@@ -78,6 +106,7 @@ def main() -> None:
     parser.add_argument("--tmp", default=None, help="каталог dev-данных (default: runs/dev)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
+    _load_dotenv(root / ".env")
     dev = Path(args.tmp) if args.tmp else root / "runs" / "dev"
     if args.fresh and dev.exists():
         import shutil

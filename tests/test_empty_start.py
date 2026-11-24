@@ -35,7 +35,7 @@ def test_journal_seq_resumes_after_restart(tmp_path, monkeypatch):
     monkeypatch.setenv("LAB_SHOP_RUNTIME", str(runtime))
     (runtime / "journal-3.jsonl").write_text('{"seq": 1, "hash": "x"}\n', encoding="utf-8")
     shop_app.STATE.journal_seq = 0  # имитация рестарта процесса
-    j = shop_app._new_journal()
+    shop_app._new_journal()
     assert shop_app.STATE.journal_seq == 4
     assert (runtime / "journal-4.jsonl").exists()
     # следующая ячейка — следующий файл
