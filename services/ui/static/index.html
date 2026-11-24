@@ -5,159 +5,159 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dvarp-lab · консоль полигона</title>
 <link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/vue.global.prod.js"></script>
 </head>
 <body>
+<div id="app" v-cloak>
 <header class="top">
   <div class="brand"><span class="dot"></span> dvarp-lab</div>
-  <nav class="tabs" id="tabs">
-    <button data-tab="run" class="tab active">Запуск</button>
-    <button data-tab="episodes" class="tab">Эпизоды</button>
-    <button data-tab="metrics" class="tab">Метрики</button>
-    <button data-tab="history" class="tab">История</button>
-    <button data-tab="system" class="tab">Система</button>
+  <nav class="tabs">
+    <button v-for="t in tabs" :key="t.id" class="tab" :class="{active: tab === t.id}" @click="open(t.id)">{{ t.label }}</button>
   </nav>
+  <span v-if="meta.remote_endpoints && meta.remote_endpoints.length" class="badge bad" :title="meta.terms.remote_llm">
+    remote LLM: {{ meta.remote_endpoints.join(", ") }}</span>
 </header>
 
-<main>
-  <!-- ==================== RUN ==================== -->
-  <section id="tab-run" class="page">
-    <div class="page-head">
-      <span class="eyebrow">Запускатель</span>
-      <h1 class="display">Кампания прогонов</h1>
-      <p class="lede">Оси: точечно / диапазон / все / все со сдвигом. Прогон — парные эпизоды
-      (легальный + атакующий в одном стиле) от общего снимка состояния.</p>
+<main v-if="meta.axes">
+  <p v-if="error" class="card err"><span class="badge bad">ошибка</span> <span class="mono">{{ error }}</span></p>
+
+  <!-- ==================== ЗАПУСК ==================== -->
+  <section v-show="tab === 'run'">
+    <div class="card">
+      <div class="card-title">Пресеты</div>
+      <div class="row">
+        <button v-for="p in meta.presets" :key="p.name" class="btn ghost" @click="applyPreset(p)">{{ p.label }}</button>
+      </div>
     </div>
 
-    <div class="card" id="run-form">
-      <div class="axis" data-axis="configs">
-        <label>Конфигурации</label>
-        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="styles">
-        <label>Стили</label>
-        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="tactics">
-        <label>Тактики</label>
-        <select class="mode"><option value="point">точечно</option><option value="range">диапазон</option><option value="all" selected>все</option><option value="all_limited">все+сдвиг</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="agent_models">
-        <label>Модель агента</label>
-        <select class="mode"><option value="point" selected>точечно</option><option value="all">все</option><option value="all_limited">все+сдвиг</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="attacker_models">
-        <label>Модель атакующего</label>
-        <select class="mode"><option value="point" selected>точечно</option><option value="all">все</option><option value="all_limited">все+сдвиг</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="episodes">
-        <label>Эпизоды</label>
-        <select class="mode"><option value="point" selected>точечно</option><option value="range">диапазон</option><option value="all_limited">со сдвигом</option></select>
-        <span class="ctl"></span>
-      </div>
-      <div class="axis" data-axis="seeds">
-        <label>Сиды (миры)</label>
-        <select class="mode"><option value="point" selected>точечно</option><option value="range">диапазон</option><option value="all_limited">со сдвигом</option></select>
-        <span class="ctl"></span>
+    <div class="card">
+      <div class="card-title">Оси кампании</div>
+      <div v-for="a in meta.axes" :key="a.name" class="axis">
+        <label><term-label :k="a.name" :terms="meta.terms">{{ a.label }}</term-label></label>
+        <pick v-model="spec[a.name].mode" :options="a.modes" :terms="meta.terms" :label="a.label + ': режим'"></pick>
+        <axis-control :axis="a" :value="spec[a.name]" :terms="meta.terms"></axis-control>
       </div>
       <div class="row">
-        <label>Бюджет атаки <input id="budget" type="number" value="8" min="1"></label>
-        <label class="check"><input id="compute" type="checkbox"> пересчитать метрики после</label>
-        <span class="badge bad">Не-локальный LLM-эндпоинт маркируется remote автоматически</span>
-      </div>
-      <div class="row">
-        <span class="hint">пресеты:</span>
-        <button id="preset-smoke" class="btn ghost">Smoke</button>
-        <button id="preset-pilot" class="btn ghost">Пилот</button>
+        <field-control v-for="f in meta.run_fields" :key="f.name" :field="f" :model="spec" :terms="meta.terms"></field-control>
       </div>
       <div class="row actions">
-        <button id="btn-volume" class="btn ghost">Объём</button>
-        <button id="btn-run" class="btn primary">Запустить</button>
-        <span id="volume-out" class="hint"></span>
+        <button class="btn" @click="volume">Объём</button>
+        <button class="btn primary" :disabled="status.status === 'running'" @click="run(false)">Запустить</button>
+        <span class="hint">{{ volumeText }}</span>
       </div>
     </div>
 
-    <div class="card" id="probe-card">
-      <div class="card-title">Probe — одна атака без парной ноги (не попадает в метрики)</div>
+    <div class="card">
+      <div class="card-title">Probe: одна атака без парной ноги (в метрики не идёт)</div>
       <div class="row">
-        <label>Конфиг <select id="probe-config"></select></label>
-        <label>Тактика <select id="probe-tactic"></select></label>
-        <label>Бюджет <input id="probe-budget" type="number" value="8" min="1"></label>
-        <label>Сид <input id="probe-seed" type="number" placeholder="auto"></label>
-        
+        <field-control v-for="f in meta.probe_fields" :key="f.name" :field="f" :model="probeSpec" :terms="meta.terms"></field-control>
       </div>
-      <div class="row actions"><button id="btn-probe" class="btn ghost">Probe</button><span id="probe-out" class="hint mono"></span></div>
-    </div>
-
-    <div class="card" id="progress-card">
-      <div class="card-title">Прогресс</div>
-      <div id="progress-body" class="hint">прогон не выполняется</div>
+      <div class="row actions">
+        <button class="btn" @click="probe">Атаковать</button>
+        <span class="mono hint">{{ probeOut }}</span>
+      </div>
     </div>
   </section>
 
-  <!-- ==================== EPISODES ==================== -->
-  <section id="tab-episodes" class="page hidden">
-    <div class="page-head">
-      <span class="eyebrow">Сырые данные</span>
-      <h1 class="display">Эпизоды</h1>
-      <p class="lede">Тексты ходов из сырой БД filter_svc (только текст — барьер).</p>
+  <!-- ==================== ПРОГОНЫ ==================== -->
+  <section v-show="tab === 'runs'">
+    <div class="card">
+      <div class="card-title">Текущий прогон</div>
+      <run-status :s="status" :terms="meta.terms"></run-status>
     </div>
+    <div>
+      <div class="card">
+        <div class="card-title">Манифесты <button class="btn small" @click="loadRuns">обновить</button></div>
+        <p v-if="!runs.length" class="hint">прогонов пока нет</p>
+        <button v-for="r in runs" :key="r.run_id" class="list-item" :class="{active: runDetail && runDetail.run_id === r.run_id}" @click="openRun(r.run_id)">
+          <span class="mono">{{ r.run_id }}</span>
+          <span class="hint">{{ r.cells }} ячеек · {{ r.episodes }} эп.</span>
+          <span v-if="r.remote_llm" class="badge bad">remote</span>
+        </button>
+      </div>
+      <div class="card" v-if="runDetail">
+        <div class="card-title mono">{{ runDetail.run_id }} <span v-if="runDetail.remote_llm" class="badge bad" :title="meta.terms.remote_llm">remote</span></div>
+        <value-view :v="runDetail.axes" :terms="meta.terms"></value-view>
+        <div class="scroll"><table>
+          <tr><th v-for="c in cellCols" :key="c"><term-label :k="c" :terms="meta.terms">{{ c }}</term-label></th><th>эпизоды</th></tr>
+          <tr v-for="(c, i) in runDetail.cells" :key="i">
+            <td class="mono">{{ c.config }}</td><td>{{ c.scenario.style }}</td><td>{{ c.scenario.tactic }}</td>
+            <td>{{ c.seed }}</td><td class="mono">{{ c.agent_model.name }}</td><td class="mono">{{ c.attacker_model.name }}</td>
+            <td>
+              <button v-for="e in c.episodes" :key="e.episode" class="btn small" @click="openPair(e)">
+                #{{ e.episode }} <outcome :o="e.legal.outcome" :terms="meta.terms"></outcome> / <outcome :o="e.attack.outcome" :terms="meta.terms"></outcome>
+              </button>
+            </td>
+          </tr>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== ТРЕЙС ==================== -->
+  <section v-show="tab === 'trace'">
     <div class="card">
       <div class="row">
-        <label>Эпизод <select id="ep-select" class="mono" style="min-width:340px"><option value="">— загрузка…</option></select></label>
-        <label>или id <input id="ep-id" class="mono" placeholder="вручную" style="width:180px"></label>
-        <button id="btn-episode" class="btn primary">Показать</button>
+        <pick v-model="episodePick" class="wide" :options="episodeOptions" label="эпизод из сырой БД"></pick>
+        <button class="btn" @click="openPair({legal_episode_id: episodePick})" :disabled="!episodePick">Открыть</button>
+        <button class="btn small" @click="loadEpisodes">обновить</button>
       </div>
-      <div id="episode-view" class="episode-view hint">выберите эпизод</div>
+    </div>
+    <div class="grid2">
+      <div class="card" v-for="leg in trace" :key="leg.episode_id">
+        <div class="card-title"><term-label :k="leg.channel" :terms="meta.terms">{{ leg.channel || "эпизод" }}</term-label>&nbsp;
+          <span class="mono hint">{{ leg.episode_id }}</span> <outcome v-if="leg.outcome" :o="leg.outcome" :terms="meta.terms"></outcome></div>
+        <p v-if="!leg.lines.length" class="hint">нет ходов</p>
+        <div v-for="(t, i) in leg.lines" :key="i" class="bubble" :class="[t.channel, t.author]">
+          <div class="who">ход {{ t.turn }} · <term-label :k="t.author" :terms="meta.terms">{{ t.author === "agent" ? "агент" : (t.channel === "attack" ? "атакующий" : "клиент") }}</term-label></div>{{ t.text }}
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- ==================== METRICS ==================== -->
-  <section id="tab-metrics" class="page hidden">
-    <div class="page-head">
-      <span class="eyebrow">Движок</span>
-      <h1 class="display">Метрики</h1>
-      <p class="lede">Расчёт по формулам канона поверх сырой БД — в любое время. Ниже — карточки
-      конфигураций, по которым есть прогоны; оглавление-чекпоинты ведут к карточке.</p>
+  <!-- ==================== МЕТРИКИ ==================== -->
+  <section v-show="tab === 'metrics'">
+    <div class="card">
+      <div class="card-title">Фильтры расчёта</div>
+      <div class="row">
+        <label>конфиг <pick v-model="mf.config_name" :options="configOptions" label="конфиг"></pick></label>
+        <label>модель <pick v-model="mf.model_spec" :options="modelOptions" label="модель"></pick></label>
+        <label class="check"><input type="checkbox" v-model="mf.include_probe"> <term-label k="probe" :terms="meta.terms">probe</term-label></label>
+        <label class="check"><input type="checkbox" v-model="mf.include_remote"> <term-label k="remote_llm" :terms="meta.terms">remote</term-label></label>
+      </div>
+      <div class="row actions">
+        <button class="btn primary" @click="compute(true)">Рассчитать и сохранить</button>
+        <button class="btn" @click="compute(false)">Рассчитать без сохранения</button>
+        <button class="btn small" @click="loadStored">сохранённые</button>
+        <span class="hint">{{ metricsNote }}</span>
+      </div>
+    </div>
+    <div v-for="g in metricGroups" :key="g.key" class="card">
+      <div class="card-title"><span class="mono">{{ g.config_name }}</span> · {{ g.model_spec.name }} · {{ g.model_spec.role }} · {{ g.model_spec.revision }}
+        <span v-if="g.ephemeral" class="badge warn">не сохранено</span></div>
+      <div class="grid2">
+        <div><div class="hint">итог</div><value-view :v="g.final" :terms="meta.terms"></value-view></div>
+        <div v-if="g.raw"><div class="hint">собранные значения</div><value-view :v="g.raw" :terms="meta.terms"></value-view></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== СИСТЕМА ==================== -->
+  <section v-show="tab === 'system'">
+    <div class="card">
+      <div class="card-title">Сервисы</div>
+      <span v-for="(v, k) in health" :key="k" class="badge" :class="v === 'ok' ? 'ok' : 'bad'">{{ k }}: {{ v }}</span>
     </div>
     <div class="card">
-      <div class="row">
-        <label class="check"><input id="m-probe" type="checkbox"> включая probe</label>
-        <label class="check"><input id="m-remote" type="checkbox"> включая remote-LLM</label>
-        <button id="btn-compute" class="btn primary">Пересчитать</button>
-        <button id="btn-metrics" class="btn ghost">Обновить</button>
-        <span id="m-out" class="hint"></span>
-      </div>
+      <div class="card-title">Хеш-цепочка сырой БД</div>
+      <span v-if="chain === null" class="hint">…</span>
+      <span v-else-if="chain.error" class="badge bad">filter недоступен</span>
+      <span v-else-if="chain.defects.length" class="badge bad">дефекты: {{ chain.defects.length }}</span>
+      <span v-else class="badge ok">цепочка цела</span>
     </div>
-    <nav id="m-toc" class="toc hidden"></nav>
-    <div id="metrics-view" class="hint">нет прогонов</div>
-  </section>
-
-  <!-- ==================== HISTORY ==================== -->
-  <section id="tab-history" class="page hidden">
-    <div class="page-head">
-      <span class="eyebrow">Артефакты</span>
-      <h1 class="display">История прогонов</h1>
-      <p class="lede">Манифесты runs/ — пин осей и сидов каждого прогона.</p>
-    </div>
-    <div id="history-view" class="hint">пусто</div>
-  </section>
-
-  <!-- ==================== SYSTEM ==================== -->
-  <section id="tab-system" class="page hidden">
-    <div class="page-head">
-      <span class="eyebrow">Состояние</span>
-      <h1 class="display">Система</h1>
-      <p class="lede">Здоровье сервисов и целостность хеш-цепочки сырой БД.</p>
-    </div>
-    <div class="card"><div id="health-view" class="hint">—</div></div>
-    <div class="card"><div class="card-title">Цепочка</div><div id="chain-view" class="hint">—</div></div>
   </section>
 </main>
+</div>
 <script src="/static/app.js"></script>
 </body>
 </html>

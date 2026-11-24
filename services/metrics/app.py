@@ -158,20 +158,17 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
     ]
 
 
-def compute(
+def _computed(
     config_name: str | None = None,
     model_spec: dict | None = None,
     include_probe: bool = False,
     include_remote: bool = False,
-) -> int:
-    """Recalculate metrics from the raw DB into the metrics DB; returns stored row count.
+) -> list[tuple[extract.Aggregate, list[dict[str, Any]]]]:
+    """Aggregates and metric rows per config × model_spec over the raw DB (no writes).
 
     The filter selects which configs are computed; the reference config is still looked
-    up in the full raw data, so L* survives a config-filtered /compute.
+    up in the full raw data, so L* survives a config-filtered computation.
     """
-    if _raw_missing():
-        init_metrics_db()
-        return 0
     all_eps = _read_episodes(include_probe=include_probe, include_remote=include_remote)
     groups_all = extract.group(all_eps)
     eps = all_eps
@@ -179,12 +176,30 @@ def compute(
         eps = [e for e in eps if e.model_spec == json.dumps(model_spec, sort_keys=True)]
     if config_name is not None:
         eps = [e for e in eps if e.config == config_name]
-    rows: list[dict[str, Any]] = []
+    out = []
     for (cfg, mkey), group_eps in sorted(extract.group(eps).items()):
         agg = extract.aggregate(group_eps)
         # L* needs the reference config of the same pinned model in the same data.
         ref = _reference_rows(groups_all, mkey) if cfg != REFERENCE_CONFIG else None
-        rows.extend(_metric_rows(agg, _break_even(agg, ref)))
+        out.append((agg, _metric_rows(agg, _break_even(agg, ref))))
+    return out
+
+
+def compute(
+    config_name: str | None = None,
+    model_spec: dict | None = None,
+    include_probe: bool = False,
+    include_remote: bool = False,
+) -> int:
+    """Recalculate metrics from the raw DB into the metrics DB; returns stored row count."""
+    if _raw_missing():
+        init_metrics_db()
+        return 0
+    rows = [
+        r
+        for _, group_rows in _computed(config_name, model_spec, include_probe, include_remote)
+        for r in group_rows
+    ]
     with Session(metrics_engine()) as session:
         for cfg, spec in {
             (r["config_name"], json.dumps(r["model_spec"], sort_keys=True)) for r in rows
@@ -219,6 +234,39 @@ def compute_endpoint(body: ComputeIn) -> dict:
             body.config_name, body.model_spec, body.include_probe, body.include_remote
         )
     }
+
+
+@app.post("/preview")
+def preview_endpoint(body: ComputeIn) -> dict:
+    """One-off computation by filters: computed and returned, never written to metric_results.
+
+    Next to the final metrics each group carries the collected aggregates (counts and
+    rates the formulas consume), so a reader sees what the numbers are made of.
+    """
+    if _raw_missing():
+        return {"groups": []}
+    groups = _computed(body.config_name, body.model_spec, body.include_probe, body.include_remote)
+    return {
+        "groups": [
+            {
+                "config_name": agg.config,
+                "model_spec": json.loads(agg.model_spec),
+                "final": {r["metric"]: r["value"] for r in rows},
+                "raw": {
+                    k: getattr(agg, k)
+                    for k in ("n_attack", "n_legal", "V_k", "V_n", "w_A", "w_L", "V", "R", "E")
+                },
+            }
+            for agg, rows in groups
+        ]
+    }
+
+
+@app.get("/models")
+def models_with_data() -> dict:
+    """model_spec, по которым есть записи (включая probe/remote) — для фильтров консоли."""
+    specs = {e.model_spec for e in _read_episodes(include_probe=True, include_remote=True)}
+    return {"models": [json.loads(s) for s in sorted(specs)]}
 
 
 @app.get("/configs")

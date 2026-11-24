@@ -13,13 +13,94 @@ def client(monkeypatch):
     return TestClient(ui_app.app)
 
 
-def test_meta_lists_frozen_and_guard(client):
+def test_meta_describes_form_as_data(client):
     m = client.get("/api/meta").json()
-    assert "g0" in m["configs"]
-    assert "patient" in m["styles"]
-    assert "third_party_emergency" in m["tactics"]
+    axes = {a["name"]: a for a in m["axes"]}
+    assert "g0" in axes["configs"]["universe"]
+    assert "patient" in axes["styles"]["universe"]
+    assert "third_party_emergency" in axes["tactics"]["universe"]
+    assert "set" in axes["configs"]["modes"] and "set" in axes["seeds"]["modes"]
+    assert "all" not in axes["episodes"]["modes"]  # числовые оси неограничены
+    assert axes["agent_models"]["free"] is True
+    assert {p["name"] for p in m["presets"]} >= {"smoke", "pilot"}
+    assert {f["name"] for f in m["run_fields"]} == {"budget", "compute"}
+    assert {f["name"] for f in m["probe_fields"]} >= {"config", "tactic", "agent_model"}
+    for key in ("L_star", "V", "TPR", "n_attack", "remote_llm", "set"):
+        assert m["terms"][key]
     assert m["guard"] == 1000
     assert set(m["health"]) == {"shop", "traffic", "attack", "filter", "metrics"}
+
+
+def test_presets_resolve_to_campaigns(client):
+    for p in client.get("/api/meta").json()["presets"]:
+        r = client.post("/api/volume", json={"spec": p["spec"]})
+        assert r.status_code == 200, (p["name"], r.text)
+        assert r.json()["cells"] >= 1
+
+
+def test_runs_summary_and_detail(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path))
+    manifest = {
+        "run_id": "run-1",
+        "remote_llm": True,
+        "axes": {"configs": ["g0"]},
+        "cells": [{"config": "g0", "episodes": [{"episode": 1}, {"episode": 2}]}],
+    }
+    (tmp_path / "run-1").mkdir()
+    (tmp_path / "run-1" / "manifest.json").write_text(json.dumps(manifest))
+    runs = client.get("/api/runs").json()["runs"]
+    assert runs == [
+        {
+            "run_id": "run-1",
+            "remote_llm": True,
+            "cells": 1,
+            "episodes": 2,
+            "axes": {"configs": ["g0"]},
+        }
+    ]
+    assert client.get("/api/runs/run-1").json() == manifest
+    assert client.get("/api/runs/no-such").status_code == 404
+
+
+def test_compute_and_preview_forward_all_filters(client, monkeypatch):
+    calls = []
+
+    class FakeSvc:
+        def __init__(self, url, timeout=30.0):
+            pass
+
+        def post(self, path, body):
+            calls.append((path, body))
+            return {"computed": 1} if path == "/compute" else {"groups": []}
+
+        def get(self, path):
+            return {
+                "config_name": "g0",
+                "results": [
+                    {"model_spec": {"name": "m"}, "metric": "V", "value": 0.5, "computed_at": "t"},
+                    {"model_spec": {"name": "m"}, "metric": "R", "value": 0.0, "computed_at": "t"},
+                ],
+            }
+
+    monkeypatch.setattr(ui_app, "Svc", FakeSvc)
+    body = {
+        "config_name": "g0",
+        "model_spec": {"name": "m"},
+        "include_probe": True,
+        "include_remote": True,
+    }
+    assert client.post("/api/compute", json=body).json() == {"computed": 1}
+    assert client.post("/api/preview", json=body).json() == {"groups": []}
+    assert calls == [("/compute", body), ("/preview", body)]
+    groups = client.get("/api/metrics/g0").json()["groups"]
+    assert groups == [
+        {
+            "config_name": "g0",
+            "model_spec": {"name": "m"},
+            "computed_at": "t",
+            "final": {"V": 0.5, "R": 0.0},
+        }
+    ]
 
 
 def test_volume_endpoint(client):
@@ -122,6 +203,7 @@ def test_static_page_served(client):
     assert r.status_code == 200
     assert "dvarp-lab" in r.text and "app.js" in r.text
     assert client.get("/static/style.css").status_code == 200
+    assert client.get("/static/vendor/vue.global.prod.js").status_code == 200
 
 
 def test_meta_remote_models_from_env(client, monkeypatch):

@@ -1,15 +1,14 @@
 """ui_svc: консоль полигона — читатель/вызыватель, ноль расчётов и ноль оркестрации.
 
-Статическая страница + тонкие /api/*: свод frozen, запуск run_campaign/probe
-(единственные источники прогона — те же функции, что у CLI), прогресс, прокси
-на metrics/filter. Инвариант: никакой математики и никакого управления
-сервисами здесь нет — только вызов launcher/metrics/filter.
+Статическая страница (Vue, vendored, без билда) + тонкие /api/*: описание формы
+данными (`services/ui/describe.py`), запуск run_campaign/probe (те же функции, что у
+CLI), прогресс, прокси на metrics/filter. Инвариант: никакой математики и никакого
+управления сервисами здесь нет — только вызов launcher/metrics/filter.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import threading
 import time
 from pathlib import Path
@@ -30,8 +29,9 @@ from launcher import (
     run_campaign,
 )
 from launcher import probe as launcher_probe
-from launcher.axes import GUARD_VOLUME, axis_universe, resolve_campaign
+from launcher.axes import GUARD_VOLUME, resolve_campaign
 from launcher.campaign import _runs_dir
+from services.ui.describe import describe
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -43,20 +43,6 @@ _STATE_LOCK = threading.Lock()
 
 def _svc(url: str, timeout: float = 30.0) -> Svc:
     return Svc(url, timeout=timeout)
-
-
-def _remote_models() -> dict[str, str | None]:
-    """Имена внешних моделей из env процесса (не секрет: пинуются в манифестах).
-
-    Только имена: ключи и base_url не раскрываются никогда. Имена соответствуют
-    тому, что сервисы реально читают: агент shop_svc — RESEARCH_LLM_MODEL,
-    атакующий attack_svc — LAB_ATTACKER_LLM_MODEL.
-    """
-
-    def name(var: str) -> str | None:
-        return (os.environ.get(var) or "").strip() or None
-
-    return {"agent": name("RESEARCH_LLM_MODEL"), "attacker": name("LAB_ATTACKER_LLM_MODEL")}
 
 
 @app.get("/")
@@ -85,16 +71,7 @@ def meta() -> dict:
             health[name] = "ok"
         except Exception:  # noqa: BLE001 — ping failure is a status, not a bug
             health[name] = "down"
-    return {
-        "configs": axis_universe("configs"),
-        "styles": axis_universe("styles"),
-        "tactics": axis_universe("tactics"),
-        "agent_models": axis_universe("agent_models"),
-        "attacker_models": axis_universe("attacker_models"),
-        "remote_models": _remote_models(),
-        "guard": GUARD_VOLUME,
-        "health": health,
-    }
+    return {**describe(), "health": health}
 
 
 class VolumeIn(BaseModel):
@@ -152,25 +129,58 @@ def run_status() -> dict:
         return dict(_STATE)
 
 
+class MetricsFilter(BaseModel):
+    config_name: str | None = None
+    model_spec: dict[str, Any] | None = None
+    include_probe: bool = False
+    include_remote: bool = False
+
+
 @app.post("/api/compute")
-def compute(body: dict[str, Any]) -> dict:
-    return _svc(METRICS_URL).post(
-        "/compute",
-        {
-            "config_name": body.get("config_name"),
-            "include_probe": bool(body.get("include_probe")),
-        },
-    )
+def compute(body: MetricsFilter) -> dict:
+    """Расчёт с сохранением в metric_results (metrics /compute)."""
+    return _svc(METRICS_URL).post("/compute", body.model_dump())
+
+
+@app.post("/api/preview")
+def preview(body: MetricsFilter) -> dict:
+    """Одноразовый расчёт по фильтрам (metrics /preview): ничего не пишет."""
+    return _svc(METRICS_URL).post("/preview", body.model_dump())
+
+
+@app.get("/api/metric-models")
+def metric_models() -> dict:
+    return _svc(METRICS_URL).get("/models")
 
 
 @app.get("/api/metrics/{config_name}")
 def metrics(config_name: str) -> dict:
-    return _svc(METRICS_URL).get(f"/metrics/{config_name}")
+    """Сохранённые строки metrics, разложенные по model_spec (форма для отрисовки)."""
+    m = _svc(METRICS_URL).get(f"/metrics/{config_name}")
+    groups: dict[str, dict[str, Any]] = {}
+    for r in m.get("results", []):
+        key = json.dumps(r["model_spec"], sort_keys=True)
+        g = groups.setdefault(
+            key,
+            {
+                "config_name": config_name,
+                "model_spec": r["model_spec"],
+                "computed_at": r["computed_at"],
+                "final": {},
+            },
+        )
+        g["final"][r["metric"]] = r["value"]
+    return {**m, "groups": list(groups.values())}
 
 
 @app.get("/api/text/{episode_id}")
 def text(episode_id: str) -> dict:
     return _svc(FILTER_URL).get(f"/text/{episode_id}")
+
+
+@app.get("/api/dialog/{episode_id}")
+def dialog(episode_id: str) -> dict:
+    return _svc(FILTER_URL).get(f"/dialog/{episode_id}")
 
 
 @app.get("/api/episodes")
@@ -188,8 +198,7 @@ def chain() -> dict:
     return _svc(FILTER_URL).get("/chain/verify")
 
 
-@app.get("/api/runs")
-def runs() -> dict:
+def _manifests() -> list[dict[str, Any]]:
     items = []
     runs_dir = _runs_dir()
     if runs_dir.exists():
@@ -198,7 +207,33 @@ def runs() -> dict:
                 items.append(json.loads(mf.read_text(encoding="utf-8")))
             except json.JSONDecodeError:
                 continue
-    return {"runs": items}
+    return items
+
+
+@app.get("/api/runs")
+def runs() -> dict:
+    """Сводка манифестов (без ячеек): run_id, remote-пин, объём."""
+    return {
+        "runs": [
+            {
+                "run_id": m.get("run_id"),
+                "remote_llm": bool(m.get("remote_llm")),
+                "cells": len(m.get("cells", [])),
+                "episodes": sum(len(c.get("episodes", [])) for c in m.get("cells", [])),
+                "axes": m.get("axes", {}),
+            }
+            for m in _manifests()
+        ]
+    }
+
+
+@app.get("/api/runs/{run_id}")
+def run_detail(run_id: str) -> dict:
+    """Манифест прогона целиком: оси, ячейки, ссылки на эпизоды и их исходы."""
+    for m in _manifests():
+        if m.get("run_id") == run_id:
+            return m
+    raise HTTPException(404, f"прогон {run_id} не найден")
 
 
 class ProbeIn(BaseModel):
