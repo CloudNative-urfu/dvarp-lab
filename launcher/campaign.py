@@ -43,17 +43,17 @@ def default_services() -> dict[str, Svc]:
     }
 
 
-def _model_spec(name: str | None, role: str, allow_remote: bool = False) -> ModelSpec:
+def _model_spec(name: str | None, role: str) -> ModelSpec:
     """Модель по имени; None/без имени — первая модель роли из ростера.
 
-    allow_remote: имя может отсутствовать в ростере (проверка через прокси) —
-    тогда честный model_spec с пометкой remote-verification.
+    Ростер — не гейт: имя вне ростера даёт честный model_spec с пометкой
+    remote-verification (params_b неизвестен).
     """
     roster = load_roster()
     if not name:
         spec = next(m for m in roster.values() if m.role == role)
         name = spec.name
-    if allow_remote and name not in roster:
+    if name not in roster:
         return ModelSpec(name, role, params_b=None, revision="remote-verification")
     return resolve(name, role, roster)
 
@@ -81,7 +81,8 @@ def run_campaign(
 
     configs = "+".join(camp.configs) if len(camp.configs) <= 2 else "multi"
     run_id = f"{configs}-s{camp.seeds[0]}-{time.strftime('%Y%m%dT%H%M%S')}"
-    remote = bool(spec.get("allow_remote_llm"))
+    # allow_remote_llm в спеке принимается и игнорируется: remote определяется эндпоинтами
+    remote = bool(nominal.remote_endpoints())
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "remote_llm": remote,
@@ -103,21 +104,17 @@ def run_campaign(
     done = 0
     for cell in cells:
         cfg, seed = cell["config"], cell["seed"]
-        agent = _model_spec(cell["agent_model"], "agent", allow_remote=remote)
+        agent = _model_spec(cell["agent_model"], "agent")
         config = json.loads(
             (Path(__file__).resolve().parents[1] / "frozen" / "configs" / f"{cfg}.json").read_text()
         )
-        problems = nominal.check_config(
-            cfg, config, [agent], allow_remote=bool(spec.get("allow_remote_llm"))
-        )
+        problems = nominal.check_config(cfg, config, [agent])
         if problems:
             raise SystemExit(
                 f"конфиг {cfg}: номинальная проверка не пройдена:\n" + "\n".join(problems)
             )
         attacker = (
-            _model_spec(cell["attacker_model"], "attacker", allow_remote=remote)
-            if cell["attacker_model"]
-            else agent
+            _model_spec(cell["attacker_model"], "attacker") if cell["attacker_model"] else agent
         )
 
         shop.post("/reset", {"seed": seed})  # сначала reset: он инициализирует журнал shop
@@ -201,23 +198,15 @@ def probe(
     """Одна атака без парной ноги: raw.probe=true, манифест не пишется, метрики пропускают."""
     svcs = services or default_services()
     shop, attack = svcs["shop"], svcs["attack"]
-    agent = _model_spec(
-        spec["agent_model"], "agent", allow_remote=bool(spec.get("allow_remote_llm"))
-    )
+    agent = _model_spec(spec["agent_model"], "agent")
     attacker = (
-        _model_spec(
-            spec["attacker_model"], "attacker", allow_remote=bool(spec.get("allow_remote_llm"))
-        )
-        if spec.get("attacker_model")
-        else agent
+        _model_spec(spec["attacker_model"], "attacker") if spec.get("attacker_model") else agent
     )
     cfg = spec["config"]
     config = json.loads(
         (Path(__file__).resolve().parents[1] / "frozen" / "configs" / f"{cfg}.json").read_text()
     )
-    problems = nominal.check_config(
-        cfg, config, [agent], allow_remote=bool(spec.get("allow_remote_llm"))
-    )
+    problems = nominal.check_config(cfg, config, [agent])
     if problems:
         raise SystemExit("номинальная проверка не пройдена:\n" + "\n".join(problems))
     seed = spec.get("seed")
@@ -235,6 +224,6 @@ def probe(
             "seed": derive_seed(seed, cfg, spec["tactic"], 0, "attack"),
             "style": spec.get("style"),
             "probe": True,
-            **({"remote_llm": True} if spec.get("allow_remote_llm") else {}),
+            **({"remote_llm": True} if nominal.remote_endpoints() else {}),
         },
     )

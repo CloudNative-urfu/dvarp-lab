@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lab.nominal import is_local_url
 from lab.seeds import derive_seed
 from services.traffic.episode import outcome_of
 from services.traffic.record import ChatModel, Recorder
@@ -47,6 +48,8 @@ def run_attack(
         style = styles[style_name]
     prompt = start_prompt(registry[tactic_name], derive_seed(seed, episode_id))
     recorder = Recorder(filter_svc, episode_id, "attack", attacker_model)
+    # не-локальный эндпоинт атакующего маркирует записи сам (инвариант 8c)
+    remote_llm = remote_llm or bool(attacker_base_url and not is_local_url(attacker_base_url))
     recorder.raw_extra = {"config_name": config_name}
     if attacker_complete or attacker_base_url:
         import os

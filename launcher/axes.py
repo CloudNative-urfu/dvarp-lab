@@ -84,7 +84,7 @@ def axis_universe(axis: str) -> list[Any]:
     raise ValueError(f"неизвестная перечислимая ось {axis!r}")
 
 
-def resolve_axis(axis: str, spec: dict[str, Any] | None, allow_remote: bool = False) -> list[Any]:
+def resolve_axis(axis: str, spec: dict[str, Any] | None) -> list[Any]:
     """spec: {"mode": point|range|all|all_limited|set, ...} или None = all (enum) / point(1) (numeric)."""
     spec = dict(spec) if spec else None
     if axis in NUMERIC_AXES:
@@ -118,16 +118,15 @@ def resolve_axis(axis: str, spec: dict[str, Any] | None, allow_remote: bool = Fa
     if mode == "point":
         v = spec["point"]
         if v not in universe:
-            if allow_remote and axis.endswith("_models"):
-                return [v]  # remote-верификация: имя модели из прокси, не из ростера
+            if axis.endswith("_models"):
+                return [v]  # ростер — не гейт: имя вне ростера пинуется remote-verification
             raise ValueError(f"{axis}: {v!r} отсутствует в frozen ({len(universe)} значений)")
         return [v]
     if mode == "set":
         missing = [v for v in spec["values"] if v not in universe]
         if missing:
-            if allow_remote and axis.endswith("_models"):
-                # remote-верификация: имена моделей из прокси, не из ростера
-                return sorted(spec["values"])
+            if axis.endswith("_models"):
+                return sorted(spec["values"])  # ростер — не гейт (см. point)
             raise ValueError(f"{axis}: отсутствуют в frozen: {missing}")
         return sorted(spec["values"])
     if mode == "range":
@@ -188,13 +187,12 @@ def resolve_campaign(spec: dict[str, Any]) -> Campaign:
     pairs = None
     if spec.get("scenario_pairs"):
         pairs = [(p["style"], p["tactic"]) for p in spec["scenario_pairs"]]
-    remote = bool(spec.get("allow_remote_llm"))
-    attacker = resolve_axis("attacker_models", spec.get("attacker_models"), allow_remote=remote)
+    attacker = resolve_axis("attacker_models", spec.get("attacker_models"))
     return Campaign(
         configs=resolve_axis("configs", spec.get("configs")),
         styles=resolve_axis("styles", spec.get("styles")),
         tactics=resolve_axis("tactics", spec.get("tactics")),
-        agent_models=resolve_axis("agent_models", spec.get("agent_models"), allow_remote=remote),
+        agent_models=resolve_axis("agent_models", spec.get("agent_models")),
         attacker_models=attacker or [None],
         episodes=resolve_axis("episodes", spec.get("episodes")),
         seeds=resolve_axis("seeds", spec.get("seeds")),

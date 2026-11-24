@@ -32,7 +32,7 @@ from .settings import (
     ENV_PARAMS_B,
     LLMSettings,
     SizeVerdict,
-    check_local_endpoint,
+    check_endpoint,
     check_model_size,
     parse_params_b,
 )
@@ -81,7 +81,7 @@ __all__ = [
     "ToolSpec",
     "Usage",
     "UsageMeter",
-    "check_local_endpoint",
+    "check_endpoint",
     "check_model_size",
     "estimate_completion",
     "estimate_prompt",

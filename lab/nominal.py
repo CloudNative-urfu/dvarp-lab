@@ -1,12 +1,46 @@
-"""Номинальная проверка конфигурации перед каждым прогоном (замена сетевой охраны)."""
+"""Номинальная проверка конфигурации перед каждым прогоном и маркировка remote-эндпоинтов.
+
+Локальность LLM-эндпоинтов не гейт: любой http(s) base_url допускается, а
+не-локальный автоматически включает тройной guard remote-прогона (инвариант 8c).
+Ростер моделей — справочник заморозки, тоже не гейт.
+"""
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
+import ipaddress
+import os
+from collections.abc import Mapping
+from urllib.parse import urlsplit
 
-from lab.modelspec import FROZEN_DIR, ModelSpec, load_roster
+from lab.modelspec import FROZEN_DIR, ModelSpec
 
-LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+# base_url живых клиентов: агент shop_svc, легальный клиент traffic_svc, атакующий attack_svc
+LLM_BASE_URL_ENV = (
+    "RESEARCH_LLM_BASE_URL",
+    "LAB_CUSTOMER_LLM_BASE_URL",
+    "LAB_ATTACKER_LLM_BASE_URL",
+)
+
+
+def is_local_url(url: str) -> bool:
+    """Локальный контур = loopback (127.0.0.0/8, ::1, localhost); всё прочее — remote."""
+    host = (urlsplit(url.strip()).hostname or "").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def remote_endpoints(environ: Mapping[str, str] | None = None) -> list[str]:
+    """Заданные в env не-локальные base_url живых клиентов (только имена переменных)."""
+    env = os.environ if environ is None else environ
+    return [
+        key
+        for key in LLM_BASE_URL_ENV
+        if (env.get(key) or "").strip() and not is_local_url(env[key])
+    ]
 
 
 def check_config(
@@ -17,8 +51,8 @@ def check_config(
 ) -> list[str]:
     """Возвращает список замечаний; пустой список — прогон можно запускать.
 
-    allow_remote=True — обход проверки локальности LLM-эндпоинтов (проверка
-    работоспособности через прокси, НЕ для статьи): остальные проверки остаются.
+    Проверяется только принадлежность конфига замороженному набору. allow_remote
+    и agents приняты для совместимости и не гейтят (remote маркируется, а не запрещается).
     """
     problems: list[str] = []
     configs_dir = FROZEN_DIR / "configs"
@@ -27,43 +61,4 @@ def check_config(
     known = {p.stem for p in configs_dir.glob("*.json")}
     if known and config_name not in known:
         problems.append(f"конфиг {config_name} не из замороженного набора")
-    if not allow_remote:
-        problems += _check_llm_endpoints(config)
-    else:
-        problems += [
-            f"{key}={value} — REMOTE LLM (verification only, not article data)"
-            for key, value in _walk(config)
-            if isinstance(key, str)
-            and key.endswith("base_url")
-            and isinstance(value, str)
-            and (urlparse(value).hostname or "") not in LOCAL_HOSTS
-        ]
-    if not allow_remote:
-        roster = load_roster()
-        for spec in agents:
-            if spec.name not in roster:
-                problems.append(f"модель {spec.name} ({spec.role}) отсутствует в ростере")
     return problems
-
-
-def _check_llm_endpoints(config: dict) -> list[str]:
-    problems: list[str] = []
-    for key, value in _walk(config):
-        if not (isinstance(key, str) and key.endswith("base_url") and isinstance(value, str)):
-            continue
-        host = urlparse(value).hostname or ""
-        if host not in LOCAL_HOSTS:
-            problems.append(f"{key}={value} — не локальный контур (ожидается 127.0.0.1)")
-    return problems
-
-
-def _walk(node: object, path: str = "") -> list[tuple[str, object]]:
-    out: list[tuple[str, object]] = []
-    if isinstance(node, dict):
-        for key, value in node.items():
-            out.append((key, value))
-            out += _walk(value, f"{path}.{key}")
-    elif isinstance(node, list):
-        for item in node:
-            out += _walk(item, path)
-    return out

@@ -43,7 +43,7 @@ function axisCtl(kind, values, axis) {
       const t = document.createElement("input"); t.type = "text"; t.className = "mono";
       t.placeholder = "имя модели"; t.value = "";
       wrap.appendChild(t);
-    } else if (Array.isArray(values) && $("#remote-llm").checked && (META.agent_models.includes(values[0]) || META.attacker_models.includes(values[0]))) {
+    } else if (axis.endsWith("_models") && (META.remote_models || {})[axis === "attacker_models" ? "attacker" : "agent"]) {
       const t = document.createElement("input"); t.type = "text"; t.className = "mono";
       t.placeholder = "имя модели у прокси";
       t.value = (META.remote_models || {})[axis === "attacker_models" ? "attacker" : "agent"] || "";
@@ -79,7 +79,6 @@ function renderAxes() {
   }
 }
 document.querySelectorAll("#run-form .mode").forEach((s) => s.addEventListener("change", renderAxes));
-$("#remote-llm").addEventListener("change", renderAxes);
 
 function specFromForm() {
   const ENUM = { configs: META.configs, styles: META.styles, tactics: META.tactics,
@@ -87,7 +86,6 @@ function specFromForm() {
   const spec = {
     budget: +$("#budget").value,
     compute: $("#compute").checked,
-    ...( $("#remote-llm").checked ? { allow_remote_llm: true } : {}),
   };
   for (const row of document.querySelectorAll("#run-form .axis")) {
     const axis = row.dataset.axis;
@@ -162,7 +160,6 @@ async function probe() {
     config: $("#probe-config").value, tactic: $("#probe-tactic").value,
     budget: +$("#probe-budget").value,
     seed: $("#probe-seed").value ? +$("#probe-seed").value : null,
-    allow_remote_llm: $("#probe-remote").checked,
   };
   const r = await api.post("/api/probe", body);
   $("#probe-out").textContent = JSON.stringify(r);
