@@ -28,6 +28,19 @@ uv run python scripts/smoke.py   # сквозной смок (временные
 
 ## Дисциплина
 
+- Задачи и ишью: задача ведётся в issue `CloudNative-urfu/dvarp-lab`,
+  привязанном к доске **DVARP Board** (`CloudNative-urfu/projects/1`);
+  коммиты — только в контексте issue; task без issue не ведётся;
+- **openspec обязателен**: каждый openspec change привязан к своему issue
+  (ссылка на issue в proposal). Каждое содержательное изменение коммитится
+  вместе с дельтой `openspec/changes/<change-id>/` (proposal, design, tasks,
+  спеки); технические правки (style, chore, мелкие docs) — отметкой в
+  tasks.md своего change; изменение без дельты спеки не принимается;
+- **Канон**: канон исследования — репо `CloudNative-urfu/dvarp`
+  (`docs/guardrails_requirements.md`, FR-1.x/NFR-2.x). Из задач dvarp-lab
+  он напрямую не редактируется; при расхождении кода лаба с каноном —
+  заявка в `canon-requests/` в том же коммите + сообщение владельцу;
+  правка канона — отдельный PR в `dvarp` после решения владельца;
 - Коммиты: Conventional Commits **на английском**, малыми проверенными блоками,
   `git -c commit.gpgsign=false commit`;
 - **Пуш — только после явной приёмки владельцем.** Без просьбы — не пушить;
