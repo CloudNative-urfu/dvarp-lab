@@ -65,7 +65,7 @@ def test_reset_is_deterministic(lab):
     assert other != v1
 
 
-def test_configure_rejects_unknown_config_and_non_roster_model(lab):
+def test_configure_rejects_unknown_config_accepts_off_roster_model(lab):
     c = lab.client
     r = c.post("/configure", json={"config_name": "no-such-config", "agent_model": MODEL_SPEC})
     assert r.status_code == 400
@@ -81,23 +81,19 @@ def test_configure_rejects_unknown_config_and_non_roster_model(lab):
             },
         },
     )
-    assert r.status_code == 400
-    assert "roster" in r.json()["detail"] or "ростер" in r.json()["detail"]
+    assert r.status_code == 200  # ростер — не гейт
     r = c.post("/configure", json={"config_name": "g_layered", "agent_model": MODEL_SPEC})
     assert r.status_code == 200
     assert r.json()["applied"]["config_name"] == "g_layered"
 
 
-def test_configure_allows_off_roster_model_only_with_remote_env(lab, monkeypatch):
+def test_configure_allows_off_roster_model_without_flags(lab, monkeypatch):
     off_roster = {
         "name": "proxy/agent-x",
         "role": "agent",
         "params_b": 8.0,
         "revision": "remote-verification",
     }
-    r = lab.client.post("/configure", json={"config_name": "g0", "agent_model": off_roster})
-    assert r.status_code == 400
-    monkeypatch.setenv("LAB_ALLOW_REMOTE_LLM", "1")
     r = lab.client.post("/configure", json={"config_name": "g0", "agent_model": off_roster})
     assert r.status_code == 200
     assert r.json()["applied"]["config_name"] == "g0"

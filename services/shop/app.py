@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 import services.shop.guards.plugins  # noqa: F401 — register built-in guardrail plugins
 from lab.modelspec import FROZEN_DIR, ModelSpec
-from lab.nominal import check_config
+from lab.nominal import check_config, remote_endpoints
 from lab.svc_client import Svc
 from services.shop import db
 from services.shop.agent import AgentConfig, make_agent_model
@@ -294,14 +294,7 @@ def configure(body: ConfigureRequest) -> dict:
         agent_model = ModelSpec(**body.agent_model)
     except TypeError:
         raise HTTPException(400, "agent_model fields: name, role, params_b, revision") from None
-    problems = check_config(
-        body.config_name,
-        spec,
-        [agent_model],
-        # LAB_ALLOW_REMOTE_LLM=1 — верификация конвейера (не статья): off-roster
-        # модели допускаются с пином remote-verification, как у агента в llm/settings.py.
-        allow_remote=(os.environ.get("LAB_ALLOW_REMOTE_LLM") or "").strip() in ("1", "true", "yes"),
-    )
+    problems = check_config(body.config_name, spec, [agent_model])
     if problems:
         raise HTTPException(400, "; ".join(problems))
     cfg = ConfigSpec.from_spec(spec)
@@ -406,6 +399,12 @@ def _deliver(
                 "model_spec": ep.model_spec,
                 "raw": {
                     **raw,
+                    # не-локальный эндпоинт агента маркирует записи сам (инвариант 8c)
+                    **(
+                        {"remote_llm": True}
+                        if "RESEARCH_LLM_BASE_URL" in remote_endpoints()
+                        else {}
+                    ),
                     **({"run_id": body.run_id} if body.run_id else {}),
                     **({"seed": body.seed} if body.seed is not None else {}),
                 },

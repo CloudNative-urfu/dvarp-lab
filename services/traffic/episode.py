@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from lab.nominal import is_local_url
 from lab.seeds import derive_seed
 
 from .case import Case, render, truthful_case
@@ -79,6 +80,8 @@ def run_episode(
         raise ValueError(f"стиль {style_name!r} отсутствует в frozen/styles.json")
     style = styles[style_name]
     case = truthful_case(db_url, seed)
+    # не-локальный эндпоинт клиента маркирует записи сам (инвариант 8c)
+    remote_llm = remote_llm or bool(customer_base_url and not is_local_url(customer_base_url))
     recorder = Recorder(filter_svc, episode_id, "legal", agent_model)
     recorder.raw_extra = {
         "config_name": config_name,

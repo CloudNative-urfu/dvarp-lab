@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import math
 import re
@@ -22,6 +21,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from lab.modelspec import ModelSpec
+from lab.nominal import is_local_url
 from services.shop.repro import FLOATING_VERSIONS, check_seed
 
 from .types import LLMConfigError
@@ -87,8 +87,12 @@ def check_model_size(params_b: float | None, *, model: str = "") -> SizeVerdict:
     )
 
 
-def check_local_endpoint(base_url: str) -> str:
-    """Возвращает нормализованный base_url или бросает LLMConfigError (NFR-2.5)."""
+def check_endpoint(base_url: str) -> str:
+    """Нормализованный base_url или LLMConfigError: только транспортная гигиена.
+
+    Локальность не гейт: не-локальный эндпоинт маркируется (lab.nominal.remote_endpoints,
+    инвариант 8c), а не отвергается.
+    """
     if not isinstance(base_url, str) or not base_url.strip():
         raise LLMConfigError(f"{ENV_BASE_URL} пуст")
     parts = urlsplit(base_url.strip())
@@ -99,23 +103,8 @@ def check_local_endpoint(base_url: str) -> str:
         raise LLMConfigError(
             f"{ENV_BASE_URL}: учётные данные в URL запрещены, используйте {ENV_API_KEY}"
         )
-    host = (parts.hostname or "").lower()
-    if not host:
+    if not parts.hostname:
         raise LLMConfigError(f"{ENV_BASE_URL}: нет имени хоста")
-    local = host == "localhost" or host.endswith(".localhost")
-    if not local:
-        try:
-            ip = ipaddress.ip_address(host)
-        except ValueError:
-            raise LLMConfigError(
-                f"{ENV_BASE_URL}: хост {host!r} не адрес локального контура (NFR-2.5); "
-                "используйте loopback/частный IP или localhost"
-            ) from None
-        local = ip.is_loopback or ip.is_private or ip.is_link_local
-        if not local:
-            raise LLMConfigError(
-                f"{ENV_BASE_URL}: {host} — публичный адрес, вне локального контура (NFR-2.5)"
-            )
     return base_url.strip().rstrip("/")
 
 
@@ -193,13 +182,7 @@ class LLMSettings:
         if missing:
             raise LLMConfigError(f"не заданы переменные окружения: {', '.join(missing)}")
         model = environ[ENV_MODEL].strip()
-        # LAB_ALLOW_REMOTE_LLM=1 — верификация конвейера через прокси (AITunnel и т.п.);
-        # данные таких прогонов в статью не попадают (пин remote_llm). Проверки схемы
-        # URL и запрета учётных данных сохраняются; пропускается только локальность.
-        if (environ.get("LAB_ALLOW_REMOTE_LLM") or "").strip() in ("1", "true", "yes"):
-            base_url = environ[ENV_BASE_URL].strip()
-        else:
-            base_url = check_local_endpoint(environ[ENV_BASE_URL])
+        base_url = check_endpoint(environ[ENV_BASE_URL])
         raw_b = (environ.get(ENV_PARAMS_B) or "").strip()
         if raw_b:
             try:
@@ -208,8 +191,8 @@ class LLMSettings:
                 raise LLMConfigError(f"{ENV_PARAMS_B} не число") from None
         else:
             params_b = parse_params_b(model)
-        remote_verify = (environ.get("LAB_ALLOW_REMOTE_LLM") or "").strip() in ("1", "true", "yes")
-        if remote_verify:
+        # не-локальный эндпоинт (прокси и т.п.) — remote-прогон, не данные статьи
+        if not is_local_url(base_url):
             # верификация через прокси: предел NFR-2.6 не применяется (данные не для статьи);
             # размер всё равно нужен честному пину — fail-closed, если не определить
             if params_b is None:

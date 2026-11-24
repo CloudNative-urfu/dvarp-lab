@@ -31,7 +31,7 @@ def main() -> None:
     p.add_argument(
         "--allow-remote-llm",
         action="store_true",
-        help="обход локальности LLM-эндпоинтов (проверка, не для статьи)",
+        help="устарел: принимается и игнорируется (remote маркируется автоматически)",
     )
     p.add_argument("--spec", default=None, help="путь к JSON-спецификации осей (вместо флагов)")
     args = p.parse_args()

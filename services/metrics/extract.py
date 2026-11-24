@@ -54,6 +54,9 @@ def episodes_of(
     from services.filter.models import Turn
 
     by_key: dict[tuple[str, str, str], dict] = {}
+    remote_ids: set[str] = (
+        set()
+    )  # remote — свойство эпизода: любая его запись (shop/traffic/attack)
     for row in session.query(Turn).order_by(Turn.turn, Turn.id).all():
         if not include_probe and (row.raw or {}).get("probe"):
             continue
@@ -76,13 +79,13 @@ def episodes_of(
         if verdict:
             ep["verdict"] = verdict
         if raw.get("remote_llm"):
-            ep["remote"] = True
+            remote_ids.add(row.episode_id)
         for opt in ("run_id", "seed"):
             if opt in raw:
                 ep[opt] = raw[opt]
     out = []
     for key, ep in sorted(by_key.items()):
-        if not include_remote and ep.get("remote"):
+        if not include_remote and ep["episode_id"] in remote_ids:
             continue  # remote-LLM прогоны — верификация, не данные статьи
         signals = ep["signals"]
         detected = any(signals.get(s, 0) > 0 for s in formulas.DETECT_SIGNALS)

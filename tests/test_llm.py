@@ -26,7 +26,7 @@ from services.shop.llm import (
     StubBackend,
     StubReply,
     ToolSpec,
-    check_local_endpoint,
+    check_endpoint,
     check_model_size,
     estimate_prompt,
     make_chat_model,
@@ -151,28 +151,25 @@ class SettingsTest(unittest.TestCase):
         self.assertFalse(s.has_api_key)
         self.assertEqual(s.auth_headers(), {})
 
-    def test_nfr25_endpoint_must_be_local(self):
+    def test_endpoint_hygiene_only(self):
         for ok in (
             "http://127.0.0.1:8787/v1",
             "http://localhost:8000/v1",
             "http://[::1]:9/v1",
             "http://10.1.2.3/v1",
-            "https://192.168.0.5:443/v1",
-            "http://172.16.0.1/v1",
-        ):
-            self.assertTrue(check_local_endpoint(ok).startswith("http"), ok)
-        for bad in (
             "https://api.openai.com/v1",
-            "http://8.8.8.8/v1",
             "http://example.org/v1",
+        ):
+            self.assertTrue(check_endpoint(ok).startswith("http"), ok)
+        for bad in (
             "ftp://127.0.0.1/v1",
             "http://user:pw@127.0.0.1/v1",
             "",
         ):
             with self.assertRaises(LLMConfigError, msg=bad):
-                check_local_endpoint(bad)
-        with self.assertRaises(LLMConfigError):
-            LLMSettings.from_env(dict(ENV, RESEARCH_LLM_BASE_URL="https://api.openai.com/v1"))
+                check_endpoint(bad)
+        remote = LLMSettings.from_env(dict(ENV, RESEARCH_LLM_BASE_URL="https://api.openai.com/v1"))
+        self.assertEqual(remote.size.status, "remote_verification")
 
     def test_nfr25_floating_model_name_rejected(self):
         with self.assertRaises(LLMConfigError):
