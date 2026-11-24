@@ -125,6 +125,9 @@ def resolve_axis(axis: str, spec: dict[str, Any] | None, allow_remote: bool = Fa
     if mode == "set":
         missing = [v for v in spec["values"] if v not in universe]
         if missing:
+            if allow_remote and axis.endswith("_models"):
+                # remote-верификация: имена моделей из прокси, не из ростера
+                return sorted(spec["values"])
             raise ValueError(f"{axis}: отсутствуют в frozen: {missing}")
         return sorted(spec["values"])
     if mode == "range":

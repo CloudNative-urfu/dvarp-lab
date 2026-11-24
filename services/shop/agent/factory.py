@@ -31,6 +31,7 @@ def make_agent_model(
     environ: Mapping[str, str] | None = None,
     transport: Any = None,
     timeout_s: float = 60.0,
+    sink: list[dict] | None = None,
 ) -> ChatModel:
     """Модель агента. В режиме `stub` — `AgentStubResponder(profile)`; профиль хешируется в
     пин модели (`ChatModel.model_spec().revision`). В режиме `live` профиль не нужен."""
@@ -48,6 +49,7 @@ def make_agent_model(
             profile=prof,
             responder=responder_for(prof),
             model_name="lab-stub-agent",
+            sink=sink,
         )
     return make_chat_model(
         ROLE,
@@ -58,6 +60,7 @@ def make_agent_model(
         environ=environ,
         transport=transport,
         timeout_s=timeout_s,
+        sink=sink,
     )
 
 

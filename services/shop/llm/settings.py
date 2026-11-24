@@ -210,7 +210,13 @@ class LLMSettings:
             params_b = parse_params_b(model)
         remote_verify = (environ.get("LAB_ALLOW_REMOTE_LLM") or "").strip() in ("1", "true", "yes")
         if remote_verify:
-            # верификация через прокси: предел NFR-2.6 не применяется (данные не для статьи)
+            # верификация через прокси: предел NFR-2.6 не применяется (данные не для статьи);
+            # размер всё равно нужен честному пину — fail-closed, если не определить
+            if params_b is None:
+                raise LLMConfigError(
+                    f"размер модели {model!r} не определён: задайте {ENV_PARAMS_B} "
+                    "(remote-верификация, пин model_spec)"
+                )
             size = SizeVerdict(float(params_b), "remote_verification", None)
         else:
             size = check_model_size(params_b, model=model)

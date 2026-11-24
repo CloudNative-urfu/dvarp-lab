@@ -14,7 +14,7 @@ FROZEN_DIR = Path(__file__).resolve().parent.parent / "frozen"
 class ModelSpec:
     name: str
     role: str
-    params_b: float
+    params_b: float | None
     revision: str
 
     def as_dict(self) -> dict[str, Any]:

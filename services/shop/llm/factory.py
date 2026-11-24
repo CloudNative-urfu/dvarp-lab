@@ -51,6 +51,7 @@ def make_chat_model(
     transport: Transport | None = None,
     timeout_s: float = 60.0,
     extra_body: Mapping[str, Any] | None = None,
+    sink: list[dict] | None = None,
 ) -> ChatModel:
     if mode not in MODES:
         raise LLMConfigError(f"режим модели {mode!r} не из {MODES}")
@@ -73,5 +74,9 @@ def make_chat_model(
         extra_body=LIVE_EXTRA_BODY if extra_body is None else extra_body,
     )
     return ChatModel(
-        OpenAICompatibleBackend(settings, transport=transport), role=role, limits=lim, writer=writer
+        OpenAICompatibleBackend(settings, transport=transport),
+        role=role,
+        limits=lim,
+        writer=writer,
+        sink=sink,
     )

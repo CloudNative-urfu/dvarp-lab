@@ -115,7 +115,9 @@ def run_campaign(
                 f"конфиг {cfg}: номинальная проверка не пройдена:\n" + "\n".join(problems)
             )
         attacker = (
-            _model_spec(cell["attacker_model"], "attacker") if cell["attacker_model"] else agent
+            _model_spec(cell["attacker_model"], "attacker", allow_remote=remote)
+            if cell["attacker_model"]
+            else agent
         )
 
         shop.post("/reset", {"seed": seed})  # сначала reset: он инициализирует журнал shop
@@ -199,9 +201,15 @@ def probe(
     """Одна атака без парной ноги: raw.probe=true, манифест не пишется, метрики пропускают."""
     svcs = services or default_services()
     shop, attack = svcs["shop"], svcs["attack"]
-    agent = _model_spec(spec["agent_model"], "agent")
+    agent = _model_spec(
+        spec["agent_model"], "agent", allow_remote=bool(spec.get("allow_remote_llm"))
+    )
     attacker = (
-        _model_spec(spec["attacker_model"], "attacker") if spec.get("attacker_model") else agent
+        _model_spec(
+            spec["attacker_model"], "attacker", allow_remote=bool(spec.get("allow_remote_llm"))
+        )
+        if spec.get("attacker_model")
+        else agent
     )
     cfg = spec["config"]
     config = json.loads(

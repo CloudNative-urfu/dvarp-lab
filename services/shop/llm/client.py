@@ -48,12 +48,14 @@ class ChatModel:
         limits: Limits | None = None,
         meter: UsageMeter | None = None,
         writer: ComponentWriter | None = None,
+        sink: list[dict] | None = None,
     ):
         if meter is not None and limits is not None and meter.limits != limits:
             raise LLMConfigError("переданы и limits, и meter с другими лимитами")
         self.backend = backend
         self.role = role
         self.meter = meter or UsageMeter(limits or Limits())
+        self.sink = sink
         if writer is not None and LOG_KIND not in KINDS[component_class(writer.component)]:
             raise LLMConfigError(
                 f"компонент {writer.component!r} не пишет {LOG_KIND}; передайте writer=None и "
@@ -126,6 +128,16 @@ class ChatModel:
         if comp.provider:
             data["provider"] = comp.provider
         self._log(data, comp.cost(), episode_id, t_sim)
+        if self.sink is not None:
+            # пара запрос→ответ для кассеты filter (raw.llm_calls); наружу не выходит
+            self.sink.append(
+                {
+                    "role": self.role,
+                    "model": self.model_spec().as_dict(),
+                    "request": [m.to_openai() for m in msgs],
+                    "response": comp.message().content,
+                }
+            )
         return comp
 
     def _log(self, data: dict, cost: dict, episode_id: str | None, t_sim: float | None) -> None:

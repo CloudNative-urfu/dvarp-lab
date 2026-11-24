@@ -24,7 +24,7 @@ document.querySelectorAll("#tabs .tab").forEach((b) => b.addEventListener("click
 }));
 
 /* ---------- оси: point / range / all / all_limited ---------- */
-function axisCtl(kind, values) {
+function axisCtl(kind, values, axis) {
   const wrap = document.createElement("span");
   wrap.className = "ctl";
   const sel = (options, v) => {
@@ -45,7 +45,8 @@ function axisCtl(kind, values) {
       wrap.appendChild(t);
     } else if (Array.isArray(values) && $("#remote-llm").checked && (META.agent_models.includes(values[0]) || META.attacker_models.includes(values[0]))) {
       const t = document.createElement("input"); t.type = "text"; t.className = "mono";
-      t.placeholder = "имя модели у прокси"; t.value = "openai/gpt-4o-mini";
+      t.placeholder = "имя модели у прокси";
+      t.value = (META.remote_models || {})[axis === "attacker_models" ? "attacker" : "agent"] || "";
       wrap.appendChild(t);
     } else if (Array.isArray(values)) wrap.appendChild(sel(values, values[0]));
     else { const i = document.createElement("input"); i.type = "number"; i.className = "mono"; i.value = values; wrap.appendChild(i); }
@@ -74,7 +75,7 @@ function renderAxes() {
     const mode = row.querySelector(".mode").value;
     const numeric = axis === "episodes" || axis === "seeds";
     const values = numeric ? (axis === "seeds" ? 0 : 1) : ENUM[axis];
-    ctl.appendChild(axisCtl(mode, values));
+    ctl.appendChild(axisCtl(mode, values, axis));
   }
 }
 document.querySelectorAll("#run-form .mode").forEach((s) => s.addEventListener("change", renderAxes));

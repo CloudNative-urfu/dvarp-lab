@@ -1,5 +1,7 @@
 """UI-сервис: meta, жизненный цикл run, объём, прокси, статическая страница."""
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -120,3 +122,35 @@ def test_static_page_served(client):
     assert r.status_code == 200
     assert "dvarp-lab" in r.text and "app.js" in r.text
     assert client.get("/static/style.css").status_code == 200
+
+
+def test_meta_remote_models_from_env(client, monkeypatch):
+    monkeypatch.delenv("RESEARCH_LLM_MODEL", raising=False)
+    monkeypatch.delenv("LAB_ATTACKER_LLM_MODEL", raising=False)
+    m = client.get("/api/meta").json()
+    assert m["remote_models"] == {"agent": None, "attacker": None}
+
+    monkeypatch.setenv("RESEARCH_LLM_MODEL", "proxy/agent-x")
+    monkeypatch.setenv("LAB_ATTACKER_LLM_MODEL", "proxy/attacker-y")
+    monkeypatch.setenv("RESEARCH_LLM_API_KEY", "sk-secret")
+    m = client.get("/api/meta").json()
+    assert m["remote_models"] == {"agent": "proxy/agent-x", "attacker": "proxy/attacker-y"}
+    assert "sk-secret" not in json.dumps(m)  # ключи не раскрываются
+    assert "BASE_URL" not in json.dumps(m)  # base_url не раскрывается
+
+
+def test_probe_forwards_allow_remote_llm(client, monkeypatch):
+    captured = {}
+
+    def fake_probe(spec):
+        captured.update(spec)
+        return {"outcome": "budget_exhausted"}
+
+    monkeypatch.setattr(ui_app, "launcher_probe", fake_probe)
+    r = client.post(
+        "/api/probe",
+        json={"config": "g0", "tactic": "direct_task", "allow_remote_llm": True},
+    )
+    assert r.status_code == 200
+    assert captured["allow_remote_llm"] is True
+    assert captured["config"] == "g0"

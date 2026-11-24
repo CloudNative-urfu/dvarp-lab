@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -44,6 +45,20 @@ def _svc(url: str, timeout: float = 30.0) -> Svc:
     return Svc(url, timeout=timeout)
 
 
+def _remote_models() -> dict[str, str | None]:
+    """Имена внешних моделей из env процесса (не секрет: пинуются в манифестах).
+
+    Только имена: ключи и base_url не раскрываются никогда. Имена соответствуют
+    тому, что сервисы реально читают: агент shop_svc — RESEARCH_LLM_MODEL,
+    атакующий attack_svc — LAB_ATTACKER_LLM_MODEL.
+    """
+
+    def name(var: str) -> str | None:
+        return (os.environ.get(var) or "").strip() or None
+
+    return {"agent": name("RESEARCH_LLM_MODEL"), "attacker": name("LAB_ATTACKER_LLM_MODEL")}
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
@@ -76,6 +91,7 @@ def meta() -> dict:
         "tactics": axis_universe("tactics"),
         "agent_models": axis_universe("agent_models"),
         "attacker_models": axis_universe("attacker_models"),
+        "remote_models": _remote_models(),
         "guard": GUARD_VOLUME,
         "health": health,
     }
@@ -193,6 +209,7 @@ class ProbeIn(BaseModel):
     style: str | None = None
     agent_model: str | None = None
     attacker_model: str | None = None
+    allow_remote_llm: bool = False
 
 
 @app.post("/api/probe")
@@ -207,6 +224,7 @@ def probe_run(body: ProbeIn) -> dict:
                 "style": body.style,
                 "agent_model": body.agent_model,
                 "attacker_model": body.attacker_model,
+                "allow_remote_llm": body.allow_remote_llm,
             }
         )
     except SystemExit as exc:

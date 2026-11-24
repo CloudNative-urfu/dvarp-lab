@@ -72,6 +72,7 @@ class Episode:
     executor: Any
     status: str = "open"
     model_spec: dict[str, Any] = field(default_factory=dict)
+    llm_calls: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -123,11 +124,13 @@ def _default_config() -> ConfigSpec:
 # ------------------------------------------------------------------ episode assembly
 
 
-def _agent_model() -> Any:
-    """The agent model of the current configuration: a deterministic stub pinned by the
-    configured model_spec (the model_spec is what each episode's journal fixes)."""
+def _agent_model(log: EventLog | None = None, sink: list[dict] | None = None) -> Any:
+    """Модель агента: live через RESEARCH_LLM_*, если задан base_url, иначе детерминированный
+    stub, запиненный сконфигурированным model_spec. sink — пара запрос→ответ для кассеты."""
+    if (os.environ.get("RESEARCH_LLM_BASE_URL") or "").strip():
+        return make_agent_model(log, mode="live", seed=0, environ=os.environ, sink=sink)
     profile = profile_by_name("default")
-    return make_agent_model(None, mode="stub", seed=0, profile=profile)
+    return make_agent_model(log, mode="stub", seed=0, profile=profile, sink=sink)
 
 
 def _assigned_customer(channel: str) -> str:
@@ -175,19 +178,27 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
         config_name=STATE.config_name,
     )
     ex = db_session_executor(episode_id, customer, ticket_id, channel)
+    llm_calls: list[dict] = []
     bundle = assemble_defender(
         STATE.config or _default_config(),
         log=log,
         executor=ex,
         db_path=STATE.engine_url,
         episode_id=episode_id,
-        model=_agent_model(),
+        model=_agent_model(log, llm_calls),
         agent_config=STATE.agent_cfg,
         order_id=order_id,
         task_text=TASK_TEXT,
     )
     ep = Episode(
-        episode_id, channel, customer, ticket_id, bundle, ex, model_spec=STATE.agent_model or {}
+        episode_id,
+        channel,
+        customer,
+        ticket_id,
+        bundle,
+        ex,
+        model_spec=STATE.agent_model or {},
+        llm_calls=llm_calls,
     )
     STATE.episodes[episode_id] = ep
     return ep
@@ -283,7 +294,14 @@ def configure(body: ConfigureRequest) -> dict:
         agent_model = ModelSpec(**body.agent_model)
     except TypeError:
         raise HTTPException(400, "agent_model fields: name, role, params_b, revision") from None
-    problems = check_config(body.config_name, spec, [agent_model])
+    problems = check_config(
+        body.config_name,
+        spec,
+        [agent_model],
+        # LAB_ALLOW_REMOTE_LLM=1 — верификация конвейера (не статья): off-roster
+        # модели допускаются с пином remote-verification, как у агента в llm/settings.py.
+        allow_remote=(os.environ.get("LAB_ALLOW_REMOTE_LLM") or "").strip() in ("1", "true", "yes"),
+    )
     if problems:
         raise HTTPException(400, "; ".join(problems))
     cfg = ConfigSpec.from_spec(spec)
@@ -358,9 +376,12 @@ def turn(body: TurnRequest) -> dict:
         "ticket_id": ep.ticket_id,
         "customer_id": ep.customer_id,
         "model_spec": ep.model_spec,
+        **({"llm_calls": ep.llm_calls} if ep.llm_calls else {}),
     }
     snapshot = db.dump_state(STATE.engine)
     delivered = _deliver(ep, body, reply, raw, snapshot)
+    if delivered:
+        ep.llm_calls.clear()
     if not delivered:
         ep.status = "error"
         session_status = "error"

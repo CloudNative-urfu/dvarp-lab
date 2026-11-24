@@ -88,6 +88,21 @@ def test_configure_rejects_unknown_config_and_non_roster_model(lab):
     assert r.json()["applied"]["config_name"] == "g_layered"
 
 
+def test_configure_allows_off_roster_model_only_with_remote_env(lab, monkeypatch):
+    off_roster = {
+        "name": "proxy/agent-x",
+        "role": "agent",
+        "params_b": 8.0,
+        "revision": "remote-verification",
+    }
+    r = lab.client.post("/configure", json={"config_name": "g0", "agent_model": off_roster})
+    assert r.status_code == 400
+    monkeypatch.setenv("LAB_ALLOW_REMOTE_LLM", "1")
+    r = lab.client.post("/configure", json={"config_name": "g0", "agent_model": off_roster})
+    assert r.status_code == 200
+    assert r.json()["applied"]["config_name"] == "g0"
+
+
 def test_turn_returns_only_text_and_delivers_raw_to_filter(lab):
     c = lab.client
     r = c.post(
