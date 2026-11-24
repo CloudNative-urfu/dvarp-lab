@@ -189,3 +189,18 @@ async def test_compute_with_model_spec_filter(filter_client, metrics_client):
     body = await metrics_client.get("/metrics/g0")
     specs = {json.dumps(r["model_spec"], sort_keys=True) for r in body.json()["results"]}
     assert specs == {json.dumps(other, sort_keys=True)}
+
+
+async def test_preview_computes_without_writing(filter_client, metrics_client):
+    await _seed_grid(filter_client)
+    r = await metrics_client.post("/preview", json={"config_name": "g_proc"})
+    r.raise_for_status()
+    groups = r.json()["groups"]
+    assert [g["config_name"] for g in groups] == ["g_proc"]
+    g = groups[0]
+    assert g["final"]["L_star"] == pytest.approx(3.0)  # то же, что /compute
+    assert g["raw"]["n_attack"] == 5 and g["raw"]["n_legal"] == 5 and g["raw"]["V_k"] == 0
+    # инвариант «сбор ≠ расчёт»: preview ничего не пишет в metric_results
+    assert (await metrics_client.get("/metrics/g_proc")).json()["results"] == []
+    models = (await metrics_client.get("/models")).json()["models"]
+    assert MODEL_SPEC in models

@@ -177,3 +177,33 @@ async def test_seed_episode_writes_chain_and_text(filter_client):
     body = (await filter_client.get("/text/ep-legal")).json()
     assert [t["turn"] for t in body["turns"]] == [0, 1]
     assert (await filter_client.get("/chain/verify")).json()["defects"] == []
+
+
+async def test_dialog_is_texts_only_and_deduplicated(filter_client):
+    def msg(direction, turn, text):
+        return {"kind": "message", "data": {"direction": direction, "turn": turn, "text": text}}
+
+    events = [
+        msg("to_defender", 0, "верните деньги"),
+        msg("to_attacker", 0, "назовите номер заказа"),
+        {"kind": "tool_call", "data": {"tool": "refund", "secret": "shop-private"}},
+    ]
+    shop_raw = make_raw(extra={"events": events}, guard_signals={"flagged": 1})
+    for _ in range(2):  # повторная доставка той же записи схлопывается
+        await record_turn(
+            filter_client, episode_id="dlg", raw=shop_raw, text="назовите номер заказа"
+        )
+    await record_turn(filter_client, episode_id="dlg", raw=make_raw(), text="назовите номер заказа")
+    body = (await filter_client.get("/dialog/dlg")).json()
+    assert body["lines"] == [
+        {"turn": 0, "channel": "legal", "author": "customer", "text": "верните деньги"},
+        {"turn": 0, "channel": "legal", "author": "agent", "text": "назовите номер заказа"},
+    ]
+    blob = json.dumps(body, ensure_ascii=False)
+    for leak in ("shop-private", "tool_call", "flagged", *RAW_KEYS):
+        assert leak not in blob
+
+    # без записей shop: только ответы агента
+    await record_turn(filter_client, episode_id="sim-only", raw=make_raw(), text="ответ")
+    lines = (await filter_client.get("/dialog/sim-only")).json()["lines"]
+    assert lines == [{"turn": 0, "channel": "legal", "author": "agent", "text": "ответ"}]

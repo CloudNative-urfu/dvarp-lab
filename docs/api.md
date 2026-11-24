@@ -45,6 +45,9 @@
   → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная строка
   формируется из raw.llm_calls (запрос→ответ).
 - `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты;
+- `GET /dialog/{episode_id}` → `{lines: [{turn, channel, author: customer|agent, text}]}` —
+  эпизод диалогом из сообщений канала (реплика клиента/атакующего → ответ агента),
+  повторные доставки схлопнуты; только тексты, сырьё не выходит;
 - `GET /episodes` → `{episodes: [{episode_id, config_name, channels, n_turns}]}` —
   список эпизодов сырой БД без текстов (для выбора в консоли).
 - `GET /chain/verify` → `{defects: []}`.
@@ -54,6 +57,10 @@
 - `POST /compute` `{config_name: str, model_spec?: model_spec}` → `{computed: n}` —
   пересчёт метрик (L*, break-even, detection) из read-only доступа к сырой БД
   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
+- `POST /preview` (тело как у `/compute`) → `{groups: [{config_name, model_spec, final, raw}]}` —
+  одноразовый расчёт по фильтрам: вычислить и вернуть, **ничего не пишет** в
+  metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E);
+- `GET /models` → `{models: [model_spec]}` — пины моделей, по которым есть записи;
 - `GET /metrics/{config_name}` → агрегаты по config × model;
 - `GET /configs` → `{configs: [...]}` — конфигурации, по которым есть прогоны
   (для оглавления-чекпоинтов в консоли).
@@ -80,17 +87,29 @@ Probe: одна атака без парной ноги — `raw.probe=true`, м
 
 ## ui_svc (порт 9410)
 
-Консоль полигона: статическая страница (палитра dvarp-prototype/console) + `/api/*`.
-**Инвариант: только читатель/вызыватель — ноль расчётов и нуля оркестрации**:
-запуск идёт через те же `launcher.campaign.run_campaign/probe`, расчёт — через
-`metrics /compute`.
+Консоль полигона: статическая страница на vendored Vue (`static/vendor/vue.global.prod.js`,
+MIT, без node/билда) + `/api/*`. **Фронт только рисует**: оси, режимы, поля, пресеты
+и словарь терминов описаны данными (`services/ui/describe.py`) — новая ось/пресет/термин
+без правки JS. **Инвариант: только читатель/вызыватель — ноль расчётов и ноль
+оркестрации**: запуск идёт через те же `launcher.campaign.run_campaign/probe`, расчёт —
+через `metrics /compute` и `/preview`.
 
-- `GET /` — страница (Run / Episodes / Metrics / History / System);
-- `GET /api/meta` — свод frozen (оси, guard) + health 5 сервисов;
+- `GET /` — страница (Запуск / Прогоны / Трейс / Метрики / Система);
+- `GET /api/meta` — описание формы: `axes` (name, label, kind enum|numeric, modes
+  point/range/set/all/all_limited, universe, default, free — имена вне ростера),
+  `run_fields`, `probe_fields`, `presets` (полные спецификации осей), `terms` (словарь
+  тултипов), `guard`, `remote_models`, `remote_endpoints` (имена env-переменных, без
+  URL), `health` 5 сервисов;
 - `POST /api/volume` — объём кампании до запуска (cells, episodes);
 - `POST /api/run` — спецификация осей; фоновый поток, один прогон за раз
   (409, если уже идёт); объём сверх guard требует `confirm: true`;
 - `GET /api/run/status` — живой прогресс (стадия, ячейки, текущая ячейка);
 - `POST /api/probe` — одна атака (probe);
-- `GET/POST /api/metrics/{config}`, `/api/compute` (опция include_probe),
-  `/api/text/{episode}`, `/api/chain`, `/api/runs` — прокси read-only.
+- `GET /api/runs` — сводка манифестов (run_id, remote_llm, cells, episodes, axes);
+  `GET /api/runs/{run_id}` — манифест целиком (ячейки, id эпизодов, исходы);
+- `POST /api/compute` / `POST /api/preview` — фильтры `{config_name, model_spec,
+  include_probe, include_remote}` → metrics `/compute` (с сохранением) / `/preview`
+  (без); `GET /api/metrics/{config}` — сохранённые строки, разложенные по model_spec
+  (`groups[].final`); `GET /api/metric-models`, `/api/metric-configs`;
+- `GET /api/dialog/{episode}`, `/api/text/{episode}`, `/api/episodes`, `/api/chain` —
+  прокси read-only.

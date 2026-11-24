@@ -85,6 +85,46 @@ def text(episode_id: str) -> dict:
     }
 
 
+@app.get("/dialog/{episode_id}")
+def dialog(episode_id: str) -> dict:
+    """Barrier: the episode as a dialog of channel texts only (customer → agent per turn).
+
+    Built from the shop channel messages (what the customer sent and what the agent
+    answered); one line per (turn, author, text), so duplicate deliveries collapse.
+    Nothing else of the raw (guard decisions, tools, llm calls) leaves.
+    """
+    store.init_db()
+    with Session(store.engine()) as session:
+        rows = store.episode_turns(session, episode_id)
+    authors = {"to_defender": "customer", "to_attacker": "agent"}
+    lines: list[dict] = []
+    seen: set[tuple] = set()
+    for r in rows:
+        for e in (r.raw or {}).get("events") or []:
+            data = e.get("data") or {}
+            if e.get("kind") != "message" or data.get("direction") not in authors:
+                continue
+            line = {
+                "turn": data.get("turn", r.turn),
+                "channel": r.channel,
+                "author": authors[data["direction"]],
+                "text": data.get("text", ""),
+            }
+            key = (line["turn"], line["author"], line["text"])
+            if key not in seen:
+                seen.add(key)
+                lines.append(line)
+    if not lines:  # нет записей shop: только ответы агента из записей симуляций
+        for r in rows:
+            key = (r.turn, "agent", r.text)
+            if key not in seen:
+                seen.add(key)
+                lines.append(
+                    {"turn": r.turn, "channel": r.channel, "author": "agent", "text": r.text}
+                )
+    return {"episode_id": episode_id, "lines": lines}
+
+
 @app.get("/episodes")
 def episodes() -> dict:
     """Список эпизодов сырой БД: id, конфиг, каналы, число ходов (без текстов)."""
