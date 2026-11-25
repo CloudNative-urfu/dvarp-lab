@@ -58,6 +58,20 @@ def _model_spec(name: str | None, role: str) -> ModelSpec:
     return resolve(name, role, roster)
 
 
+# Оси, по которым эпизоды и так различаются в метриках (ключ config × model_spec × episode_id)
+# или которые стоят в id отдельно (сид); остальные оси ячейки — сценарная сигнатура ноги.
+_KEYED_ELSEWHERE = ("config", "agent_model", "attacker_model", "seed")
+
+
+def attack_signature(cell: dict[str, Any]) -> list[str]:
+    """Сценарные оси ячейки по порядку: стиль, тактика и любые новые (цель #4) — без правки формата."""
+    return [str(v) for k, v in cell.items() if k not in _KEYED_ELSEWHERE and v is not None]
+
+
+def attack_episode_id(run_id: str, i: int, cell: dict[str, Any]) -> str:
+    return f"{run_id}-A{i}-{'-'.join(attack_signature(cell))}-s{cell['seed']}"
+
+
 def run_campaign(
     spec: dict[str, Any],
     *,
@@ -142,15 +156,16 @@ def run_campaign(
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
+            attack_id = attack_episode_id(run_id, i, cell)
             attacked = attack.post(
                 "/run-episode",
                 {
-                    "episode_id": f"{run_id}-A{i}-{cell['tactic']}-s{seed}",
+                    "episode_id": attack_id,
                     "config_name": cfg,
                     "attacker_model": attacker.as_dict(),
                     "tactic": cell["tactic"],
                     "budget": camp.budget,
-                    "seed": derive_seed(seed, cfg, cell["tactic"], i, "attack"),
+                    "seed": derive_seed(seed, cfg, *attack_signature(cell), i, "attack"),
                     "style": cell["style"],
                     "run_id": run_id,
                     **({"remote_llm": True} if remote else {}),
@@ -161,7 +176,7 @@ def run_campaign(
                 {
                     "episode": i,
                     "legal_episode_id": f"{run_id}-L{i}-{cell['style']}-s{seed}",
-                    "attack_episode_id": f"{run_id}-A{i}-{cell['tactic']}-s{seed}",
+                    "attack_episode_id": attack_id,
                     "legal": legal,
                     "attack": attacked,
                 }
