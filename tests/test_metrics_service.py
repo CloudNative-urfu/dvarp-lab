@@ -4,9 +4,9 @@ Synthetic grid through filter_svc /record (10 episodes per config, w_A = 0.5):
 
 - g0:     5 attacks, 2 violated (V = 0.4), 5 clean legal → reference;
 - g_proc: 5 attacks refused & detected (V = 0, TPR = 1, FPR = 0), 1 escalated attack
-  (E = 0.1), 5 clean legal → L* = (0.1·6) / (0.5·0.4) = 3.0, threshold;
+  (E = 0.1), 5 clean legal → L* = (0.1·2) / (0.5·0.4) = 1.0, threshold;
 - g_in:   same as g_proc plus 1 unjustified refusal of 5 legal (R = 0.2) →
-  L* = (0.5·0.2·15 + 0.1·6) / 0.2 = 10.5, threshold.
+  L* = (0.5·0.2·15 + 0.1·2) / 0.2 = 8.5, threshold.
 """
 
 from __future__ import annotations
@@ -102,14 +102,14 @@ async def test_compute_golden_values(filter_client, metrics_client):
 
     assert await _lookup(metrics_client, "g_proc", "V") == [pytest.approx(0.0)]
     assert await _lookup(metrics_client, "g_proc", "E") == [pytest.approx(0.1)]
-    assert await _lookup(metrics_client, "g_proc", "L_star") == [pytest.approx(3.0)]
+    assert await _lookup(metrics_client, "g_proc", "L_star") == [pytest.approx(1.0)]
     assert await _lookup(metrics_client, "g_proc", "break_even_status") == ["threshold"]
-    assert await _lookup(metrics_client, "g_proc", "L_star_min") == [pytest.approx(1.5)]
+    assert await _lookup(metrics_client, "g_proc", "L_star_min") == [pytest.approx(0.5)]
     assert await _lookup(metrics_client, "g_proc", "L_star_max") == [pytest.approx(7.5)]
     assert await _lookup(metrics_client, "g_proc", "prices_robust") == [True]
 
     assert await _lookup(metrics_client, "g_in", "R") == [pytest.approx(0.2)]
-    assert await _lookup(metrics_client, "g_in", "L_star") == [pytest.approx(10.5)]
+    assert await _lookup(metrics_client, "g_in", "L_star") == [pytest.approx(8.5)]
     assert await _lookup(metrics_client, "g_in", "break_even_status") == ["threshold"]
 
     # Detection: guardrails stop all 5 attacks and flag none of the legal cases.
@@ -136,7 +136,7 @@ async def test_compute_filtered_by_config(filter_client, metrics_client):
     r.raise_for_status()
     assert (await metrics_client.get("/metrics/g0")).json()["results"] == []
     assert (await metrics_client.get("/metrics/g_in")).json()["results"] == []
-    assert await _lookup(metrics_client, "g_proc", "L_star") == [pytest.approx(3.0)]
+    assert await _lookup(metrics_client, "g_proc", "L_star") == [pytest.approx(1.0)]
 
 
 async def test_no_reference_config(filter_client, metrics_client):
@@ -198,7 +198,7 @@ async def test_preview_computes_without_writing(filter_client, metrics_client):
     groups = r.json()["groups"]
     assert [g["config_name"] for g in groups] == ["g_proc"]
     g = groups[0]
-    assert g["final"]["L_star"] == pytest.approx(3.0)  # то же, что /compute
+    assert g["final"]["L_star"] == pytest.approx(1.0)  # то же, что /compute
     assert g["raw"]["n_attack"] == 5 and g["raw"]["n_legal"] == 5 and g["raw"]["V_k"] == 0
     # инвариант «сбор ≠ расчёт»: preview ничего не пишет в metric_results
     assert (await metrics_client.get("/metrics/g_proc")).json()["results"] == []

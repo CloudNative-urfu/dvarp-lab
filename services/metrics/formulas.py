@@ -5,9 +5,16 @@ Sources (prototype):
 - darp_range/metrics/extract.py — detection TP/FP/FN/TN, TPR/FPR;
 - darp_range/metrics/analysis.py — seed_spread.
 
-Simplifications vs the prototype (lab has no cost accounting and no manual queue):
-- C_ep and C_guard are pinned to 0.0 (no per-turn cost data in the lab raw DB);
-- queue terms (ΔQ·C_queue, ΔP_sla·C_sla) are dropped: Q = P_sla = 0 for every config;
+Simplifications vs the prototype (lab queue model is a separate task, issue #12):
+- C_ep and C_guard come from the saved journal events via the economics pin (#11);
+  the prototype-era token range (0.05–0.50 USD/1M) is superseded by the frozen
+  economics pin (frozen/economics.json: agent 0.50/1.50, guard 0.15/0.15 per 1M);
+- the pinned C_human ($2/ticket, issue #11) is the base of the C_manual price
+  (same entity: a manual-review escalation); the §9.4 range is widened to (1, 2, 15)
+  so the base stays bracketed for "L* at the range bounds";
+- queue terms (ΔQ·C_queue, ΔP_sla·C_sla) are dropped: Q = P_sla = 0 for every config
+  (they return with the analytic queue model, issue #12, with a canon-request for the
+  abandonment re-model);
 - statuses keep the §9.2 rule (reference / threshold / pays_at_any_price / no_safety_gain /
   more_violations); the prototype's statistical `unresolved` overlay (Newcombe CI, seed
   noise floor) is not carried over — see seed_spread for the plain spread reporting.
@@ -21,9 +28,11 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 # (lower, base, upper) — decomposition assumption "prices for break-even" (prototype §9.4).
+# C_manual base is the pinned C_human ($2/ticket, issue #11); the range is widened so the
+# base stays inside the bracket ("L* at the range bounds", prototype §9.4).
 PRICE_RANGES: dict[str, tuple[float, float, float]] = {
     "C_refuse": (5.0, 15.0, 40.0),  # USD per unjustified refusal
-    "C_manual": (3.0, 6.0, 15.0),  # USD per manual review
+    "C_manual": (1.0, 2.0, 15.0),  # USD per manual review (base = pinned C_human, #11)
 }
 STATUSES = ("reference", "threshold", "pays_at_any_price", "no_safety_gain", "more_violations")
 DIRECTIONAL = ("threshold", "pays_at_any_price", "more_violations")
