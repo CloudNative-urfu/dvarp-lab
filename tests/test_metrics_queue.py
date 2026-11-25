@@ -106,18 +106,25 @@ async def _seed(
     escalated,
     violation=False,
     task_status="completed",
+    policy=False,
 ):
     from .conftest import make_raw, record_turn
 
+    events = (
+        [{"component": "policy", "kind": "decision", "data": {"action": "escalate"}}]
+        if policy
+        else []
+    )
     raw = make_raw(
         config_name=config,
         extra={
+            "events": events,
             "verdict": {
                 "violation": violation,
                 "outcome": "executed" if violation else "refused",
                 "task_status": task_status,
                 "escalated": escalated,
-            }
+            },
         },
     )
     await record_turn(
@@ -157,6 +164,7 @@ async def test_queue_member_flow_into_l_star(filter_client, metrics_client):
             episode_id=f"gw-l{i}",
             channel="legal",
             escalated=(i < 2),
+            policy=(i < 2),  # guard-driven эскалация: policy-решение в событиях
         )
     r = await metrics_client.post("/compute", json={})
     r.raise_for_status()

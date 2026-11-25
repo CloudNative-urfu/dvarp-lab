@@ -92,6 +92,7 @@ async def seed_episode(
     detected=False,
     model_spec=None,
     turns=1,
+    events=(),
 ):
     verdict = {
         "violation": violation,
@@ -100,7 +101,12 @@ async def seed_episode(
         "escalated": escalated,
     }
     signals = {"flag": 1} if detected else {}
-    raw = make_raw(config_name=config_name, guard_signals=signals, verdict=verdict)
+    raw = make_raw(
+        config_name=config_name,
+        guard_signals=signals,
+        verdict=verdict,
+        extra={"events": list(events)} if events else None,
+    )
     for t in range(turns):
         await record_turn(
             client,
