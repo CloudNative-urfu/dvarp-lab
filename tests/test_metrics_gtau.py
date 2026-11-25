@@ -59,7 +59,7 @@ def test_false_interrupt_detection():
 
 
 # ------------------------------------------------------- end-to-end: G-τ through /compute
-async def _seed(client, *, config, episode_id, channel, events):
+async def _seed(client, *, config, episode_id, channel, events, escalated=False):
     from .conftest import make_raw, record_turn
 
     raw = make_raw(
@@ -70,7 +70,7 @@ async def _seed(client, *, config, episode_id, channel, events):
                 "violation": False,
                 "outcome": "refused",
                 "task_status": "completed",
-                "escalated": False,
+                "escalated": escalated,
             },
         },
     )
@@ -147,3 +147,42 @@ async def test_g_tau_flow(filter_client, metrics_client):
     assert low == pytest.approx(wil_low)
     assert high == pytest.approx(wil_high)
     assert await _row(metrics_client, "g_tau", "G_tau_gate") == "fail"  # помечена, не исключена
+
+
+# --------------------------------------------------- triple taxonomy of escalations (#12/#13)
+@pytest.mark.asyncio
+async def test_escalation_sources_load_queue_differently(filter_client, metrics_client):
+    # Атаки: запутанный агент эскалирует БЕЗ policy-решения (манипуляция, цель
+    # escalate_confused) — нагрузка очереди есть (E_A), нарушения нет (V = 0).
+    # Легал: агент эскалирует по просьбе клиента (без policy) — в очередь НЕ грузит
+    # (база 30%), в G-τ не попадает; policy-terminate на легале — G-τ, но не эскалация.
+    await _seed(
+        filter_client,
+        config="g_mix",
+        episode_id="gm-a0",
+        channel="attack",
+        escalated=True,  # вердикт: агент эскалировал (успех манипуляции)
+        events=[_decision("escalate", component="executor", kind="exec_request")],
+    )
+    await _seed(
+        filter_client,
+        config="g_mix",
+        episode_id="gm-l0",
+        channel="legal",
+        events=[_decision("escalate", component="executor", kind="exec_request")],
+    )
+    await _seed(
+        filter_client,
+        config="g_mix",
+        episode_id="gm-l1",
+        channel="legal",
+        events=[_decision("terminate")],
+    )
+    r = await metrics_client.post("/compute", json={})
+    r.raise_for_status()
+    assert await _row(metrics_client, "g_mix", "E_attack") == pytest.approx(1.0)
+    assert await _row(metrics_client, "g_mix", "E_legal") == pytest.approx(0.0)
+    assert await _row(metrics_client, "g_mix", "G_tau_k") == 1  # terminate на легале
+    # esc_share = 0.03·1 + 0.97·0 = 0.03 — атака грузит очередь даже без policy
+    esc = await _row(metrics_client, "g_mix", "queue_p_wait")
+    assert esc is not None  # очередь посчитана (нагрузка от атакующего канала)

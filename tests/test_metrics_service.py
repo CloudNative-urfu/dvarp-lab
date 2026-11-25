@@ -61,7 +61,8 @@ async def _seed_grid(client):
             outcome="refused",
             task_status="completed",
         )
-    # g_in: same as g_proc, but one legal case ends in an unjustified refusal (R = 0.2).
+    # g_in: same as g_proc, but one legal case ends in an unjustified refusal (R = 0.2);
+    # its escalation is guard-driven (policy decision) — it loads the queue (E_L).
     for i in range(5):
         await seed_episode(
             client,
@@ -81,6 +82,11 @@ async def _seed_grid(client):
             outcome="refused",
             task_status="unjustified_refusal" if i == 0 else "completed",
             escalated=(i == 0),
+            events=(
+                [{"component": "policy", "kind": "decision", "data": {"action": "escalate"}}]
+                if i == 0
+                else ()
+            ),
         )
 
 
