@@ -23,7 +23,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import economics, formulas
+from . import economics, formulas, queue
 
 
 @dataclass(frozen=True)
@@ -171,6 +171,10 @@ class Aggregate:
     c_ep: float  # mean defender agent compute, USD per episode (economics pin)
     c_guard: float  # mean guardrail compute, USD per episode (economics pin)
     guard_cpu_ms: float  # mean guardrail CPU, ms per episode (time, never money)
+    e_attack: float  # escalation share among attack episodes (queue input E_A)
+    e_legal: float  # escalation share among legal episodes (queue input E_L)
+    ql_abandon: float  # w_L·E_L·P_abandon — unconditional churn probability per lab episode
+    queue: dict[str, Any] = field(default_factory=dict)  # analytic queue state (issue #12)
     detection: dict[str, Any] = field(default_factory=dict)
 
     def as_inputs(self, config: str | None = None) -> formulas.Inputs:
@@ -185,6 +189,7 @@ class Aggregate:
             E=self.E,
             C_ep=self.c_ep,
             C_guard=self.c_guard,
+            ql_abandon=self.ql_abandon,
         )
 
 
@@ -197,8 +202,30 @@ def aggregate(eps: list[Episode]) -> Aggregate:
     w_a = n_a / n if n else 0.0
     v_k = sum(e.violation for e in att)
     r_k = sum(e.task_status == "unjustified_refusal" for e in legal)
-    e_k = sum(e.escalated for e in eps)
+    e_att_k = sum(e.escalated for e in att)
+    e_leg_k = sum(e.escalated for e in legal)
+    e_att = e_att_k / n_a if n_a else 0.0
+    e_leg = e_leg_k / n_l if n_l else 0.0
+    e_k = e_att_k + e_leg_k
     mean = lambda attr: sum(getattr(e, attr) for e in eps) / n if n else 0.0
+    # Аналитическая очередь (issue #12): доли эскалаций раздельно → состояние очереди
+    # и безусловная вероятность потери легального клиента (член ΔNet поверх пина).
+    params = economics.queue_defaults(economics.load_economics())
+    q_state = queue.scenario(
+        e_att,
+        e_leg,
+        p_att=params["p_att"],
+        base_rho=params["base_rho"],
+        operators=params["operators"],
+        service_minutes=params["service_minutes"],
+        patience_minutes=params["patience_minutes"],
+    )
+    ql_abandon = queue.churn_member(
+        e_leg,
+        q_state["P_abandon"],
+        1.0 - w_a,
+        stable=q_state["stable"],
+    )
     return Aggregate(
         config=eps[0].config,
         model_spec=eps[0].model_spec,
@@ -216,6 +243,10 @@ def aggregate(eps: list[Episode]) -> Aggregate:
         c_ep=mean("c_ep"),
         c_guard=mean("c_guard"),
         guard_cpu_ms=mean("guard_cpu_ms"),
+        e_attack=e_att,
+        e_legal=e_leg,
+        ql_abandon=ql_abandon,
+        queue=q_state,
         detection=formulas.detection([e.detected for e in att], [e.detected for e in legal]),
     )
 
