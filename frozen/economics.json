@@ -13,5 +13,13 @@
   "C_human": 2.0,
   "C_churn": 20.0,
   "p_att_scenarios": [0.01, 0.03, 0.1],
-  "price_sensitivity_factors": [0.5, 2.0]
+  "price_sensitivity_factors": [0.5, 2.0],
+  "queue": {
+    "straight_to_queue": 0.3,
+    "base_rho": 0.3,
+    "operators": 7,
+    "service_minutes": 5.0,
+    "patience_minutes": 4.0,
+    "notes": "Scale anchor (issue #12, canon dvarp#39): at least 30% of all shop requests go straight to the human queue (customers demanding a human, independent of defense) — this flow creates the baseline operator load rho0 = 0.3 at the anchor. The AI agent handles the remaining (1-h)/h times larger flow; escalations come only from the AI channel, reweighted by p_att. Patience doubles as the SLA threshold. Erlang C, no simulation."
+  }
 }

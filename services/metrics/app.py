@@ -138,6 +138,7 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
         return {"config_name": agg.config, "model_spec": spec, "metric": metric, "value": value}
 
     d = agg.detection
+    q = agg.queue
     return [
         row("n_attack", agg.n_attack),
         row("n_legal", agg.n_legal),
@@ -148,6 +149,13 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
         row("C_ep", agg.c_ep),
         row("C_guard", agg.c_guard),
         row("C_guard_cpu_ms", agg.guard_cpu_ms),
+        row("E_attack", agg.e_attack),
+        row("E_legal", agg.e_legal),
+        row("queue_p_wait", q.get("P_wait")),
+        row("queue_w_q_min", q.get("W_q_min")),
+        row("queue_p_abandon", q.get("P_abandon")),
+        row("queue_q_l_min", q.get("Q_L_min")),
+        row("queue_stable", q.get("stable")),
         row("detection_tpr", d["TPR"]),
         row("detection_fpr", d["FPR"]),
         row("detection_precision", d["precision"]),

@@ -60,7 +60,43 @@ def load_economics(path=None) -> dict[str, Any]:
     out["price_sensitivity_factors"] = sorted(
         float(_positive(x, "price_sensitivity_factors[]")) for x in factors
     )
+    out["queue"] = _queue(data.get("queue"))
     return out
+
+
+def _queue(raw: Any) -> dict[str, Any]:
+    """Queue scale anchor of the pin (issue #12): straight-to-queue share, ρ₀ base load,
+    operators/service/patience."""
+    if not isinstance(raw, dict):
+        raise TypeError("economics.queue: expected an object")
+    base_rho = raw.get("base_rho")
+    if isinstance(base_rho, bool) or not isinstance(base_rho, (int, float)):
+        raise TypeError("economics.queue.base_rho: expected a number")
+    if not math.isfinite(float(base_rho)) or not 0 <= float(base_rho) < 1:
+        raise ValueError("economics.queue.base_rho: expected a share in [0, 1)")
+    stq = raw.get("straight_to_queue")
+    if isinstance(stq, bool) or not isinstance(stq, (int, float)):
+        raise TypeError("economics.queue.straight_to_queue: expected a number")
+    if not math.isfinite(float(stq)) or not 0 < float(stq) < 1:
+        raise ValueError("economics.queue.straight_to_queue: expected a share in (0, 1)")
+    operators = raw.get("operators")
+    if isinstance(operators, bool) or not isinstance(operators, int) or operators < 1:
+        raise ValueError("economics.queue.operators: expected an integer ≥ 1")
+    return {
+        "straight_to_queue": float(stq),
+        "base_rho": float(base_rho),
+        "operators": int(operators),
+        "service_minutes": _positive(raw.get("service_minutes"), "queue.service_minutes"),
+        "patience_minutes": _positive(raw.get("patience_minutes"), "queue.patience_minutes"),
+    }
+
+
+def queue_defaults(pin: dict[str, Any]) -> dict[str, Any]:
+    """Base-case queue parameters: the middle p_att scenario anchors the base computation."""
+    return {
+        "p_att": pin["p_att_scenarios"][len(pin["p_att_scenarios"]) // 2],
+        **pin["queue"],
+    }
 
 
 def money(cost: dict[str, Any], tariff: tuple[float, float]) -> float:
@@ -70,4 +106,4 @@ def money(cost: dict[str, Any], tariff: tuple[float, float]) -> float:
     return (tokens_in * tariff[0] + tokens_out * tariff[1]) / 1_000_000.0
 
 
-__all__ = ["ECONOMICS_PATH", "load_economics", "money"]
+__all__ = ["ECONOMICS_PATH", "load_economics", "money", "queue_defaults"]
