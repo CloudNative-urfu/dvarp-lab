@@ -6,7 +6,8 @@ Synthetic grid through filter_svc /record (10 episodes per config, w_A = 0.5):
 - g_proc: 5 attacks refused & detected (V = 0, TPR = 1, FPR = 0), 1 escalated attack
   (E = 0.1), 5 clean legal → L* = (0.1·2) / (0.5·0.4) = 1.0, threshold;
 - g_in:   same as g_proc plus 1 unjustified refusal of 5 legal (R = 0.2) →
-  L* = (0.5·0.2·15 + 0.1·2) / 0.2 = 8.5, threshold.
+  L* = (0.5·0.2·15 + 0.1·2) / 0.2 + churn (w_L·0.2·P_abandon·20) →
+  (1.7 + 0.0034575) / 0.2 = 8.517288, threshold.
 """
 
 from __future__ import annotations
@@ -60,7 +61,8 @@ async def _seed_grid(client):
             outcome="refused",
             task_status="completed",
         )
-    # g_in: same as g_proc, but one legal case ends in an unjustified refusal (R = 0.2).
+    # g_in: same as g_proc, but one legal case ends in an unjustified refusal (R = 0.2);
+    # its escalation is guard-driven (policy decision) — it loads the queue (E_L).
     for i in range(5):
         await seed_episode(
             client,
@@ -80,6 +82,11 @@ async def _seed_grid(client):
             outcome="refused",
             task_status="unjustified_refusal" if i == 0 else "completed",
             escalated=(i == 0),
+            events=(
+                [{"component": "policy", "kind": "decision", "data": {"action": "escalate"}}]
+                if i == 0
+                else ()
+            ),
         )
 
 
@@ -109,7 +116,7 @@ async def test_compute_golden_values(filter_client, metrics_client):
     assert await _lookup(metrics_client, "g_proc", "prices_robust") == [True]
 
     assert await _lookup(metrics_client, "g_in", "R") == [pytest.approx(0.2)]
-    assert await _lookup(metrics_client, "g_in", "L_star") == [pytest.approx(8.5)]
+    assert await _lookup(metrics_client, "g_in", "L_star") == [pytest.approx(8.517288, rel=1e-6)]
     assert await _lookup(metrics_client, "g_in", "break_even_status") == ["threshold"]
 
     # Detection: guardrails stop all 5 attacks and flag none of the legal cases.

@@ -40,7 +40,18 @@ def default_services() -> dict[str, Svc]:
         "traffic": Svc(TRAFFIC_URL),
         "attack": Svc(ATTACK_URL),
         "metrics": Svc(METRICS_URL),
+        "filter": Svc(FILTER_URL),
     }
+
+
+def _final_outcome(flt: Svc | None, episode_id: str) -> str | None:
+    """Structural outcome of a finished leg from filter episode_finals (#10)."""
+    if flt is None:
+        return None
+    try:
+        return (flt.get(f"/finals/{episode_id}") or {}).get("outcome")
+    except Exception:  # noqa: BLE001 — no final row (old filter, failed finalize): unknown
+        return None
 
 
 def _model_spec(name: str | None, role: str) -> ModelSpec:
@@ -58,6 +69,20 @@ def _model_spec(name: str | None, role: str) -> ModelSpec:
     return resolve(name, role, roster)
 
 
+# Оси, по которым эпизоды и так различаются в метриках (ключ config × model_spec × episode_id)
+# или которые стоят в id отдельно (сид); остальные оси ячейки — сценарная сигнатура ноги.
+_KEYED_ELSEWHERE = ("config", "agent_model", "attacker_model", "seed")
+
+
+def attack_signature(cell: dict[str, Any]) -> list[str]:
+    """Сценарные оси ячейки по порядку: стиль, тактика и любые новые (цель #4) — без правки формата."""
+    return [str(v) for k, v in cell.items() if k not in _KEYED_ELSEWHERE and v is not None]
+
+
+def attack_episode_id(run_id: str, i: int, cell: dict[str, Any]) -> str:
+    return f"{run_id}-A{i}-{'-'.join(attack_signature(cell))}-s{cell['seed']}"
+
+
 def run_campaign(
     spec: dict[str, Any],
     *,
@@ -72,6 +97,7 @@ def run_campaign(
         svcs["attack"],
         svcs["metrics"],
     )
+    flt = svcs.get("filter")
     camp = resolve_campaign(spec)
     cells = camp.cells()
     _, episodes_total = camp.volume()
@@ -142,26 +168,31 @@ def run_campaign(
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
+            attack_id = attack_episode_id(run_id, i, cell)
+            legal["outcome"] = _final_outcome(
+                flt, f"{run_id}-L{i}-{cell['style']}-s{seed}"
+            ) or legal.get("outcome")
             attacked = attack.post(
                 "/run-episode",
                 {
-                    "episode_id": f"{run_id}-A{i}-{cell['tactic']}-s{seed}",
+                    "episode_id": attack_id,
                     "config_name": cfg,
                     "attacker_model": attacker.as_dict(),
                     "tactic": cell["tactic"],
                     "budget": camp.budget,
-                    "seed": derive_seed(seed, cfg, cell["tactic"], i, "attack"),
+                    "seed": derive_seed(seed, cfg, *attack_signature(cell), i, "attack"),
                     "style": cell["style"],
                     "run_id": run_id,
                     **({"remote_llm": True} if remote else {}),
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
+            attacked["outcome"] = _final_outcome(flt, attack_id) or attacked.get("outcome")
             cell_result["episodes"].append(
                 {
                     "episode": i,
                     "legal_episode_id": f"{run_id}-L{i}-{cell['style']}-s{seed}",
-                    "attack_episode_id": f"{run_id}-A{i}-{cell['tactic']}-s{seed}",
+                    "attack_episode_id": attack_id,
                     "legal": legal,
                     "attack": attacked,
                 }

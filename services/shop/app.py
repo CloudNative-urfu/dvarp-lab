@@ -2,15 +2,19 @@
 
 Guardrails, reaction policy, agent tools, executor rights, escalation rules — ported from
 dvarp-prototype @ d5828df. The turn returns ONLY text; raw payloads (guardrail decisions,
-tool calls, journal events) plus a state snapshot are delivered to filter_svc POST /record
-from inside shop_svc. If filter_svc is unreachable, the episode is marked as error.
+tool calls, this turn's journal events) plus a state snapshot are delivered to filter_svc
+POST /record from inside shop_svc. A record that filter_svc does not accept waits in the
+episode outbox and goes first on the next delivery (idempotent by record_id), so the chain
+gets no holes; /reset and /snapshot/restore drain the outbox first or answer 503.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+import time
+import uuid
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +32,9 @@ from services.shop.agent.profiles import profile_by_name
 from services.shop.channel import DefenderTurn
 from services.shop.configs import ConfigSpec, assemble_defender
 from services.shop.configs.registry import g0 as g0_config
+from services.shop.evaluator import EvaluationError, StartState, evaluate
+from services.shop.evaluator.live import live_truth
+from services.shop.evaluator.prompt_leak import system_prompt_leak_via_reply
 from services.shop.guards import Session
 from services.shop.journal import EventLog
 
@@ -73,6 +80,17 @@ class Episode:
     status: str = "open"
     model_spec: dict[str, Any] = field(default_factory=dict)
     llm_calls: list[dict] = field(default_factory=list)
+    sent_events: int = 0  # journal events of this episode already put into records
+    outbox: list[tuple[str, dict]] = field(default_factory=list)  # (path, body) not yet accepted
+    truth: Any = None  # EpisodeTruth built by shop itself (evaluator/live.py), never by the sims
+    start: StartState | None = None
+    guard_signals: dict[str, int] = field(default_factory=dict)
+    verdict: dict[str, Any] | None = None
+    leak: dict[str, Any] = field(default_factory=dict)
+    escalated: bool = False
+    finalized: bool = False
+    run_id: str | None = None
+    seed: int | None = None
 
 
 @dataclass
@@ -169,8 +187,17 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
                 ]
             },
         )
+        truth = live_truth(
+            conn,
+            STATE.manifest_accounts,
+            episode_id=episode_id,
+            channel=channel,
+            actor=customer,
+            ticket_id=ticket_id,
+        )
     finally:
         conn.close()
+    start_state = db.dump_state(STATE.engine)
     log.start_episode(
         episode_id,
         "attack" if channel == "attack" else "legal",
@@ -199,6 +226,8 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
         ex,
         model_spec=STATE.agent_model or {},
         llm_calls=llm_calls,
+        truth=truth,
+        start=StartState(state=start_state, state_hash=db.state_hash(STATE.engine)),
     )
     STATE.episodes[episode_id] = ep
     return ep
@@ -258,11 +287,15 @@ def health() -> dict:
 
 @app.post("/reset")
 def reset(body: ResetRequest) -> dict:
+    _drain()
     STATE.engine = _engine()
     STATE.engine_url = settings()["db_url"]
     db.reset(STATE.engine, body.seed)
     STATE.episodes.clear()
     STATE.journal = _new_journal()
+    # канарейка утечки промпта: из конфигурации прогона, иначе синтетическая на каждый reset
+    canary = os.environ.get("LAB_PROMPT_CANARY") or f"DVARP-CNR-{uuid.uuid4().hex[:12]}"
+    STATE.agent_cfg = replace(STATE.agent_cfg, prompt_canary=canary)
     conn = db.connect(STATE.engine)
     try:
         manifest_raw = db.meta_value(conn, "accounts_manifest")
@@ -323,8 +356,6 @@ def turn(body: TurnRequest) -> dict:
     if STATE.journal is None or STATE.engine is None:
         raise HTTPException(409, "shop db is not initialized: call POST /reset first")
     ep = _open_episode(body.episode_id, body.channel)
-    if ep.status == "error":
-        raise HTTPException(409, f"episode {ep.episode_id} is marked error; filter_svc failed")
     ex = ep.executor
     marker = ex.execute("harness", "record_message", author="customer", body=body.text)
     if not marker.ok:
@@ -360,65 +391,153 @@ def turn(body: TurnRequest) -> dict:
     if raw_turn.closed:
         log.end_episode(ep.episode_id)
         ep.status = "closed"
-    session_status = {"open": "open", "closed": "closed", "error": "error"}[ep.status]
     # Barrier: raw payloads and the snapshot go to filter_svc, not into the response.
     events = [e for e in log.events if e.get("episode_id") == ep.episode_id]
+    delta = events[ep.sent_events :]
+    state = db.dump_state(STATE.engine)
+    signals = _guard_signals(delta)
+    for k, v in signals.items():
+        ep.guard_signals[k] = ep.guard_signals.get(k, 0) + v
+    ep.escalated |= bool(raw_turn.signals.get("escalated"))
+    ep.verdict = _verdict(ep, state, events)
+    ep.leak = _leak(ep, events)
+    ep.run_id, ep.seed = body.run_id or ep.run_id, body.seed if body.seed is not None else ep.seed
     raw = {
         "config_name": STATE.config_name,
-        "events": [strip_chain(e) for e in events],
+        "events": [strip_chain(e) for e in delta],  # delta of this turn
+        "guard_signals": signals,
+        "verdict": ep.verdict,
         "ticket_id": ep.ticket_id,
         "customer_id": ep.customer_id,
         "model_spec": ep.model_spec,
-        **({"llm_calls": ep.llm_calls} if ep.llm_calls else {}),
+        **({"llm_calls": list(ep.llm_calls)} if ep.llm_calls else {}),
+        # не-локальный эндпоинт агента маркирует записи сам (инвариант 8c)
+        **({"remote_llm": True} if "RESEARCH_LLM_BASE_URL" in remote_endpoints() else {}),
+        **({"run_id": body.run_id} if body.run_id else {}),
+        **({"seed": body.seed} if body.seed is not None else {}),
     }
-    snapshot = db.dump_state(STATE.engine)
-    delivered = _deliver(ep, body, reply, raw, snapshot)
-    if delivered:
-        ep.llm_calls.clear()
-    if not delivered:
-        ep.status = "error"
-        session_status = "error"
-    return {"text": reply, "ended": bool(raw_turn.closed), "session_status": session_status}
+    ep.sent_events = len(events)
+    ep.llm_calls.clear()
+    ep.outbox.append(
+        (
+            "/record",
+            {
+                "record_id": uuid.uuid4().hex,
+                "episode_id": ep.episode_id,
+                "channel": ep.channel,
+                "turn": body.turn,
+                "text": reply,
+                "model_spec": ep.model_spec,
+                "raw": raw,
+                "snapshot": state,
+                "config_name": STATE.config_name,
+            },
+        )
+    )
+    if ep.status == "closed":
+        _finalize(ep)
+    _flush(ep)
+    return {"text": reply, "ended": bool(raw_turn.closed), "session_status": ep.status}
 
 
 def strip_chain(event: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in event.items() if k not in ("prev", "h")}
 
 
-def _deliver(
-    ep: Episode, body: TurnRequest, reply: str, raw: dict[str, Any], snapshot: dict[str, Any]
-) -> bool:
+def _guard_signals(events: list[dict[str, Any]]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for e in events:
+        if str(e.get("component", "")).startswith("guard:") and e.get("kind") == "guard_signal":
+            sig = (e.get("data") or {}).get("signal")
+            out[sig] = out.get(sig, 0) + 1
+    return out
+
+
+def _verdict(ep: Episode, state: dict[str, Any], events: list[dict]) -> dict[str, Any]:
+    """Cumulative state verdict of the episode so far (evaluator, FR-1.18/1.19)."""
     try:
-        _filter().post(
-            "/record",
+        v = evaluate(ep.truth, ep.start, state, events)
+    except EvaluationError as exc:
+        return {"error": str(exc)}
+    ep.escalated |= bool(v.state.get("manual_reviews"))
+    return {
+        "violation": v.violation,
+        "violations": [dict(x) for x in v.violations],
+        "outcome": v.outcome,
+        "task_status": v.task_status,
+        "escalated": ep.escalated,
+        "version": v.version,
+    }
+
+
+def _leak(ep: Episode, events: list[dict]) -> dict[str, Any]:
+    """Утечка системного промпта — отдельное поле финала, вне словаря исходов (#10)."""
+    canary = STATE.agent_cfg.prompt_canary
+    if not canary:
+        return {"leak": False, "leak_turns": []}
+    r = system_prompt_leak_via_reply(events, ep.episode_id, canary)
+    return {"leak": r["system_prompt_leak_via_reply"], "leak_turns": r["leak_turns"]}
+
+
+def _finalize(ep: Episode) -> None:
+    """Queue the episode's final row for filter episode_finals (once per episode)."""
+    if ep.finalized or ep.verdict is None:
+        return
+    ep.finalized = True
+    ep.outbox.append(
+        (
+            "/finalize",
             {
                 "episode_id": ep.episode_id,
-                "channel": ep.channel,
-                "turn": body.turn,
-                "text": reply,
-                "model_spec": ep.model_spec,
-                "raw": {
-                    **raw,
-                    # не-локальный эндпоинт агента маркирует записи сам (инвариант 8c)
-                    **(
-                        {"remote_llm": True}
-                        if "RESEARCH_LLM_BASE_URL" in remote_endpoints()
-                        else {}
-                    ),
-                    **({"run_id": body.run_id} if body.run_id else {}),
-                    **({"seed": body.seed} if body.seed is not None else {}),
-                },
-                "snapshot": snapshot,
                 "config_name": STATE.config_name,
+                "channel": ep.channel,
+                "model_spec": ep.model_spec,
+                "verdict": ep.verdict,
+                "guard_signals": ep.guard_signals,
+                **ep.leak,
+                "run_id": ep.run_id,
+                "seed": ep.seed,
+                "remote_llm": "RESEARCH_LLM_BASE_URL" in remote_endpoints(),
             },
         )
-        return True
-    except Exception as exc:  # noqa: BLE001 — any filter failure marks the episode error
-        STATE.journal.writer("runner").emit(
-            "svc_retry",
-            {"svc": "filter", "episode_id": ep.episode_id, "error": type(exc).__name__},
-        )
-        return False
+    )
+
+
+DELIVERY_ATTEMPTS = 3
+
+
+def _flush(ep: Episode) -> bool:
+    """Deliver the episode outbox in order; True when it is empty.
+
+    Every record keeps its record_id across attempts, so a retry after a lost response
+    does not duplicate the chain line in filter_svc.
+    """
+    while ep.outbox:
+        for attempt in range(DELIVERY_ATTEMPTS):
+            try:
+                _filter().post(*ep.outbox[0])
+                break
+            except Exception as exc:  # noqa: BLE001 — any filter failure keeps the record queued
+                STATE.journal.writer("runner").emit(
+                    "svc_retry",
+                    {"svc": "filter", "episode_id": ep.episode_id, "error": type(exc).__name__},
+                )
+                if attempt + 1 < DELIVERY_ATTEMPTS:
+                    time.sleep(0.2 * (attempt + 1))
+        else:
+            return False
+        ep.outbox.pop(0)
+    return True
+
+
+def _drain() -> None:
+    """Before episodes are dropped (reset/restore): every queued record reaches filter_svc."""
+    for ep in STATE.episodes.values():
+        _finalize(ep)  # legs end by budget/attacker stop without closing the session
+    stuck = [ep for ep in STATE.episodes.values() if not _flush(ep)]
+    if stuck:
+        n = sum(len(ep.outbox) for ep in stuck)
+        raise HTTPException(503, f"filter_svc unavailable: {n} undelivered records kept, retry")
 
 
 @app.post("/snapshot")
@@ -452,6 +571,7 @@ def restore_snapshot(body: RestoreRequest) -> dict:
     snap = STATE.snapshots.get(body.snapshot_id)
     if snap is None:
         raise HTTPException(404, f"no snapshot {body.snapshot_id}")
+    _drain()
     loaded = db.load_snapshot(snap["path"])
     db.restore_snapshot(loaded, STATE.engine)
     STATE.episodes.clear()

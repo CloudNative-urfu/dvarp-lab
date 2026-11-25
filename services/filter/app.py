@@ -6,6 +6,7 @@ Raw payloads, state snapshots and model-call cassettes are stored here behind th
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from lab.chain import GENESIS
 
 from . import store
-from .models import Turn
+from .models import EpisodeFinal, Turn
 
 
 @asynccontextmanager
@@ -42,6 +43,8 @@ class RecordRequest(BaseModel):
     snapshot: dict[str, Any] | None = None
     # Not in docs/api.md; shop_svc pins the config per episode, metrics aggregate by it.
     config_name: str | None = None
+    # Idempotency key: a retried delivery with a known record_id is not appended twice.
+    record_id: str | None = None
 
 
 @app.get("/health")
@@ -58,8 +61,11 @@ def record(body: RecordRequest) -> dict:
         raise HTTPException(400, "config_name missing (top-level or raw.config_name)")
     store.init_db()
     with Session(store.engine()) as session:
+        if body.record_id and store.has_record(session, body.record_id):
+            return {"record_id": body.record_id, "duplicate": True}
         record_id = store.record_turn(
             session,
+            record_id=body.record_id,
             episode_id=body.episode_id,
             config_name=config_name,
             channel=body.channel,
@@ -71,6 +77,66 @@ def record(body: RecordRequest) -> dict:
         )
         session.commit()
     return {"record_id": record_id}
+
+
+class FinalizeRequest(BaseModel):
+    episode_id: str
+    config_name: str
+    channel: str
+    model_spec: dict[str, Any]
+    verdict: dict[str, Any]
+    guard_signals: dict[str, int] = {}
+    leak: bool = False  # system prompt canary in an agent reply (separate from outcomes)
+    leak_turns: list[int] = []
+    run_id: str | None = None
+    seed: int | None = None
+    remote_llm: bool = False
+
+
+@app.post("/finalize")
+def finalize(body: FinalizeRequest) -> dict:
+    """One final row per episode; a repeat (delivery retry) replaces it with the same data."""
+    if body.channel not in CHANNELS:
+        raise HTTPException(400, f"channel must be one of {CHANNELS}")
+    store.init_db()
+    key = {
+        "episode_id": body.episode_id,
+        "config_name": body.config_name,
+        "model_key": json.dumps(body.model_spec, sort_keys=True, ensure_ascii=False),
+    }
+    with Session(store.engine()) as session:
+        row = session.query(EpisodeFinal).filter_by(**key).one_or_none()
+        if row is None:
+            row = EpisodeFinal(**key)
+            session.add(row)
+        for k, v in body.model_dump().items():
+            setattr(row, k, v)
+        session.commit()
+    return {"ok": True}
+
+
+@app.get("/finals/{episode_id}")
+def final(episode_id: str) -> dict:
+    """Structural outcome of a finished episode for the launcher manifest (no trace, no raw)."""
+    store.init_db()
+    with Session(store.engine()) as session:
+        row = (
+            session.query(EpisodeFinal)
+            .filter_by(episode_id=episode_id)
+            .order_by(EpisodeFinal.id.desc())
+            .first()
+        )
+    if row is None:
+        raise HTTPException(404, f"no final row for {episode_id}")
+    v = row.verdict or {}
+    return {
+        "episode_id": episode_id,
+        "outcome": v.get("outcome") or v.get("task_status"),
+        "violation": bool(v.get("violation")),
+        "task_status": v.get("task_status"),
+        "escalated": bool(v.get("escalated")),
+        "leak": bool(row.leak),
+    }
 
 
 @app.get("/text/{episode_id}")

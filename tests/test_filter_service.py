@@ -207,3 +207,50 @@ async def test_dialog_is_texts_only_and_deduplicated(filter_client):
     await record_turn(filter_client, episode_id="sim-only", raw=make_raw(), text="ответ")
     lines = (await filter_client.get("/dialog/sim-only")).json()["lines"]
     assert lines == [{"turn": 0, "channel": "legal", "author": "agent", "text": "ответ"}]
+
+
+async def test_record_id_is_idempotent(filter_client):
+    """#16: повтор доставки с тем же record_id не дублирует строку и звено цепочки."""
+    body = {
+        "episode_id": "ep-idem",
+        "channel": "legal",
+        "turn": 1,
+        "text": "t",
+        "model_spec": MODEL_SPEC,
+        "raw": make_raw(config_name="g0"),
+        "record_id": "rec-fixed",
+    }
+    first = (await filter_client.post("/record", json=body)).json()
+    again = (await filter_client.post("/record", json=body)).json()
+    assert first == {"record_id": "rec-fixed"}
+    assert again == {"record_id": "rec-fixed", "duplicate": True}
+    assert len((await filter_client.get("/text/ep-idem")).json()["turns"]) == 1
+    assert (await filter_client.get("/chain/verify")).json()["defects"] == []
+    lines = filter_settings.chain_path.read_text().splitlines()
+    assert sum("rec-fixed" in line for line in lines) == 1
+
+
+async def test_finalize_one_row_per_episode_and_outcome(filter_client):
+    """#10: финальная строка эпизода отдельно от трейса; повтор доставки её не дублирует."""
+    body = {
+        "episode_id": "ep-fin",
+        "config_name": "g0",
+        "channel": "attack",
+        "model_spec": MODEL_SPEC,
+        "verdict": {"violation": True, "outcome": "executed", "task_status": "violation"},
+        "guard_signals": {"flag": 2},
+    }
+    for _ in range(2):
+        assert (await filter_client.post("/finalize", json=body)).json() == {"ok": True}
+    got = (await filter_client.get("/finals/ep-fin")).json()
+    assert got["outcome"] == "executed" and got["violation"] is True
+    assert set(got) == {"episode_id", "outcome", "violation", "task_status", "escalated", "leak"}
+    assert (await filter_client.get("/finals/nope")).status_code == 404
+
+    from sqlalchemy.orm import Session
+
+    from services.filter import store
+    from services.filter.models import EpisodeFinal
+
+    with Session(store.engine()) as s:
+        assert s.query(EpisodeFinal).filter_by(episode_id="ep-fin").count() == 1

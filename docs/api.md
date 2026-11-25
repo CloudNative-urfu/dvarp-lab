@@ -15,7 +15,9 @@
 - `POST /turn` `{episode_id: str, channel: "legal"|"attack", text: str, turn: int}` →
   `{text: str, ended: bool, session_status: str}` — ход агента поддержки.
   Ответ возвращает только текст; сырьё (решения гвардрейлов, вызовы инструментов,
-  журнал) доставляется в `filter_svc` POST /record изнутри shop_svc.
+  журнал) доставляется в `filter_svc` POST /record изнутри shop_svc. Если filter недоступен,
+  запись хода ждёт в очереди эпизода и уходит первой при следующей доставке; /reset и
+  /snapshot/restore сначала дожимают очередь и при недоступном filter отвечают 503.
 - `GET /snapshot/{snapshot_id}` → снимок состояния (JSON).
 - `POST /snapshot/restore` `{snapshot_id: str}` → `{ok: true}`.
 - Строка подключения к БД магазина по HTTP не отдаётся: traffic_svc (прямой читающий
@@ -41,9 +43,18 @@
 
 ## filter_svc (порт 9414)
 
-- `POST /record` `{episode_id, channel, turn, text, model_spec, raw: {...}, snapshot: {...}}`
-  → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная строка
-  формируется из raw.llm_calls (запрос→ответ).
+- `POST /record` `{episode_id, channel, turn, text, model_spec, raw: {...}, snapshot: {...},
+  record_id?}` → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная
+  строка формируется из raw.llm_calls (запрос→ответ). `record_id` — ключ идемпотентности:
+  повтор с уже записанным ключом отвечает `{record_id, duplicate: true}` и в цепочку не пишет.
+  `raw.events` записи shop — события журнала только этого хода (дельта); история эпизода —
+  все его записи по порядку.
+- `POST /finalize` `{episode_id, config_name, channel, model_spec, verdict, guard_signals,
+  leak, leak_turns, run_id?, seed?, remote_llm?}` → `{ok}` — финальная строка эпизода в `episode_finals`
+  (одна на episode_id × config × model_spec, повтор заменяет); пишет shop_svc при закрытии
+  эпизода или перед /reset и /snapshot/restore. Restore снапшота её не трогает.
+- `GET /finals/{episode_id}` → `{episode_id, outcome, violation, task_status, escalated, leak}` —
+  структурный исход завершённой ноги для манифеста launcher'а (без трейса и сырья).
 - `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты;
 - `GET /dialog/{episode_id}` → `{lines: [{turn, channel, author: customer|agent, text}]}` —
   эпизод диалогом из сообщений канала (реплика клиента/атакующего → ответ агента),
@@ -59,7 +70,8 @@
   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
 - `POST /preview` (тело как у `/compute`) → `{groups: [{config_name, model_spec, final, raw}]}` —
   одноразовый расчёт по фильтрам: вычислить и вернуть, **ничего не пишет** в
-  metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E);
+  metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E,
+  C_ep, C_guard, E_attack, E_legal, ql_abandon + состояние аналитической очереди);
 - `GET /models` → `{models: [model_spec]}` — пины моделей, по которым есть записи;
 - `GET /metrics/{config_name}` → агрегаты по config × model;
 - `GET /configs` → `{configs: [...]}` — конфигурации, по которым есть прогоны

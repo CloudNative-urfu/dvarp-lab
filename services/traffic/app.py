@@ -54,10 +54,11 @@ def run(body: RunEpisode) -> dict:
 
 
 def resolve_db_url() -> str:
-    """Строка подключения к БД магазина — только из env LAB_SHOP_DB_URL (секрет конфигурации, по HTTP не ходит)."""
+    """Строка подключения к БД магазина — только из env LAB_SHOP_DB_URL (секрет конфигурации,
+    по HTTP не ходит; issue #17)."""
     url = os.environ.get("LAB_SHOP_DB_URL")
     if not url:
-        raise ValueError(
+        raise RuntimeError(
             "LAB_SHOP_DB_URL не задан: traffic_svc читает БД магазина только по строке из env"
         )
     return url
