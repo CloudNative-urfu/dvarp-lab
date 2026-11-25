@@ -82,9 +82,23 @@ def _queue(raw: Any) -> dict[str, Any]:
     operators = raw.get("operators")
     if isinstance(operators, bool) or not isinstance(operators, int) or operators < 1:
         raise ValueError("economics.queue.operators: expected an integer ≥ 1")
+    rho0 = raw.get("rho0_scenarios")
+    if not isinstance(rho0, list) or not rho0:
+        raise ValueError("economics.queue.rho0_scenarios: expected a non-empty list")
+    for x in rho0:
+        if (
+            isinstance(x, bool)
+            or not isinstance(x, (int, float))
+            or not math.isfinite(float(x))
+            or not 0 <= float(x) < 1
+        ):
+            raise ValueError(f"economics.queue.rho0_scenarios[]: share in [0, 1), got {x!r}")
+    if float(base_rho) not in {float(x) for x in rho0}:
+        raise ValueError("economics.queue: base_rho must be one of rho0_scenarios")
     return {
         "straight_to_queue": float(stq),
         "base_rho": float(base_rho),
+        "rho0_scenarios": sorted(float(x) for x in rho0),
         "operators": int(operators),
         "service_minutes": _positive(raw.get("service_minutes"), "queue.service_minutes"),
         "patience_minutes": _positive(raw.get("patience_minutes"), "queue.patience_minutes"),

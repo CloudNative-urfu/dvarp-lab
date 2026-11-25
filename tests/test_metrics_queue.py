@@ -17,9 +17,9 @@ import math
 
 import pytest
 
-from services.metrics import economics, formulas, queue
+from services.metrics import economics, extract, formulas, queue
 from services.metrics.formulas import base_prices, bounds, l_star
-from tests.test_metrics_golden import REF
+from tests.test_metrics_golden import GOLDEN, REF
 
 PARAMS: dict = {
     "p_att": 0.03,
@@ -87,6 +87,7 @@ def test_pin_queue_section_and_defaults():
     assert pin["queue"] == {
         "straight_to_queue": 0.3,
         "base_rho": 0.3,
+        "rho0_scenarios": [0.3, 0.6, 0.7],
         "operators": 7,
         "service_minutes": 5.0,
         "patience_minutes": 4.0,
@@ -223,3 +224,83 @@ def test_bounds_cover_churn_price():
     assert be["prices_robust"] is True
     assert be["bounds"]["low"]["L_star"] == pytest.approx(0.025 / 0.2)
     assert be["bounds"]["high"]["L_star"] == pytest.approx(0.1 / 0.2)
+
+
+# --------------------------------------------------------------------- pin follows (#34)
+def test_formulas_follow_pin():
+    from services.metrics import formulas
+
+    custom = {
+        "C_human": 4.0,
+        "C_churn": 50.0,
+        "p_att_scenarios": [0.01, 0.03, 0.1],
+        "price_sensitivity_factors": [0.5, 2.0],
+    }
+    bp = formulas.base_prices(custom)
+    assert bp.C_manual == 4.0 and bp.C_churn == 50.0 and bp.C_refuse == 15.0
+    ranges = formulas.price_ranges(custom)
+    assert ranges["C_manual"] == (2.0, 4.0, 15.0)
+    assert ranges["C_churn"] == (25.0, 50.0, 100.0)
+    bounds = formulas.bound_prices(custom)
+    assert bounds["low"].C_manual == 2.0 and bounds["high"].C_churn == 100.0
+
+
+def test_pin_bases_match_current_goldens():
+    from services.metrics import formulas
+
+    bp = formulas.base_prices()
+    assert bp.C_manual == 2.0 and bp.C_churn == 20.0  # пин #11 — golden-базы
+
+
+def test_queue_grid_nine_cells():
+    grid = extract.queue_grid(0.0, 0.0)
+    assert len(grid) == 9  # ρ₀ {0.3, 0.6, 0.7} × p_att {0.01, 0.03, 0.1}
+    assert set(grid) == {f"{r:g}|{p:g}" for r in (0.3, 0.6, 0.7) for p in (0.01, 0.03, 0.1)}
+    assert grid["0.6|0.1"]["rho"] > grid["0.3|0.01"]["rho"]
+    assert grid["0.3|0.01"]["stable"]
+    # базовая ρ₀ соответствует пину: ячейка 0.3|0.03 == состоянию очереди без эскалаций
+    base_state = extract.queue_grid(0.0, 0.0)["0.3|0.03"]
+    assert base_state["rho"] == pytest.approx(0.3, abs=0.01)
+
+
+# --------------------------------------------------------------- real frame (фрейм A, #34)
+def test_real_frame_term_scaling():
+    from services.metrics.formulas import real_frame_terms, terms
+
+    ref = REF
+    t = terms(GOLDEN["g_proc"], ref, base_prices())
+    rt = real_frame_terms(t, 0.03)
+    scale_share = 0.97 / 0.5
+    assert rt["refuse"] == pytest.approx(t["refuse"] * scale_share)
+    assert rt["churn"] == pytest.approx(t["churn"] * scale_share)
+    assert rt["attack_service"] == pytest.approx(t["attack_service"] * (0.03 / 0.5))
+    assert rt["guard"] == pytest.approx(t["guard"])  # без долевого веса
+    assert rt["manual"] == pytest.approx(t["manual"])
+    assert rt["w_A"] == 0.03 and rt["w_L"] == 0.97
+
+
+def test_l_star_real_golden():
+    g = formulas.Inputs(
+        config="g_wait", w_A=0.5, w_L=0.5, V=0.0, V_k=0, V_n=20, R=0.0, E=0.0, ql_abandon=0.001
+    )
+    res = formulas.l_star_real(g, REF, base_prices(), 0.03)
+    # лабовый L* = 0.02/0.2 = 0.1; реальный: refuse/churn ×0.97/0.5, attack_service 0,
+    # знаменатель 0.03·0.4 = 0.012 → L* = (0.02·1.94)/0.012 ≈ 3.233
+    assert res["L_star"] == pytest.approx(0.02 * 1.94 / 0.012)
+    assert res["status"] == "threshold"
+    assert res["p_att"] == 0.03
+
+
+def test_l_star_real_orders_unchanged():
+    # Порядок конфигураций фреймом не меняется: у обеих один масштабируемый терм churn
+    g1 = formulas.Inputs(
+        config="a", w_A=0.5, w_L=0.5, V=0.0, V_k=0, V_n=20, R=0.1, E=0.1, ql_abandon=0.001
+    )
+    g2 = formulas.Inputs(
+        config="b", w_A=0.5, w_L=0.5, V=0.0, V_k=0, V_n=20, R=0.0, E=0.1, ql_abandon=0.001
+    )
+    lab1 = formulas.l_star(g1, REF, base_prices())["L_star"]
+    lab2 = formulas.l_star(g2, REF, base_prices())["L_star"]
+    real1 = formulas.l_star_real(g1, REF, base_prices(), 0.03)["L_star"]
+    real2 = formulas.l_star_real(g2, REF, base_prices(), 0.03)["L_star"]
+    assert (lab1 < lab2) == (real1 < real2)

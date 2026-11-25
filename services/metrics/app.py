@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from lab.db import is_postgres
 
-from . import extract, formulas
+from . import economics, extract, formulas
 from .models import Base, MetricRow
 
 app = FastAPI(title="metrics_svc", version="0.1.0")
@@ -109,7 +109,8 @@ def _reference_rows(
 
 
 def _break_even(agg: extract.Aggregate, ref: extract.Aggregate | None) -> dict[str, Any]:
-    """L* of the config against the reference (g0) of the same model; §9.2 statuses."""
+    """L* of the config against the reference (g0) of the same model; §9.2 statuses.
+    Рядом — L* реального фрейма (фрейм A, #34) по сценариям p_att пина."""
     none = lambda st: {
         "status": st,
         "L_star": None,
@@ -122,13 +123,23 @@ def _break_even(agg: extract.Aggregate, ref: extract.Aggregate | None) -> dict[s
         "decision_at_L_viol": {},
     }
     if agg.config == REFERENCE_CONFIG:
-        return none("reference")
+        out = none("reference")
+        out["L_star_real"] = None
+        return out
     if ref is None:
-        return none("no_reference")
-    return formulas.bounds(
+        out = none("no_reference")
+        out["L_star_real"] = None
+        return out
+    out = formulas.bounds(
         {k: agg.as_inputs() for k in ("low", "base", "high")},
         {k: ref.as_inputs() for k in ("low", "base", "high")},
     )
+    bp = formulas.base_prices()
+    out["L_star_real"] = {
+        f"{p_att:g}": formulas.l_star_real(agg.as_inputs(), ref.as_inputs(), bp, p_att)["L_star"]
+        for p_att in economics.load_economics()["p_att_scenarios"]
+    }
+    return out
 
 
 def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, Any]]:
@@ -156,6 +167,7 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
         row("queue_p_abandon", q.get("P_abandon")),
         row("queue_q_l_min", q.get("Q_L_min")),
         row("queue_stable", q.get("stable")),
+        row("queue_grid", agg.queue_grid),
         row("G_tau_k", agg.g_tau_k),
         row("G_tau_rate", agg.g_tau_rate),
         row("G_tau_wilson_low", agg.g_tau_wilson[0] if agg.g_tau_wilson else None),
@@ -170,6 +182,7 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
         row("L_star_max", be["L_star_max"]),
         row("prices_robust", be["prices_robust"]),
         row("break_even", be),
+        row("L_star_real", be.get("L_star_real")),
         row("detection", d),
     ]
 
