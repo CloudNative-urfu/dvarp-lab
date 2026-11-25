@@ -17,6 +17,7 @@
   "queue": {
     "straight_to_queue": 0.3,
     "base_rho": 0.3,
+    "rho0_scenarios": [0.3, 0.6, 0.7],
     "operators": 7,
     "service_minutes": 5.0,
     "patience_minutes": 4.0,

@@ -229,6 +229,7 @@ class Aggregate:
     g_tau_wilson: tuple[float, float] | None  # Wilson 95% CI of the rate (issue #13)
     g_tau_gate: str | None  # pass/fail at G_TAU_THRESHOLD (marked, not excluded — FR-1.22)
     queue: dict[str, Any] = field(default_factory=dict)  # analytic queue state (issue #12)
+    queue_grid: dict[str, Any] = field(default_factory=dict)  # ρ₀×p_att sensitivity (#34)
     detection: dict[str, Any] = field(default_factory=dict)
 
     def as_inputs(self, config: str | None = None) -> formulas.Inputs:
@@ -245,6 +246,37 @@ class Aggregate:
             C_guard=self.c_guard,
             ql_abandon=self.ql_abandon,
         )
+
+
+def queue_grid(
+    e_attack: float, e_legal: float, pin: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Сетка чувствительности очереди 9 ячеек (ρ₀ × p_att) на доли эскалаций (issue #34).
+
+    Ячейка: {"0.3|0.01": {"rho", "P_abandon", "stable"}}, ε_cell — доли эскалаций
+    конфигурации фиксированы, меняются только сценарные параметры пина.
+    """
+    econ = pin or economics.load_economics()
+    q = econ["queue"]
+    out: dict[str, Any] = {}
+    for rho0 in q["rho0_scenarios"]:
+        for p_att in econ["p_att_scenarios"]:
+            st = queue.scenario(
+                e_attack,
+                e_legal,
+                p_att=p_att,
+                straight_to_queue=q["straight_to_queue"],
+                base_rho=rho0,
+                operators=q["operators"],
+                service_minutes=q["service_minutes"],
+                patience_minutes=q["patience_minutes"],
+            )
+            out[f"{rho0:g}|{p_att:g}"] = {
+                "rho": round(st["rho"], 4),
+                "P_abandon": None if st["P_abandon"] is None else round(st["P_abandon"], 6),
+                "stable": st["stable"],
+            }
+    return out
 
 
 def aggregate(eps: list[Episode]) -> Aggregate:

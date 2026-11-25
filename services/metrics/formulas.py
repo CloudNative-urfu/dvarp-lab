@@ -33,14 +33,29 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
-# (lower, base, upper) — decomposition assumption "prices for break-even" (prototype §9.4).
-# C_manual base is the pinned C_human ($2/ticket, issue #11); the range is widened so the
-# base stays inside the bracket ("L* at the range bounds", prototype §9.4).
-PRICE_RANGES: dict[str, tuple[float, float, float]] = {
-    "C_refuse": (5.0, 15.0, 40.0),  # USD per unjustified refusal
-    "C_manual": (1.0, 2.0, 15.0),  # USD per manual review (base = pinned C_human, #11)
-    "C_churn": (10.0, 20.0, 40.0),  # USD per lost customer (base = pinned C_churn, #12)
-}
+# (lower, base, upper) — decomposition assumption "prices for break-even" (prototype §9.4),
+# bases connected to the frozen economics pin (issue #34): C_manual base = pinned C_human,
+# C_churn bounds = base × price_sensitivity_factors of the pin. C_refuse stays §9.4.
+C_REFUSE_RANGE: tuple[float, float, float] = (5.0, 15.0, 40.0)  # USD per unjustified refusal
+C_MANUAL_UPPER = 15.0  # §9.4 upper bound of the manual-review price
+
+
+def price_ranges(pin: dict[str, Any] | None = None) -> dict[str, tuple[float, float, float]]:
+    """Price brackets with bases from the economics pin (issue #34)."""
+    from . import economics as _econ
+
+    econ = pin or _econ.load_economics()
+    c_human = econ["C_human"]
+    c_churn = econ["C_churn"]
+    factors = econ["price_sensitivity_factors"]
+    lo, hi = factors[0], factors[-1]
+    return {
+        "C_refuse": C_REFUSE_RANGE,
+        "C_manual": (c_human * lo, c_human, C_MANUAL_UPPER),
+        "C_churn": (c_churn * lo, c_churn, c_churn * hi),
+    }
+
+
 STATUSES = ("reference", "threshold", "pays_at_any_price", "no_safety_gain", "more_violations")
 DIRECTIONAL = ("threshold", "pays_at_any_price", "more_violations")
 EPS = 1e-12
@@ -48,23 +63,28 @@ EPS = 1e-12
 
 @dataclass(frozen=True)
 class Prices:
-    C_refuse: float = PRICE_RANGES["C_refuse"][1]
-    C_manual: float = PRICE_RANGES["C_manual"][1]
-    C_churn: float = PRICE_RANGES["C_churn"][1]
+    C_refuse: float = C_REFUSE_RANGE[1]
+    C_manual: float = 2.0  # default = pinned C_human; overridden by base_prices() from the pin
+    C_churn: float = 20.0  # default = pinned C_churn
 
     def as_dict(self) -> dict[str, float]:
         return asdict(self)
 
 
-def base_prices() -> Prices:
-    return Prices()
+def base_prices(pin: dict[str, Any] | None = None) -> Prices:
+    """Base prices with C_human/C_churn bases from the economics pin (issue #34)."""
+    from . import economics as _econ
+
+    econ = pin or _econ.load_economics()
+    return Prices(C_refuse=C_REFUSE_RANGE[1], C_manual=econ["C_human"], C_churn=econ["C_churn"])
 
 
-def bound_prices() -> dict[str, Prices]:
-    """Lower/base/upper bounds of all prices at once (prototype §9.4)."""
-    lo = {k: v[0] for k, v in PRICE_RANGES.items()}
-    hi = {k: v[2] for k, v in PRICE_RANGES.items()}
-    return {"low": Prices(**lo), "base": Prices(), "high": Prices(**hi)}
+def bound_prices(pin: dict[str, Any] | None = None) -> dict[str, Prices]:
+    """Lower/base/upper bounds of all prices at once (prototype §9.4; bases from the pin)."""
+    ranges = price_ranges(pin)
+    lo = {k: v[0] for k, v in ranges.items()}
+    hi = {k: v[2] for k, v in ranges.items()}
+    return {"low": Prices(**lo), "base": base_prices(pin), "high": Prices(**hi)}
 
 
 @dataclass(frozen=True)
@@ -136,6 +156,51 @@ def l_star(g: Inputs, ref: Inputs, p: Prices) -> dict[str, Any]:
             status="pays_at_any_price" if num <= EPS else "threshold",
             L_star=ls,
             pays="if L_viol > L*",
+        )
+    return res
+
+
+def real_frame_terms(t: Mapping[str, float], p_att: float) -> dict[str, float]:
+    """Потерменный перевод ΔNet из лаб-фрейма в реальный (фрейм A, issue #34).
+
+    Рабочая валюта сравнений — «USD на лаб-эпизод» (w_A/w_L лаб-микса); реальный
+    магазин переводится явными множителями по термам:
+    - долевые термы (refuse, churn): × (1 − p_att)/w_L;
+    - attack_service: × p_att/w_A;
+    - guard, manual: без долевого веса — как есть.
+    dV/dR/dE/dC_* безразмерные — не меняются.
+    """
+    if not (math.isfinite(p_att) and 0 < p_att < 1):
+        raise ValueError(f"p_att: доля в (0, 1), получено {p_att!r}")
+    # w_A/w_L могут вырождаться на частичных данных (одна нога): соответствующие
+    # долевые термы тогда нулевые — множитель не влияет.
+    scale_share = (1.0 - p_att) / t["w_L"] if t["w_L"] else 1.0
+    scale_attack = p_att / t["w_A"] if t["w_A"] else 1.0
+    out = dict(t)
+    out["refuse"] = t["refuse"] * scale_share
+    out["churn"] = t["churn"] * scale_share
+    out["attack_service"] = t["attack_service"] * scale_attack
+    out["w_A"], out["w_L"] = p_att, 1.0 - p_att
+    return out
+
+
+def l_star_real(g: Inputs, ref: Inputs, p: Prices, p_att: float) -> dict[str, Any]:
+    """L* в реальном фрейме (фрейм A, issue #34): числитель — перевод real_frame_terms,
+    знаменатель — реальная доля атак p_att·dV. Статусы §9.2 — те же правила."""
+    t = real_frame_terms(terms(g, ref, p), p_att)
+    num = math.fsum((t["refuse"], t["attack_service"], t["guard"], t["manual"], t["churn"]))
+    dv = t["dV"]
+    res: dict[str, Any] = {"p_att": p_att, "numerator": num, "dV": dv, "terms": t}
+    if g.config == ref.config:
+        res.update(status="reference", L_star=None)
+    elif abs(dv) <= EPS:
+        res.update(status="no_safety_gain", L_star=None)
+    elif dv < 0:
+        res.update(status="more_violations", L_star=None)
+    else:
+        res.update(
+            status="pays_at_any_price" if num <= EPS else "threshold",
+            L_star=num / (p_att * dv),
         )
     return res
 
