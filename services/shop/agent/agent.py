@@ -44,7 +44,7 @@ from services.shop.journal import ComponentWriter
 from services.shop.llm import ChatModel, LimitExceeded, LLMResponseError, LLMUnavailable, Message
 from services.shop.repro import hash_obj
 
-from .prompt import PROMPT_VERSION, SYSTEM_PROMPT
+from .prompt import PROMPT_VERSION, system_prompt
 
 # Нейтральные ответы клиенту (английский, NFR-2.7). Не раскрывают причину: лимит, сбой модели
 # и остановка обработки выглядят для клиента одинаково обычными сообщениями поддержки.
@@ -84,10 +84,14 @@ class AgentConfig:
     max_tool_calls_per_step: int = 4  # вызовов инструментов из одного ответа модели
     close_on_finalize: bool = True  # закрыть чат после завершения обращения
     max_reply_chars: int = 4000  # ответ длиннее усекается (канал усекает так же)
+    prompt_canary: str | None = None  # слот канарейки утечки промпта (prompt.CANARY_SLOT)
 
     def __post_init__(self):
         for k, v in asdict(self).items():
-            if k == "close_on_finalize":
+            if k == "prompt_canary":
+                if v is not None and (not isinstance(v, str) or len(v) < 8):
+                    raise AgentError(f"{k} — синтетическая строка ≥ 8 символов")
+            elif k == "close_on_finalize":
                 if not isinstance(v, bool):
                     raise AgentError(f"{k} — bool")
             elif isinstance(v, bool) or not isinstance(v, int) or v < 1:
@@ -102,7 +106,7 @@ def agent_spec(config: AgentConfig | None = None) -> dict:
     cfg = config or AgentConfig()
     return {
         "prompt_version": PROMPT_VERSION,
-        "prompt_sha256": hash_obj({"system": SYSTEM_PROMPT}),
+        "prompt_sha256": hash_obj({"system": system_prompt(cfg.prompt_canary)}),
         "tools": [t.name for t in TOOL_SPECS],
         "config": cfg.to_json(),
     }
@@ -137,7 +141,9 @@ class RefundAgent:
         self._w = writer
         self._episode_id = episode_id
         self._clock = clock
-        self._messages: list[Message] = [Message("system", SYSTEM_PROMPT)]
+        self._messages: list[Message] = [
+            Message("system", system_prompt(self.config.prompt_canary))
+        ]
         self._closed = False
         self.turns = 0
         self.steps = 0

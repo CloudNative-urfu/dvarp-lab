@@ -75,6 +75,17 @@ def _episode_costs(events: list[Any]) -> dict[str, float]:
     return {"c_ep": c_ep, "c_guard": c_guard, "guard_cpu_ms": cpu_ms}
 
 
+def _finals(session: Session) -> dict[str, Any]:
+    """episode_finals of the raw DB; runs recorded before #10 have no such table."""
+    from sqlalchemy import inspect
+
+    from services.filter.models import EpisodeFinal
+
+    if not inspect(session.get_bind()).has_table(EpisodeFinal.__tablename__):
+        return {}
+    return {(f.config_name, f.model_key, f.episode_id): f for f in session.query(EpisodeFinal)}
+
+
 def episodes_of(
     session: Session, include_probe: bool = False, include_remote: bool = False
 ) -> list[Episode]:
@@ -122,6 +133,14 @@ def episodes_of(
         ep["c_ep"] += costs["c_ep"]
         ep["c_guard"] += costs["c_guard"]
         ep["guard_cpu_ms"] += costs["guard_cpu_ms"]
+    # #10: final rows override the collapsed trace (verdict, signal counters) when present
+    finals = _finals(session)
+    for ep in by_key.values():
+        fin = finals.get((ep["config"], ep["model"], ep["episode_id"]))
+        if fin is not None:
+            ep["verdict"], ep["signals"] = fin.verdict, dict(fin.guard_signals or {})
+            if fin.remote_llm:
+                remote_ids.add(ep["episode_id"])
     out = []
     for key, ep in sorted(by_key.items()):
         if not include_remote and ep["episode_id"] in remote_ids:

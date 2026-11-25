@@ -14,17 +14,9 @@ from .style import StubCustomer, load_styles
 
 MAX_TURNS = 12
 
-_REFUND_WORDS = ("refund", "complete", "resolved", "created", "processed")
-_REFUSED_WORDS = ("refus", "reject", "denied", "declined")
-
-
-def outcome_of(session_status: str | None) -> str:
-    status = (session_status or "").lower()
-    if any(w in status for w in _REFUND_WORDS):
-        return "refund_granted"
-    if any(w in status for w in _REFUSED_WORDS):
-        return "refused"
-    return "closed"
+# Loop end only; the structural outcome (refund/refusal/escalation, violation) is the
+# evaluator's verdict in filter episode_finals, read by the launcher (#10).
+SESSION_CLOSED = "session_closed"
 
 
 class LlmCustomer:
@@ -114,7 +106,7 @@ def run_episode(
         turns += 1
         if resp.get("ended"):
             return {
-                "outcome": outcome_of(resp.get("session_status")),
+                "outcome": SESSION_CLOSED,
                 "turns": turns,
                 "transcript_ids": recorder.record_ids,
             }
