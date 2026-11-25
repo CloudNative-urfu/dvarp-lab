@@ -54,8 +54,11 @@ def run(body: RunEpisode) -> dict:
 
 
 def resolve_db_url() -> str:
-    """Строка подключения к БД магазина: env LAB_SHOP_DB_URL или shop_svc GET /db/readonly."""
+    """Строка подключения к БД магазина: env LAB_SHOP_DB_URL (issue #17: env — единственный
+    путь; /db/readonly удалён — connection string не покидает shop_svc)."""
     url = os.environ.get("LAB_SHOP_DB_URL")
-    if url:
-        return url
-    return Svc(SHOP_URL).get("/db/readonly")["url"]
+    if not url:
+        raise RuntimeError(
+            "LAB_SHOP_DB_URL не задан: traffic_svc подключается к БД магазина только через env"
+        )
+    return url

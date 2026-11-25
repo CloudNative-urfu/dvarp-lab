@@ -198,13 +198,6 @@ def test_snapshot_restore_restores_state(lab):
     assert db.state_hash(STATE.engine) == snap["state_hash"]
 
 
-def test_db_readonly_endpoint(lab):
-    info = lab.client.get("/db/readonly").json()
-    assert info["dialect"] == "sqlite"
-    assert info["readonly"] is True
-    assert info["url"].startswith("sqlite:///")
-
-
 def test_prompt_canary_leak_measured(lab, monkeypatch):
     """#10: канарейка в промпте; её появление в ответе агента — leak с номером хода."""
     import services.shop.app as shop_app

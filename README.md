@@ -75,7 +75,7 @@ uv run python -m launcher --config g0 --episodes 2    # CLI: та же камп�
 | [`configs/`](services/shop/configs) | Сборка конфигураций, их спецификация и реестр. Готовые замороженные JSON находятся в `frozen/configs/`. |
 | [`corpus/`](services/shop/corpus) | Схема, загрузка и привязка элементов корпуса к сценарию; сами наборы атак — в `frozen/corpus/`. |
 | [`evaluator/`](services/shop/evaluator) | Определение исхода по состоянию и свидетельствам, включая проверку утечки промпта. |
-| [`manual_queue/`](services/shop/manual_queue) | Модель ручной очереди, потока поступлений и аналитический расчёт. |
+| [`manual_queue/`](services/shop/manual_queue) | Модель ручной очереди и потока поступлений; аналитика — в `metrics/queue.py`. |
 
 ### Замороженные характеристики
 
