@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.engine import Engine
 
 import services.shop.guards.plugins  # noqa: F401 — register built-in guardrail plugins
+from lab import world as lab_world
 from lab.modelspec import FROZEN_DIR, ModelSpec
 from lab.nominal import check_config, remote_endpoints
 from lab.svc_client import Svc
@@ -87,7 +88,11 @@ class ShopState:
     episodes: dict[str, Episode] = field(default_factory=dict)
     journal_seq: int = 0
     snapshots: dict[str, dict[str, Any]] = field(default_factory=dict)
-    manifest_accounts: dict[str, Any] = field(default_factory=dict)
+    # Манифест замороженного мира (файл, не БД): роли → клиент → заказы,
+    # легальный кейс, фиктивный заказ (dvarp-lab#6).
+    world_manifest: dict[str, Any] = field(default_factory=dict)
+    world_name: str = ""
+    world_dataset_hash: str = ""
 
 
 STATE = ShopState()
@@ -134,16 +139,32 @@ def _agent_model(log: EventLog | None = None, sink: list[dict] | None = None) ->
 
 
 def _assigned_customer(channel: str) -> str:
-    accounts = STATE.manifest_accounts
-    legal = sorted(c for c, a in accounts.items() if a["role"] == "legal")
-    attackers = sorted(c for c, a in accounts.items() if a["role"] == "attacker")
-    pool = attackers if channel == "attack" else legal
-    if not pool:
-        raise HTTPException(500, f"no {channel} account in the seeded shop db")
-    return pool[0]
+    """Клиент эпизода по каналу: роли привязаны к клиентам мира вне БД (dvarp-lab#6).
+    Один мир — один клиент A, несущий обе роли."""
+    clients = [c for c in STATE.world_manifest.get("clients", []) if channel in c.get("roles", [])]
+    if not clients:
+        raise HTTPException(500, f"no {channel} client in the world manifest")
+    return clients[0]["id"]
 
 
-def _open_episode(episode_id: str, channel: str) -> Episode:
+def _episode_order(channel: str, customer: str, goal: str | None) -> str | None:
+    """Заказ тикета эпизода. Легальный — фиксированный всегда-возвратный заказ кейса;
+    атакующий — заказ претензии цели (фиктивный заказ → тикет без заказа)."""
+    manifest = STATE.world_manifest
+    if channel != "attack":
+        case = manifest.get("legal_case", {})
+        if case.get("customer") != customer or not case.get("order"):
+            raise HTTPException(500, "world manifest has no legal case for the client")
+        return case["order"]
+    if not goal:
+        raise HTTPException(400, "attack episode requires a goal (frozen/corpus/goals.json)")
+    goals = lab_world.load_goals(manifest)
+    if goal not in goals:
+        raise HTTPException(400, f"goal {goal!r} is not in frozen/corpus/goals.json")
+    return lab_world.goal_binding(goals[goal])
+
+
+def _open_episode(episode_id: str, channel: str, goal: str | None = None) -> Episode:
     log = STATE.journal
     if episode_id in STATE.episodes:
         ep = STATE.episodes[episode_id]
@@ -151,10 +172,10 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
             raise HTTPException(400, f"episode {episode_id} already runs as {ep.channel}")
         return ep
     customer = _assigned_customer(channel)
+    order_id = _episode_order(channel, customer, goal)
     conn = db.connect(STATE.engine)
     try:
         now = db.meta_now(conn)
-        order_id = STATE.manifest_accounts[customer]["orders"]["recent"]
         ticket_id = f"T-{episode_id}"
         db.apply_fixture(
             conn,
@@ -236,6 +257,7 @@ class TurnRequest(BaseModel):
     channel: str
     text: str
     turn: int
+    goal: str | None = None  # attack: цель эпизода — определяет заказ претензии
     run_id: str | None = None
     seed: int | None = None
 
@@ -260,17 +282,23 @@ def health() -> dict:
 def reset(body: ResetRequest) -> dict:
     STATE.engine = _engine()
     STATE.engine_url = settings()["db_url"]
-    db.reset(STATE.engine, body.seed)
+    # Мир один и от сида не зависит: сид детерминирует прогон, данные — нет (dvarp-lab#6).
+    db.check_seed(body.seed)
+    info = db.reset_world(STATE.engine)
     STATE.episodes.clear()
     STATE.journal = _new_journal()
-    conn = db.connect(STATE.engine)
-    try:
-        manifest_raw = db.meta_value(conn, "accounts_manifest")
-    finally:
-        conn.close()
-    STATE.manifest_accounts = json.loads(manifest_raw) if manifest_raw else {}
+    STATE.world_manifest = info["manifest"]
+    STATE.world_name = info["world"]
+    STATE.world_dataset_hash = info["dataset_hash"]
     STATE.journal.writer("runner").emit(
-        "snapshot", {"what": "reset", "seed": body.seed, "db_version": db.state_hash(STATE.engine)}
+        "snapshot",
+        {
+            "what": "reset",
+            "seed": body.seed,
+            "world": info["world"],
+            "dataset_hash": info["dataset_hash"],
+            "db_version": info["state_hash"],
+        },
     )
     snap = db.take_snapshot(
         STATE.engine, _runtime_dir() / "baseline.snapshot.json", label="baseline"
@@ -281,7 +309,12 @@ def reset(body: ResetRequest) -> dict:
         "state_hash": snap.state_hash,
         "path": snap.path,
     }
-    return {"ok": True, "db_version": db.state_hash(STATE.engine)}
+    return {
+        "ok": True,
+        "db_version": info["state_hash"],
+        "world": info["world"],
+        "dataset_hash": info["dataset_hash"],
+    }
 
 
 @app.post("/configure")
@@ -322,7 +355,7 @@ def turn(body: TurnRequest) -> dict:
         raise HTTPException(400, f"channel must be one of {CHANNELS}")
     if STATE.journal is None or STATE.engine is None:
         raise HTTPException(409, "shop db is not initialized: call POST /reset first")
-    ep = _open_episode(body.episode_id, body.channel)
+    ep = _open_episode(body.episode_id, body.channel, body.goal)
     if ep.status == "error":
         raise HTTPException(409, f"episode {ep.episode_id} is marked error; filter_svc failed")
     ex = ep.executor
