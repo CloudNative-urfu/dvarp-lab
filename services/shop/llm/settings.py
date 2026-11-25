@@ -4,10 +4,9 @@
   loopback, частная сеть (RFC 1918 / ULA / link-local) или имя `localhost`. Публичный адрес
   отвергается до первого запроса. Имя модели фиксируется как закреплённая версия
   (`pin=served_model_id`); плавающие имена (`latest`, `default`, …) запрещены.
-- NFR-2.6 (размер моделей): ориентир — до 8B параметров; от 8B до 12B включительно —
-  допустимое исключение «отдельный контроль», помечаемое предупреждением; больше 12B —
-  отказ. Размер берётся из явного `RESEARCH_LLM_PARAMS_B` или из имени модели (`…-9b`,
-  `…_86m`); неизвестный размер — отказ (fail-closed).
+- NFR-2.6 (размер моделей, ревизия канона 2026-11-12): до 16B параметров включительно;
+  больше 16B — отказ. Размер берётся из явного `RESEARCH_LLM_PARAMS_B` или из имени
+  модели (`…-9b`, `…_86m`); неизвестный размер — отказ (fail-closed).
 - Ключ API никогда не попадает в repr, словари, манифест, журнал и тексты ошибок.
 """
 
@@ -33,8 +32,7 @@ ENV_PARAMS_B = "RESEARCH_LLM_PARAMS_B"
 ENV_EXTRA_BODY = "RESEARCH_LLM_EXTRA_BODY"  # необязательный JSON-объект доп. полей запроса
 REQUIRED_ENV = (ENV_BASE_URL, ENV_MODEL)
 
-SIZE_TARGET_B = 8.0  # ориентир NFR-2.6
-SIZE_EXCEPTION_B = 12.0  # исключение для отдельных контролей
+SIZE_TARGET_B = 16.0  # предел NFR-2.6 (ревизия 2026-11-12: до 16B)
 
 RESERVED_BODY_KEYS = frozenset(
     {"model", "messages", "temperature", "seed", "max_tokens", "stream", "tools", "tool_choice"}
@@ -57,7 +55,7 @@ def parse_params_b(model_name: str) -> float | None:
 @dataclass(frozen=True)
 class SizeVerdict:
     params_b: float
-    status: str  # within_target | exception_control
+    status: str  # within_target | remote_verification
     warning: str | None
 
 
@@ -75,15 +73,8 @@ def check_model_size(params_b: float | None, *, model: str = "") -> SizeVerdict:
         raise LLMConfigError(f"недопустимый размер модели: {params_b!r}")
     if params_b <= SIZE_TARGET_B:
         return SizeVerdict(float(params_b), "within_target", None)
-    if params_b <= SIZE_EXCEPTION_B:
-        return SizeVerdict(
-            float(params_b),
-            "exception_control",
-            f"модель {model!r} {params_b:g}B > ориентира {SIZE_TARGET_B:g}B: "
-            f"учитывается как исключение до {SIZE_EXCEPTION_B:g}B (NFR-2.6)",
-        )
     raise LLMConfigError(
-        f"модель {model!r} {params_b:g}B больше предела {SIZE_EXCEPTION_B:g}B (NFR-2.6)"
+        f"модель {model!r} {params_b:g}B больше предела {SIZE_TARGET_B:g}B (NFR-2.6)"
     )
 
 

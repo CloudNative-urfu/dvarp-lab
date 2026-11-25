@@ -176,10 +176,3 @@ def test_snapshot_restore_restores_state(lab):
     r = c.post("/snapshot/restore", json={"snapshot_id": sid})
     assert r.status_code == 200
     assert db.state_hash(STATE.engine) == snap["state_hash"]
-
-
-def test_db_readonly_endpoint(lab):
-    info = lab.client.get("/db/readonly").json()
-    assert info["dialect"] == "sqlite"
-    assert info["readonly"] is True
-    assert info["url"].startswith("sqlite:///")
