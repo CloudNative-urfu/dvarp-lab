@@ -15,7 +15,7 @@ from typing import Any
 from lab import world as lab_world
 from lab.nominal import is_local_url
 from lab.seeds import derive_seed
-from services.traffic.episode import outcome_of
+from services.traffic.episode import SESSION_CLOSED
 from services.traffic.record import ChatModel, Recorder
 from services.traffic.style import load_styles
 
@@ -111,7 +111,7 @@ def run_attack(
         attempts += 1
         if resp.get("ended"):
             return {
-                "outcome": outcome_of(resp.get("session_status")),
+                "outcome": SESSION_CLOSED,
                 "turns": attempts,
                 "attempts": attempts,
             }

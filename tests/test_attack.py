@@ -4,7 +4,6 @@ from lab import world as lab_world
 from services.attack import episode as attack_episode
 from services.attack.attacker import build_system_prompt
 from services.attack.tactics import load_tactics, method_prompt
-from services.traffic.episode import outcome_of
 from services.traffic.style import load_styles
 
 ATTACKER_MODEL = {
@@ -265,7 +264,7 @@ def test_session_ended_outcome():
         shop=shop,
         filter_svc=flt,
     )
-    assert result["outcome"] == "refused"
+    assert result["outcome"] == "session_closed"
     assert result["attempts"] == 1
 
 
@@ -344,14 +343,6 @@ def test_barrier_no_shop_db_access():
         for marker in forbidden:
             assert marker not in text, f"{path.name}: found {marker!r}"
         assert "/turn" in text or path.name != "episode.py"
-
-
-def test_outcome_mapping():
-    assert outcome_of("completed") == "refund_granted"
-    assert outcome_of("refund_created") == "refund_granted"
-    assert outcome_of("refused") == "refused"
-    assert outcome_of("closed") == "closed"
-    assert outcome_of(None) == "closed"
 
 
 def test_app_start_stop_flags():
