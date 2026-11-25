@@ -2,23 +2,25 @@
 
 Задержка легального потока не симулируется, а вычисляется аналитически
 (M/M/c — Эрланг C — при K > 1) поверх уже сохранённых финалов. Сценарий
-(ревизия владельца 2026-11-24):
+(ревизия владельца 2026-11-24, семантика «минимум 30% сразу в очередь»):
 
-- базовая загрузка ρ₀ = 0.3 — операторы заняты клиентами, которые и так
-  требуют человека (ИИ-эскалаций в базе ноль);
-- доли эскалаций из прогонов ревейтятся на реалистичный микс через
-  сценарную константу p_att (лабовый микс w_A = 0.5 — внутренний парный
-  дизайн и в очередь напрямую не подставляется):
+- **минимум 30% обращений идут сразу в живую очередь** (клиенты,
+  требующие человека; константа, не зависящая от защиты) — этот поток
+  создаёт базовую загрузку операторов ρ₀ (якорь экономики);
+- остальной поток (1−h)/h раз больше обрабатывает ИИ-агент; **эскалации
+  приходят только из ИИ-канала**, их доли из прогонов ревейтятся на
+  реалистичный микс через сценарную константу p_att (лабовый микс
+  w_A = 0.5 — внутренний парный дизайн и в очередь напрямую не
+  подставляется):
 
       доля_эскалаций_магазина = p_att·E_A + (1 − p_att)·E_L
 
 - якорь масштаба (Эрланг C зависит и от размера очереди): число
-  операторов K, время разбора S, терпение τ — из пина экономики;
-  поток «требующих человекка» λ₀ = ρ₀·K·60/S; ИИ-поток считается
-  равным ему (одно и то же обращение либо закрывается ИИ, либо
-  требует человека — якорное допущение);
-- λ_Q = λ₀·доля_эскалаций; λ = λ₀ + λ_Q — суммарный поток в очередь
-  (дренаж K·μ − λ считается от суммарного, не только эскалаций);
+  операторов K, время разбора S, терпение τ и доля h «сразу в очередь» —
+  из пина экономики; поток человекков λ_чел = ρ₀·K·60/S; ИИ-поток
+  λ_ИИ = λ_чел·(1−h)/h;
+- λ_Q = λ_ИИ·доля_эскалаций; λ = λ_чел + λ_Q — суммарный поток в очередь
+  (дренаж K·μ − λ считается от суммарного);
 - P_wait = Эрланг C рекурсией Эрланга B (без аппроксимаций);
   W_q = P_wait/(K·μ − λ); отвал P(W_q > τ) = P_wait·exp(−(K·μ − λ)·τ/60)
   (терпение = SLA — один порог, ревизия канона dvarp#39);
@@ -83,6 +85,7 @@ def scenario(
     e_legal: float,
     *,
     p_att: float,
+    straight_to_queue: float,
     base_rho: float,
     operators: int,
     service_minutes: float,
@@ -96,28 +99,33 @@ def scenario(
         raise QueueError(f"p_att: доля в [0, 1], получено {p_att!r}")
     if not (math.isfinite(base_rho) and 0 <= base_rho < 1):
         raise QueueError(f"base_rho: в [0, 1), получено {base_rho!r}")
+    if not (math.isfinite(straight_to_queue) and 0 < straight_to_queue < 1):
+        raise QueueError(f"straight_to_queue: доля в (0, 1), получено {straight_to_queue!r}")
     s_min = _pos(service_minutes, "service_minutes")
     tau_min = _pos(patience_minutes, "patience_minutes")
     if operators < 1:
         raise QueueError(f"operators: ≥ 1, получено {operators!r}")
 
     esc_share = p_att * e_attack + (1.0 - p_att) * e_legal
-    lam_base = base_rho * operators * 60.0 / s_min  # поток «требующих человекка», в час
-    lam_q = lam_base * esc_share
-    lam_total = lam_base + lam_q
+    lam_humans = base_rho * operators * 60.0 / s_min  # поток «сразу в очередь», в час
+    lam_ai = lam_humans * (1.0 - straight_to_queue) / straight_to_queue  # ИИ-канал
+    lam_q = lam_ai * esc_share
+    lam_total = lam_humans + lam_q
     load = lam_total * s_min / 60.0
     rho = load / operators
+    stable = rho < 1.0 - 1e-9  # граница насыщения с допуском float-точности
     out = {
         "model_version": QUEUE_MODEL_VERSION,
         "esc_share": esc_share,
-        "lambda_base_per_hour": lam_base,
+        "lambda_humans_per_hour": lam_humans,
+        "lambda_ai_per_hour": lam_ai,
         "lambda_q_per_hour": lam_q,
         "lambda_total_per_hour": lam_total,
         "rho": rho,
-        "stable": rho < 1.0,
+        "stable": stable,
         "non_claims": list(NON_CLAIMS),
     }
-    if rho >= 1.0:
+    if not stable:
         out.update(P_wait=None, W_q_min=None, P_abandon=None, Q_L_min=None)
         return out
     p_wait = erlang_c(operators, load)

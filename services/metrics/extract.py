@@ -215,6 +215,7 @@ def aggregate(eps: list[Episode]) -> Aggregate:
         e_att,
         e_leg,
         p_att=params["p_att"],
+        straight_to_queue=params["straight_to_queue"],
         base_rho=params["base_rho"],
         operators=params["operators"],
         service_minutes=params["service_minutes"],

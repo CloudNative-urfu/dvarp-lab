@@ -1,10 +1,14 @@
 """Analytic queue (issue #12; canon dvarp#39): Erlang C, p_att reweight, churn member.
 
-Scenario (owner 2026-11-24): base load ρ₀=0.3 from human-demanding customers (zero AI
-escalations); escalation shares from finals are reweighted to the realistic mix
-(share = p_att·E_A + (1−p_att)·E_L); scale anchor 7 operators × 5 min × 4 min patience
-(patinence = SLA); abandonment = P_wait·exp(−drain·τ); no simulation. Prototype sanity
-(erlang_c(2,1)=1/3, erlang_c(3,2)=4/9) carries over from dvarp-prototype analytic.py.
+Scenario (owner 2026-11-24, semantics «at least 30% straight to the human queue»):
+at least 30% of all shop requests bypass the AI and enter the queue directly — that
+flow creates the baseline operator load ρ₀=0.3 at the anchor; the AI handles the
+(1−h)/h times larger rest, and escalations come only from the AI channel, reweighted
+to the realistic mix (share = p_att·E_A + (1−p_att)·E_L); anchor 7 operators × 5 min
+× 4 min patience (patience = SLA); abandonment = P_wait·exp(−drain·τ); no simulation.
+Protection CAN starve this queue: saturation (ρ = 1) at ~100% reweighted escalation,
+~14% churn at 70%, ~54% at 90%. Prototype sanity (erlang_c(2,1)=1/3, erlang_c(3,2)=4/9)
+carries over from dvarp-prototype analytic.py.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from tests.test_metrics_golden import REF
 
 PARAMS: dict = {
     "p_att": 0.03,
+    "straight_to_queue": 0.3,
     "base_rho": 0.3,
     "operators": 7,
     "service_minutes": 5.0,
@@ -55,15 +60,18 @@ def test_scenario_escalation_shares_reweighted():
 
 def test_scenario_zero_and_extreme():
     zero = queue.scenario(0.0, 0.0, **PARAMS)
-    # base load only: tiny wait, no escalations → no churn probability
+    # baseline (humans only): ρ = 0.3 — tiny wait, no escalations → no churn probability
+    assert zero["rho"] == pytest.approx(0.3)
     assert zero["P_wait"] < 0.01
     assert zero["Q_L_min"] == pytest.approx(0.0)
-    full = queue.scenario(1.0, 1.0, **PARAMS)
-    # everything escalates: ρ ≈ 0.6 — stable, but the queue is visibly loaded
-    assert full["rho"] == pytest.approx(0.6)
-    assert full["stable"]
-    assert 0.01 < full["P_abandon"] < 0.05
-    assert full["Q_L_min"] > 0
+    mid = queue.scenario(0.0, 0.5, **PARAMS)  # esc_share = 0.97·0.5 ≈ 0.485
+    assert mid["rho"] == pytest.approx(0.65, abs=0.011)
+    assert 0.01 < mid["P_abandon"] < 0.05
+    heavy = queue.scenario(0.0, 0.72, **PARAMS)  # esc_share ≈ 0.70
+    assert 0.1 < heavy["P_abandon"] < 0.2
+    full = queue.scenario(1.0, 1.0, **PARAMS)  # esc_share = 1 → ρ = 1: collapse
+    assert not full["stable"]
+    assert full["P_abandon"] is None
     assert queue.scenario.__doc__  # assumptions are documented
 
 
@@ -77,6 +85,7 @@ def test_churn_member_is_probability_without_price():
 def test_pin_queue_section_and_defaults():
     pin = economics.load_economics()
     assert pin["queue"] == {
+        "straight_to_queue": 0.3,
         "base_rho": 0.3,
         "operators": 7,
         "service_minutes": 5.0,
@@ -152,7 +161,8 @@ async def test_queue_member_flow_into_l_star(filter_client, metrics_client):
     r = await metrics_client.post("/compute", json={})
     r.raise_for_status()
     q = await _row(metrics_client, "g_wait", "queue_p_abandon")
-    assert 0 < q < 0.01  # base 0.3 load absorbs a 0.5 escalation share with tiny churn
+    # esc_share = 0.97·0.5 ≈ 0.485 → ρ ≈ 0.65 → churn ≈ 3% per escalated ticket
+    assert 0.01 < q < 0.05
     # churn member: w_L·E_L·P_abandon = 0.5·0.5·P_abandon; numerator = churn (rest is 0)
     ql = await _row(metrics_client, "g_wait", "E_legal")
     assert ql == pytest.approx(0.5)
