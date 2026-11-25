@@ -197,7 +197,7 @@ def test_cassette_line_per_model_call(tmp_path):
 def test_db_url_only_from_env(monkeypatch):
     """traffic_svc не спрашивает строку подключения у shop_svc по HTTP (#17)."""
     monkeypatch.delenv("LAB_SHOP_DB_URL", raising=False)
-    with pytest.raises(ValueError, match="LAB_SHOP_DB_URL"):
+    with pytest.raises(RuntimeError, match="LAB_SHOP_DB_URL"):
         resolve_db_url()
     monkeypatch.setenv("LAB_SHOP_DB_URL", "sqlite:///x.db")
     assert resolve_db_url() == "sqlite:///x.db"
