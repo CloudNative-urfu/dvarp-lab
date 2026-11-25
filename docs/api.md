@@ -7,13 +7,17 @@
 
 ## shop_svc (порт 9411)
 
-- `POST /reset` `{seed: int}` → `{ok: true, db_version: str}` — сброс БД к исходному
-  состоянию; генерация начальных данных детерминирована от seed.
+- `POST /reset` `{seed: int}` → `{ok: true, db_version: str, world: str, dataset_hash: str}` —
+  сброс БД к единственному замороженному миру (`frozen/seed_worlds/world_a`); сид
+  детерминирует прогон, данные не меняет; `dataset_hash` — пин версии мира.
 - `POST /configure` `{config_name: str, agent_model: model_spec}` → `{ok: true, applied: {...}}` —
   загрузка конфигурации защиты из frozen/configs (гвардрейлы, политика, права, эскалация);
   конфиг не проходит номинальную проверку → 400.
-- `POST /turn` `{episode_id: str, channel: "legal"|"attack", text: str, turn: int}` →
-  `{text: str, ended: bool, session_status: str}` — ход агента поддержки.
+- `POST /turn` `{episode_id: str, channel: "legal"|"attack", text: str, turn: int, goal: str?}` →
+  `{text: str, ended: bool, session_status: str}` — ход агента поддержки. Для
+  attack-эпизода `goal` обязателен: тикет привязывается к заказу претензии цели
+  (фиктивный заказ → тикет без заказа); для legal — к фиксированному
+  всегда-возвратному заказу легального кейса мира.
   Ответ возвращает только текст; сырьё (решения гвардрейлов, вызовы инструментов,
   журнал) доставляется в `filter_svc` POST /record изнутри shop_svc.
 - `GET /snapshot/{snapshot_id}` → снимок состояния (JSON).
@@ -24,18 +28,21 @@
 
 - `POST /run-episode` `{episode_id, config_name, agent_model, style: str, seed: int}`
   → `{outcome: str, turns: int, transcript_ids: [...]}` — правдивые возвраты на основе
-  БД магазина (читает напрямую), стиль из frozen/styles.json; каждый ход — через
-  shop_svc /turn (channel="legal").
+  БД магазина (читает напрямую), стиль из frozen/styles.json; легальный кейс
+  фиксирован (всегда-возвратный заказ мира), причина возврата — из данных БД.
+  Каждый ход — через shop_svc /turn (channel="legal").
 
 ## attack_svc (порт 9413)
 
-- `POST /run-episode` `{episode_id, config_name, agent_model, attacker_model, tactic: str,
-  budget: int, seed: int, style: str?}` → `{outcome, turns, attempts}` — размеченный
-  стартовый промпт тактики из frozen/corpus, ходы через shop_svc /turn (channel="attack"),
-  видит только текст; без доступа к БД магазина и защите. `style` — общий с легальным
-  трафиком тон парного прогона (frozen/styles.json): тон-клауза в system-промпт
-  атакующего, стартовая реплика остаётся корпусной (тактика — механизм, стиль — тон).
-  Записи filter пинят `raw.style`.
+- `POST /run-episode` `{episode_id, config_name, agent_model, attacker_model, goal: str,
+  tactic: str, budget: int, seed: int, style: str?}` → `{outcome, turns, attempts}` —
+  промпт атакующего собирается attack-сервисом сам, без обращений к shop (бриф
+  исключён): претензия — из цели (`frozen/corpus/goals.json`) и манифеста мира
+  (`frozen/seed_worlds`), метод давления — из `frozen/corpus/tactics.json`, тон —
+  из оси стиля (`frozen/styles.json`, общий с легальной ногой пары). Стартовая
+  реплика — отрендеренная претензия цели; рандом-плейсхолдеров нет. Ходы через
+  shop_svc /turn (channel="attack"), видит только текст; без доступа к БД магазина
+  и защите. Записи filter пинят `raw.goal`, `raw.tactic`, `raw.style`.
 - `POST /start` / `POST /stop` — сигналы начала/конца атаки для launcher.
 
 ## filter_svc (порт 9414)
@@ -68,22 +75,27 @@
 ## launcher (CLI + модуль кампании)
 
 Спецификация осей (JSON): каждая ось — `{"mode": "point|range|all|all_limited"}`:
-- перечислимые оси (frozen-наборы, отсортированные): `configs`, `styles`,
-  `tactics` (+ фильтр `split: dev|holdout`), `agent_models`, `attacker_models` —
-  range = непрерывный срез отсортированного списка; технический режим `set`
-  (явный список) — для CLI и пресетов;
+- перечислимые оси (frozen-наборы, отсортированные): `configs`, `goals`
+  (`frozen/corpus/goals.json` — замороженные претензии поверх данных мира),
+  `styles`, `tactics` (+ фильтр `split: dev|holdout`), `agent_models`,
+  `attacker_models` — range = непрерывный срез отсортированного списка;
+  технический режим `set` (явный список) — для CLI и пресетов;
 - числовые оси: `episodes` (point = N эпизодов с 1-го), `seeds` (point = один
-  сид; по умолчанию — один, диапазон = перебор «миров»); режим `all` на них
-  запрещён (неограничены);
+  сид; диапазон — повторение ячеек для детерминизма прогона: мир один и от
+  сида не зависит); режим `all` на них запрещён (неограничены);
 - глобально: `budget`, `compute`, `confirm` (подтверждение объёма сверх guard
-  1000), `scenario_pairs` (явные пары style=tactic); `allow_remote_llm` устарел
-  и игнорируется — не-локальный LLM-эндпоинт маркируется автоматически (пин в
-  манифесте и записях, метрики пропускают, `include_remote` в `/compute`).
-CLI: `python -m launcher --config g0 --episodes 2 --seed 0 --compute` (флаги →
-та же спецификация). Каждая ячейка: `/reset` → `/configure` (номинальная
-проверка + пин model_spec) → `/snapshot` → парные прогоны → `/snapshot/restore`.
-Probe: одна атака без парной ноги — `raw.probe=true`, манифест не пишется,
-метрики по умолчанию probe-записи пропускают (`include_probe` в `/compute`).
+  1000), `scenario_pairs` (явные пары style=tactic; ось целей перемножается
+  независимо); `allow_remote_llm` устарел и игнорируется — не-локальный
+  LLM-эндпоинт маркируется автоматически (пин в манифесте и записях, метрики
+  пропускают, `include_remote` в `/compute`). Прогон пиннит версию мира
+  (`world` + `dataset_hash`) в манифесте; снапшот пары — от мира.
+CLI: `python -m launcher --config g0 --goals refund_expired --episodes 2 --seed 0
+--compute` (флаги → та же спецификация). Каждая ячейка: `/reset` → `/configure`
+(номинальная проверка + пин model_spec) → `/snapshot` → парные прогоны →
+`/snapshot/restore`.
+Probe: одна атака без парной ноги — требует `goal`; `raw.probe=true`, манифест
+не пишется, метрики по умолчанию probe-записи пропускают (`include_probe` в
+`/compute`).
 
 ## ui_svc (порт 9410)
 
