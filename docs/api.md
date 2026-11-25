@@ -18,8 +18,8 @@
   журнал) доставляется в `filter_svc` POST /record изнутри shop_svc.
 - `GET /snapshot/{snapshot_id}` → снимок состояния (JSON).
 - `POST /snapshot/restore` `{snapshot_id: str}` → `{ok: true}`.
-- `GET /db/readonly` — описание подключения read-only к БД магазина для traffic_svc
-  (в dev — строка SQLAlchemy; у traffic_svc прямой читающий доступ разрешён схемой).
+- Строка подключения к БД магазина по HTTP не отдаётся: traffic_svc (прямой читающий
+  доступ разрешён схемой) берёт её только из env `LAB_SHOP_DB_URL`.
 
 ## traffic_svc (порт 9412)
 

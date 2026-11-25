@@ -4,6 +4,7 @@ journal integrity and snapshot/restore."""
 from __future__ import annotations
 
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
@@ -178,8 +179,10 @@ def test_snapshot_restore_restores_state(lab):
     assert db.state_hash(STATE.engine) == snap["state_hash"]
 
 
-def test_db_readonly_endpoint(lab):
-    info = lab.client.get("/db/readonly").json()
-    assert info["dialect"] == "sqlite"
-    assert info["readonly"] is True
-    assert info["url"].startswith("sqlite:///")
+def test_db_url_not_served(lab):
+    """Строка подключения к БД магазина по HTTP не отдаётся (#17)."""
+    assert lab.client.get("/db/readonly").status_code == 404
+    db_url = os.environ["LAB_SHOP_DB_URL"]
+    for route in lab.client.app.routes:
+        if "GET" in getattr(route, "methods", ()) and "{" not in route.path:
+            assert db_url not in lab.client.get(route.path).text, route.path

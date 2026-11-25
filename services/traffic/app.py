@@ -54,8 +54,10 @@ def run(body: RunEpisode) -> dict:
 
 
 def resolve_db_url() -> str:
-    """Строка подключения к БД магазина: env LAB_SHOP_DB_URL или shop_svc GET /db/readonly."""
+    """Строка подключения к БД магазина — только из env LAB_SHOP_DB_URL (секрет конфигурации, по HTTP не ходит)."""
     url = os.environ.get("LAB_SHOP_DB_URL")
-    if url:
-        return url
-    return Svc(SHOP_URL).get("/db/readonly")["url"]
+    if not url:
+        raise ValueError(
+            "LAB_SHOP_DB_URL не задан: traffic_svc читает БД магазина только по строке из env"
+        )
+    return url

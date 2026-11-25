@@ -457,11 +457,3 @@ def restore_snapshot(body: RestoreRequest) -> dict:
     STATE.episodes.clear()
     STATE.journal.writer("runner").emit("restore", {"snapshot_id": body.snapshot_id})
     return {"ok": True, "state_hash": db.state_hash(STATE.engine)}
-
-
-@app.get("/db/readonly")
-def db_readonly() -> dict:
-    """Read-only connection info of the shop DB for traffic_svc (dev: SQLAlchemy URL)."""
-    url = settings()["db_url"]
-    dialect = "postgresql" if url.startswith("postgresql") else "sqlite"
-    return {"url": url, "dialect": dialect, "readonly": True}
