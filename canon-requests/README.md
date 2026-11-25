@@ -66,4 +66,4 @@ canon-requests/
 
 | № | Заявка | Статус |
 | --- | --- | --- |
-| 001 | [001-queue-abandonment-rho0.md](pending/001-queue-abandonment-rho0.md) — ревизия модели очереди: возврат ухода клиентов и ρ₀-чувствительность | open |
+| 001 | [001-queue-abandonment-rho0.md](accepted/001-queue-abandonment-rho0.md) — ревизия модели очереди: возврат ухода клиентов и ρ₀-чувствительность | accepted — [dvarp#39](https://github.com/CloudNative-urfu/dvarp/pull/39) |

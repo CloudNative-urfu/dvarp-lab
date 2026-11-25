@@ -4,7 +4,7 @@
 - **Источник:** issue dvarp-lab#12 (аналитическая очередь), issue dvarp-lab#11
   (пин экономики C_churn), openspec change `metrics-costs` (ссылка в
   `openspec/changes/metrics-costs/proposal.md`)
-- **Статус:** open
+- **Статус:** accepted — канон ревизован PR https://github.com/CloudNative-urfu/dvarp/pull/39 (dvarp#39)
 
 ## Что сделано в dvarp-lab
 
