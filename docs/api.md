@@ -20,7 +20,6 @@
   /snapshot/restore сначала дожимают очередь и при недоступном filter отвечают 503.
 - `GET /snapshot/{snapshot_id}` → снимок состояния (JSON).
 - `POST /snapshot/restore` `{snapshot_id: str}` → `{ok: true}`.
-- `GET /db/readonly` — описание подключения read-only к БД магазина для traffic_svc
   (в dev — строка SQLAlchemy; у traffic_svc прямой читающий доступ разрешён схемой).
 
 ## traffic_svc (порт 9412)
@@ -64,7 +63,8 @@
   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
 - `POST /preview` (тело как у `/compute`) → `{groups: [{config_name, model_spec, final, raw}]}` —
   одноразовый расчёт по фильтрам: вычислить и вернуть, **ничего не пишет** в
-  metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E);
+  metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E,
+  C_ep, C_guard, E_attack, E_legal, ql_abandon + состояние аналитической очереди);
 - `GET /models` → `{models: [model_spec]}` — пины моделей, по которым есть записи;
 - `GET /metrics/{config_name}` → агрегаты по config × model;
 - `GET /configs` → `{configs: [...]}` — конфигурации, по которым есть прогоны

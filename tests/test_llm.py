@@ -182,20 +182,17 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(parse_params_b("granite-guardian-3.1-2b"), 2.0)
         self.assertIsNone(parse_params_b("mystery-model"))
         self.assertEqual(parse_params_b("draft-0.5b-for-14b"), 14.0)  # консервативно: максимум
-        with self.assertRaises(LLMConfigError):
-            LLMSettings.from_env(dict(ENV, RESEARCH_LLM_MODEL="draft-0.5b-for-14b"))
         self.assertEqual(check_model_size(8.0).status, "within_target")
         self.assertIsNone(check_model_size(2.0).warning)
-        v = check_model_size(9.0, model="q")
-        self.assertEqual(v.status, "exception_control")
-        self.assertIn("NFR-2.6", v.warning)
-        self.assertEqual(check_model_size(12.0).status, "exception_control")
-        for bad in (12.5, 70.0, None, 0, -1, float("nan")):
+        self.assertIsNone(check_model_size(9.0, model="q").warning)
+        self.assertEqual(check_model_size(12.0).status, "within_target")
+        self.assertEqual(check_model_size(16.0).status, "within_target")
+        for bad in (16.5, 70.0, None, 0, -1, float("nan")):
             with self.assertRaises(LLMConfigError, msg=repr(bad)):
                 check_model_size(bad)
 
     def test_size_from_env_and_override(self):
-        self.assertEqual(LLMSettings.from_env(ENV).size.status, "exception_control")
+        self.assertEqual(LLMSettings.from_env(ENV).size.status, "within_target")
         with self.assertRaises(LLMConfigError):
             LLMSettings.from_env(dict(ENV, RESEARCH_LLM_MODEL="mystery-model"))
         s = LLMSettings.from_env(

@@ -108,3 +108,40 @@ def test_probe_marks_raw_and_skips_manifest(tmp_path, monkeypatch):
     assert shop.calls[0][1] == "/reset"
     assert shop.calls[1][1] == "/configure"
     assert not list((tmp_path / "runs").glob("*/manifest.json"))  # манифест не пишется
+
+
+def test_attack_ids_unique_on_full_grid(tmp_path, monkeypatch):
+    """#20: атакующий id и сид — от полной сценарной сигнатуры; легальный id ключуется (стиль, i)."""
+    monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path / "runs"))
+    spec = {
+        **SPEC,
+        "styles": {"mode": "all"},
+        "tactics": {"mode": "all"},
+        "episodes": {"mode": "point", "point": 2},
+        "seeds": {"mode": "point", "point": 0},
+        "confirm": True,
+    }
+    svcs = {k: FakeSvc() for k in ("shop", "traffic", "attack", "metrics")}
+    manifest = run_campaign(spec, services=svcs)
+    styles, tactics = manifest["axes"]["styles"], manifest["axes"]["tactics"]
+    assert len(styles) > 1 and len(tactics) > 1
+    eps = [e for c in manifest["cells"] for e in c["episodes"]]
+    attack_ids = [e["attack_episode_id"] for e in eps]
+    assert len(attack_ids) == len(styles) * len(tactics) * 2 == len(set(attack_ids))
+    assert {e["legal_episode_id"] for e in eps} == {
+        f"{manifest['run_id']}-L{i}-{s}-s0" for s in styles for i in (1, 2)
+    }
+    attack_calls = [c[2] for c in svcs["attack"].calls if c[1] == "/run-episode"]
+    assert [c["episode_id"] for c in attack_calls] == attack_ids
+    assert len({c["seed"] for c in attack_calls}) == len(attack_calls)
+    # у каждой пары живы обе ноги
+    legal_calls = [c for c in svcs["traffic"].calls if c[1] == "/run-episode"]
+    assert len(legal_calls) == len(attack_calls)
+
+
+def test_attack_id_picks_up_new_axes():
+    from launcher.campaign import attack_episode_id
+
+    cell = {"config": "g0", "style": "patient", "tactic": "t", "goal": "refund", "seed": 3}
+    cell |= {"agent_model": "m", "attacker_model": None}
+    assert attack_episode_id("r", 1, cell) == "r-A1-patient-t-refund-s3"
