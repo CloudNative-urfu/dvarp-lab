@@ -3,6 +3,7 @@ import sqlite3
 
 import pytest
 
+from services.traffic.app import resolve_db_url
 from services.traffic.case import money, truthful_case
 from services.traffic.episode import MAX_TURNS, run_episode
 
@@ -245,3 +246,12 @@ def test_cassette_line_per_model_call(tmp_path):
             assert entry["role"] == "customer"
     # сырьё кассеты не остаётся в ответе эпизода
     assert "llm_calls" not in result
+
+
+def test_db_url_only_from_env(monkeypatch):
+    """traffic_svc не спрашивает строку подключения у shop_svc по HTTP (#17)."""
+    monkeypatch.delenv("LAB_SHOP_DB_URL", raising=False)
+    with pytest.raises(RuntimeError, match="LAB_SHOP_DB_URL"):
+        resolve_db_url()
+    monkeypatch.setenv("LAB_SHOP_DB_URL", "sqlite:///x.db")
+    assert resolve_db_url() == "sqlite:///x.db"

@@ -319,6 +319,15 @@ def test_snapshot_restore_restores_state(lab):
     assert db.state_hash(STATE.engine) == snap["state_hash"]
 
 
+def test_db_url_not_served(lab):
+    """Строка подключения к БД магазина по HTTP не отдаётся (#17)."""
+    assert lab.client.get("/db/readonly").status_code == 404
+    db_url = os.environ["LAB_SHOP_DB_URL"]
+    for route in lab.client.app.routes:
+        if "GET" in getattr(route, "methods", ()) and "{" not in route.path:
+            assert db_url not in lab.client.get(route.path).text, route.path
+
+
 def test_prompt_canary_leak_measured(lab, monkeypatch):
     """#10: канарейка в промпте; её появление в ответе агента — leak с номером хода."""
     import services.shop.app as shop_app
