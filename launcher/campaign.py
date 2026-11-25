@@ -40,7 +40,18 @@ def default_services() -> dict[str, Svc]:
         "traffic": Svc(TRAFFIC_URL),
         "attack": Svc(ATTACK_URL),
         "metrics": Svc(METRICS_URL),
+        "filter": Svc(FILTER_URL),
     }
+
+
+def _final_outcome(flt: Svc | None, episode_id: str) -> str | None:
+    """Structural outcome of a finished leg from filter episode_finals (#10)."""
+    if flt is None:
+        return None
+    try:
+        return (flt.get(f"/finals/{episode_id}") or {}).get("outcome")
+    except Exception:  # noqa: BLE001 — no final row (old filter, failed finalize): unknown
+        return None
 
 
 def _model_spec(name: str | None, role: str) -> ModelSpec:
@@ -86,6 +97,7 @@ def run_campaign(
         svcs["attack"],
         svcs["metrics"],
     )
+    flt = svcs.get("filter")
     camp = resolve_campaign(spec)
     cells = camp.cells()
     _, episodes_total = camp.volume()
@@ -157,6 +169,9 @@ def run_campaign(
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
             attack_id = attack_episode_id(run_id, i, cell)
+            legal["outcome"] = _final_outcome(
+                flt, f"{run_id}-L{i}-{cell['style']}-s{seed}"
+            ) or legal.get("outcome")
             attacked = attack.post(
                 "/run-episode",
                 {
@@ -172,6 +187,7 @@ def run_campaign(
                 },
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
+            attacked["outcome"] = _final_outcome(flt, attack_id) or attacked.get("outcome")
             cell_result["episodes"].append(
                 {
                     "episode": i,

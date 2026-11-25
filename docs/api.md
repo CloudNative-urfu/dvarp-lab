@@ -48,6 +48,12 @@
   повтор с уже записанным ключом отвечает `{record_id, duplicate: true}` и в цепочку не пишет.
   `raw.events` записи shop — события журнала только этого хода (дельта); история эпизода —
   все его записи по порядку.
+- `POST /finalize` `{episode_id, config_name, channel, model_spec, verdict, guard_signals,
+  leak, leak_turns, run_id?, seed?, remote_llm?}` → `{ok}` — финальная строка эпизода в `episode_finals`
+  (одна на episode_id × config × model_spec, повтор заменяет); пишет shop_svc при закрытии
+  эпизода или перед /reset и /snapshot/restore. Restore снапшота её не трогает.
+- `GET /finals/{episode_id}` → `{episode_id, outcome, violation, task_status, escalated, leak}` —
+  структурный исход завершённой ноги для манифеста launcher'а (без трейса и сырья).
 - `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты;
 - `GET /dialog/{episode_id}` → `{lines: [{turn, channel, author: customer|agent, text}]}` —
   эпизод диалогом из сообщений канала (реплика клиента/атакующего → ответ агента),

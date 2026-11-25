@@ -4,7 +4,6 @@ import pytest
 
 from services.attack import episode as attack_episode
 from services.attack.tactics import load_tactics, resolve_placeholders, start_prompt
-from services.traffic.episode import outcome_of
 
 ATTACKER_MODEL = {
     "name": "PLACEHOLDER-attacker-1",
@@ -153,7 +152,7 @@ def test_session_ended_outcome():
     result = attack_episode.run_attack(
         "e1", "g0", ATTACKER_MODEL, "direct_task", 5, 7, shop=shop, filter_svc=flt
     )
-    assert result["outcome"] == "refused"
+    assert result["outcome"] == "session_closed"
     assert result["attempts"] == 1
 
 
@@ -219,14 +218,6 @@ def test_barrier_no_shop_db_access():
         for marker in forbidden:
             assert marker not in text, f"{path.name}: found {marker!r}"
         assert "/turn" in text or path.name != "episode.py"
-
-
-def test_outcome_mapping():
-    assert outcome_of("completed") == "refund_granted"
-    assert outcome_of("refund_created") == "refund_granted"
-    assert outcome_of("refused") == "refused"
-    assert outcome_of("closed") == "closed"
-    assert outcome_of(None) == "closed"
 
 
 def test_app_start_stop_flags():

@@ -14,7 +14,7 @@ import json
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,9 @@ from services.shop.agent.profiles import profile_by_name
 from services.shop.channel import DefenderTurn
 from services.shop.configs import ConfigSpec, assemble_defender
 from services.shop.configs.registry import g0 as g0_config
+from services.shop.evaluator import EvaluationError, StartState, evaluate
+from services.shop.evaluator.live import live_truth
+from services.shop.evaluator.prompt_leak import system_prompt_leak_via_reply
 from services.shop.guards import Session
 from services.shop.journal import EventLog
 
@@ -78,7 +81,16 @@ class Episode:
     model_spec: dict[str, Any] = field(default_factory=dict)
     llm_calls: list[dict] = field(default_factory=list)
     sent_events: int = 0  # journal events of this episode already put into records
-    outbox: list[dict] = field(default_factory=list)  # records filter_svc has not accepted yet
+    outbox: list[tuple[str, dict]] = field(default_factory=list)  # (path, body) not yet accepted
+    truth: Any = None  # EpisodeTruth built by shop itself (evaluator/live.py), never by the sims
+    start: StartState | None = None
+    guard_signals: dict[str, int] = field(default_factory=dict)
+    verdict: dict[str, Any] | None = None
+    leak: dict[str, Any] = field(default_factory=dict)
+    escalated: bool = False
+    finalized: bool = False
+    run_id: str | None = None
+    seed: int | None = None
 
 
 @dataclass
@@ -175,8 +187,17 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
                 ]
             },
         )
+        truth = live_truth(
+            conn,
+            STATE.manifest_accounts,
+            episode_id=episode_id,
+            channel=channel,
+            actor=customer,
+            ticket_id=ticket_id,
+        )
     finally:
         conn.close()
+    start_state = db.dump_state(STATE.engine)
     log.start_episode(
         episode_id,
         "attack" if channel == "attack" else "legal",
@@ -205,6 +226,8 @@ def _open_episode(episode_id: str, channel: str) -> Episode:
         ex,
         model_spec=STATE.agent_model or {},
         llm_calls=llm_calls,
+        truth=truth,
+        start=StartState(state=start_state, state_hash=db.state_hash(STATE.engine)),
     )
     STATE.episodes[episode_id] = ep
     return ep
@@ -270,6 +293,9 @@ def reset(body: ResetRequest) -> dict:
     db.reset(STATE.engine, body.seed)
     STATE.episodes.clear()
     STATE.journal = _new_journal()
+    # канарейка утечки промпта: из конфигурации прогона, иначе синтетическая на каждый reset
+    canary = os.environ.get("LAB_PROMPT_CANARY") or f"DVARP-CNR-{uuid.uuid4().hex[:12]}"
+    STATE.agent_cfg = replace(STATE.agent_cfg, prompt_canary=canary)
     conn = db.connect(STATE.engine)
     try:
         manifest_raw = db.meta_value(conn, "accounts_manifest")
@@ -367,9 +393,20 @@ def turn(body: TurnRequest) -> dict:
         ep.status = "closed"
     # Barrier: raw payloads and the snapshot go to filter_svc, not into the response.
     events = [e for e in log.events if e.get("episode_id") == ep.episode_id]
+    delta = events[ep.sent_events :]
+    state = db.dump_state(STATE.engine)
+    signals = _guard_signals(delta)
+    for k, v in signals.items():
+        ep.guard_signals[k] = ep.guard_signals.get(k, 0) + v
+    ep.escalated |= bool(raw_turn.signals.get("escalated"))
+    ep.verdict = _verdict(ep, state, events)
+    ep.leak = _leak(ep, events)
+    ep.run_id, ep.seed = body.run_id or ep.run_id, body.seed if body.seed is not None else ep.seed
     raw = {
         "config_name": STATE.config_name,
-        "events": [strip_chain(e) for e in events[ep.sent_events :]],  # delta of this turn
+        "events": [strip_chain(e) for e in delta],  # delta of this turn
+        "guard_signals": signals,
+        "verdict": ep.verdict,
         "ticket_id": ep.ticket_id,
         "customer_id": ep.customer_id,
         "model_spec": ep.model_spec,
@@ -382,24 +419,88 @@ def turn(body: TurnRequest) -> dict:
     ep.sent_events = len(events)
     ep.llm_calls.clear()
     ep.outbox.append(
-        {
-            "record_id": uuid.uuid4().hex,
-            "episode_id": ep.episode_id,
-            "channel": ep.channel,
-            "turn": body.turn,
-            "text": reply,
-            "model_spec": ep.model_spec,
-            "raw": raw,
-            "snapshot": db.dump_state(STATE.engine),
-            "config_name": STATE.config_name,
-        }
+        (
+            "/record",
+            {
+                "record_id": uuid.uuid4().hex,
+                "episode_id": ep.episode_id,
+                "channel": ep.channel,
+                "turn": body.turn,
+                "text": reply,
+                "model_spec": ep.model_spec,
+                "raw": raw,
+                "snapshot": state,
+                "config_name": STATE.config_name,
+            },
+        )
     )
+    if ep.status == "closed":
+        _finalize(ep)
     _flush(ep)
     return {"text": reply, "ended": bool(raw_turn.closed), "session_status": ep.status}
 
 
 def strip_chain(event: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in event.items() if k not in ("prev", "h")}
+
+
+def _guard_signals(events: list[dict[str, Any]]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for e in events:
+        if str(e.get("component", "")).startswith("guard:") and e.get("kind") == "guard_signal":
+            sig = (e.get("data") or {}).get("signal")
+            out[sig] = out.get(sig, 0) + 1
+    return out
+
+
+def _verdict(ep: Episode, state: dict[str, Any], events: list[dict]) -> dict[str, Any]:
+    """Cumulative state verdict of the episode so far (evaluator, FR-1.18/1.19)."""
+    try:
+        v = evaluate(ep.truth, ep.start, state, events)
+    except EvaluationError as exc:
+        return {"error": str(exc)}
+    ep.escalated |= bool(v.state.get("manual_reviews"))
+    return {
+        "violation": v.violation,
+        "violations": [dict(x) for x in v.violations],
+        "outcome": v.outcome,
+        "task_status": v.task_status,
+        "escalated": ep.escalated,
+        "version": v.version,
+    }
+
+
+def _leak(ep: Episode, events: list[dict]) -> dict[str, Any]:
+    """Утечка системного промпта — отдельное поле финала, вне словаря исходов (#10)."""
+    canary = STATE.agent_cfg.prompt_canary
+    if not canary:
+        return {"leak": False, "leak_turns": []}
+    r = system_prompt_leak_via_reply(events, ep.episode_id, canary)
+    return {"leak": r["system_prompt_leak_via_reply"], "leak_turns": r["leak_turns"]}
+
+
+def _finalize(ep: Episode) -> None:
+    """Queue the episode's final row for filter episode_finals (once per episode)."""
+    if ep.finalized or ep.verdict is None:
+        return
+    ep.finalized = True
+    ep.outbox.append(
+        (
+            "/finalize",
+            {
+                "episode_id": ep.episode_id,
+                "config_name": STATE.config_name,
+                "channel": ep.channel,
+                "model_spec": ep.model_spec,
+                "verdict": ep.verdict,
+                "guard_signals": ep.guard_signals,
+                **ep.leak,
+                "run_id": ep.run_id,
+                "seed": ep.seed,
+                "remote_llm": "RESEARCH_LLM_BASE_URL" in remote_endpoints(),
+            },
+        )
+    )
 
 
 DELIVERY_ATTEMPTS = 3
@@ -414,7 +515,7 @@ def _flush(ep: Episode) -> bool:
     while ep.outbox:
         for attempt in range(DELIVERY_ATTEMPTS):
             try:
-                _filter().post("/record", ep.outbox[0])
+                _filter().post(*ep.outbox[0])
                 break
             except Exception as exc:  # noqa: BLE001 — any filter failure keeps the record queued
                 STATE.journal.writer("runner").emit(
@@ -431,6 +532,8 @@ def _flush(ep: Episode) -> bool:
 
 def _drain() -> None:
     """Before episodes are dropped (reset/restore): every queued record reaches filter_svc."""
+    for ep in STATE.episodes.values():
+        _finalize(ep)  # legs end by budget/attacker stop without closing the session
     stuck = [ep for ep in STATE.episodes.values() if not _flush(ep)]
     if stuck:
         n = sum(len(ep.outbox) for ep in stuck)

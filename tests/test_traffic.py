@@ -108,7 +108,7 @@ def test_episode_reaches_outcome(tmp_path, style):
         "e1", "g0", AGENT_MODEL, style, 7, shop=shop, db_url=make_db(tmp_path), filter_svc=flt
     )
     assert result == {
-        "outcome": "refund_granted",
+        "outcome": "session_closed",
         "turns": 2,
         "transcript_ids": ["rec-1", "rec-2"],
     }
@@ -136,7 +136,7 @@ def test_style_changes_tone(tmp_path):
     r2 = run_episode(
         "e2", "g0", AGENT_MODEL, "irritated", 7, shop=shop2, db_url=url, filter_svc=flt2
     )
-    assert r1["outcome"] == r2["outcome"] == "refund_granted"
+    assert r1["outcome"] == r2["outcome"] == "session_closed"
     assert shop1.turns[0]["text"] != shop2.turns[0]["text"]
     assert shop1.turns[1]["text"] != shop2.turns[1]["text"]
 
@@ -180,7 +180,7 @@ def test_cassette_line_per_model_call(tmp_path):
         filter_svc=flt,
         customer_complete=fake_complete,
     )
-    assert result["outcome"] == "refund_granted"
+    assert result["outcome"] == "session_closed"
     assert len(calls) == result["turns"] - 1  # opening is scripted, дальше — модель
     for i, rec in enumerate(flt.records):
         assert len(rec["raw"]["llm_calls"]) == (0 if i == 0 else 1)
