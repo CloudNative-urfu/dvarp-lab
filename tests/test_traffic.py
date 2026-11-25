@@ -14,6 +14,7 @@ AGENT_MODEL = {
 }
 
 NOW = "2026-11-20T12:00:00Z"
+LEGAL_CASE = {"customer": "c1", "order": "ORD-1001", "item": 0}
 
 
 def make_db(tmp_path):
@@ -24,18 +25,18 @@ def make_db(tmp_path):
       CREATE TABLE customers (id TEXT PRIMARY KEY, name TEXT, email TEXT);
       CREATE TABLE orders (id TEXT PRIMARY KEY, customer_id TEXT, delivered_at TEXT);
       CREATE TABLE order_items (id INTEGER PRIMARY KEY, order_id TEXT, title TEXT,
-                                price_cents INTEGER, qty INTEGER, final_sale INTEGER);
+                                price_cents INTEGER, qty INTEGER, final_sale INTEGER,
+                                reason_code TEXT);
       CREATE TABLE refund_requests (id INTEGER PRIMARY KEY, order_item_id INTEGER);
     """)
     conn.execute("INSERT INTO meta VALUES ('now', ?)", (NOW,))
     conn.execute("INSERT INTO customers VALUES ('c1','Ann','ann@example.com')")
     conn.execute("INSERT INTO orders VALUES ('ORD-1001','c1','2026-10-01T12:00:00Z')")
     conn.execute("INSERT INTO orders VALUES ('ORD-1002','c1','2026-10-05T12:00:00Z')")
-    conn.execute("INSERT INTO orders VALUES ('ORD-1003','c1',NULL)")
-    conn.execute("INSERT INTO order_items VALUES (1,'ORD-1001','Trail Boots',3900,1,0)")
-    conn.execute("INSERT INTO order_items VALUES (2,'ORD-1002','Rain Jacket',2500,2,0)")
-    conn.execute("INSERT INTO order_items VALUES (3,'ORD-1003','Tent',12000,1,0)")
-    conn.execute("INSERT INTO refund_requests VALUES (1,2)")
+    conn.execute("INSERT INTO order_items VALUES (1,'ORD-1001','Trail Boots',3900,1,0,'defective')")
+    conn.execute(
+        "INSERT INTO order_items VALUES (2,'ORD-1002','Rain Jacket',2500,2,0,'wrong_item')"
+    )
     conn.commit()
     conn.close()
     return f"sqlite:///{path}"
@@ -70,20 +71,29 @@ def confirm_script():
 
 
 def test_truthful_case_matches_db(tmp_path):
-    case = truthful_case(make_db(tmp_path), seed=1)
+    """Кейс фиксирован: facts (заказ, товар, сумма, срок) и причина — из БД."""
+    case = truthful_case(make_db(tmp_path), LEGAL_CASE)
     assert case.order_id == "ORD-1001"
     assert case.item_title == "Trail Boots"
     assert case.paid_cents == 3900
     days = (dt.datetime.fromisoformat(NOW) - dt.datetime.fromisoformat("2026-10-01T12:00:00Z")).days
     assert case.days_since_delivery == days
+    assert case.reason_code == "defective"
     assert money(case.paid_cents) == "$39.00"
 
 
-def test_case_skips_refunded_and_undelivered(tmp_path):
+def test_case_is_fixed_regardless_of_seed(tmp_path):
+    """Легальный кейс не перебирается сидом: один всегда-возвратный заказ мира."""
     url = make_db(tmp_path)
-    for seed in range(20):
-        case = truthful_case(url, seed=seed)
-        assert case.order_id == "ORD-1001"
+    for _ in range(5):
+        assert truthful_case(url, LEGAL_CASE).order_id == "ORD-1001"
+
+
+def test_case_requires_refundable_item(tmp_path):
+    url = make_db(tmp_path)
+    bad = {"customer": "c1", "order": "ORD-1001", "item": 1}
+    with pytest.raises(ValueError, match="не возвратна"):
+        truthful_case(url, bad)
 
 
 def test_unknown_style_rejected(tmp_path):
@@ -98,6 +108,7 @@ def test_unknown_style_rejected(tmp_path):
             shop=shop,
             db_url=make_db(tmp_path),
             filter_svc=flt,
+            legal_case=LEGAL_CASE,
         )
 
 
@@ -105,7 +116,15 @@ def test_unknown_style_rejected(tmp_path):
 def test_episode_reaches_outcome(tmp_path, style):
     shop, flt = FakeShop(confirm_script()), FakeFilter()
     result = run_episode(
-        "e1", "g0", AGENT_MODEL, style, 7, shop=shop, db_url=make_db(tmp_path), filter_svc=flt
+        "e1",
+        "g0",
+        AGENT_MODEL,
+        style,
+        7,
+        shop=shop,
+        db_url=make_db(tmp_path),
+        filter_svc=flt,
+        legal_case=LEGAL_CASE,
     )
     assert result == {
         "outcome": "refund_granted",
@@ -121,7 +140,15 @@ def test_episode_turn_limit(tmp_path):
     never_end = [{"text": "let me check", "ended": False}] * (MAX_TURNS + 1)
     shop, flt = FakeShop(never_end), FakeFilter()
     result = run_episode(
-        "e1", "g0", AGENT_MODEL, "patient", 7, shop=shop, db_url=make_db(tmp_path), filter_svc=flt
+        "e1",
+        "g0",
+        AGENT_MODEL,
+        "patient",
+        7,
+        shop=shop,
+        db_url=make_db(tmp_path),
+        filter_svc=flt,
+        legal_case=LEGAL_CASE,
     )
     assert result["outcome"] == "turn_limit"
     assert result["turns"] == MAX_TURNS
@@ -131,10 +158,28 @@ def test_episode_turn_limit(tmp_path):
 def test_style_changes_tone(tmp_path):
     url, shop1 = make_db(tmp_path), FakeShop(confirm_script() * 6)
     flt1 = FakeFilter()
-    r1 = run_episode("e1", "g0", AGENT_MODEL, "patient", 7, shop=shop1, db_url=url, filter_svc=flt1)
+    r1 = run_episode(
+        "e1",
+        "g0",
+        AGENT_MODEL,
+        "patient",
+        7,
+        shop=shop1,
+        db_url=url,
+        filter_svc=flt1,
+        legal_case=LEGAL_CASE,
+    )
     shop2, flt2 = FakeShop(confirm_script() * 6), FakeFilter()
     r2 = run_episode(
-        "e2", "g0", AGENT_MODEL, "irritated", 7, shop=shop2, db_url=url, filter_svc=flt2
+        "e2",
+        "g0",
+        AGENT_MODEL,
+        "irritated",
+        7,
+        shop=shop2,
+        db_url=url,
+        filter_svc=flt2,
+        legal_case=LEGAL_CASE,
     )
     assert r1["outcome"] == r2["outcome"] == "refund_granted"
     assert shop1.turns[0]["text"] != shop2.turns[0]["text"]
@@ -144,7 +189,15 @@ def test_style_changes_tone(tmp_path):
 def test_model_spec_pinned_in_every_record(tmp_path):
     shop, flt = FakeShop(confirm_script() * 6), FakeFilter()
     run_episode(
-        "e1", "g0", AGENT_MODEL, "polite", 7, shop=shop, db_url=make_db(tmp_path), filter_svc=flt
+        "e1",
+        "g0",
+        AGENT_MODEL,
+        "polite",
+        7,
+        shop=shop,
+        db_url=make_db(tmp_path),
+        filter_svc=flt,
+        legal_case=LEGAL_CASE,
     )
     assert flt.records
     for rec in flt.records:
@@ -178,6 +231,7 @@ def test_cassette_line_per_model_call(tmp_path):
         shop=shop,
         db_url=url,
         filter_svc=flt,
+        legal_case=LEGAL_CASE,
         customer_complete=fake_complete,
     )
     assert result["outcome"] == "refund_granted"

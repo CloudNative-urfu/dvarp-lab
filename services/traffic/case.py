@@ -1,11 +1,18 @@
-"""Правдивый запрос на возврат: прямое read-only чтение БД магазина."""
+"""Правдивый запрос на возврат: прямое read-only чтение БД магазина.
+
+Легальный кейс фиксирован (dvarp-lab#6): один всегда-возвратный заказ клиента A
+из манифеста мира — сид не перебирает заказы. Все факты (заказ, товар, сумма,
+срок доставки) берутся из БД; reason_code — замороженная правда мира, читается
+из строки позиции, рандом прогона причину не выбирает (#15).
+"""
 
 from __future__ import annotations
 
 import datetime as dt
-import random
 from dataclasses import dataclass, field
 from typing import Any
+
+from sqlalchemy import text
 
 from lab.db import make_engine
 
@@ -41,32 +48,40 @@ def _days_between(earlier: str, later: str) -> int:
     return max(0, (b - a).days)
 
 
-def truthful_case(db_url: str, seed: int) -> Case:
-    """Правдивый кейс из БД магазина: доставленный заказ, позиция без заявки на возврат.
-
-    Все факты (заказ, товар, сумма, срок доставки) берутся из БД; reason_code —
-    детерминированный выбор от seed (причина в БД не хранится).
-    """
+def truthful_case(db_url: str, legal_case: dict[str, Any]) -> Case:
+    """Правдивый кейс легального эпизода: фиксированный заказ мира (legal_case
+    манифеста), позиция без заявки на возврат; факты и причина — из БД.
+    Кейс обязан быть возвратным: заказ доставлен, причина заморожена в данных,
+    исторических возвратов по позиции нет."""
+    order_id, item_index = legal_case["order"], int(legal_case.get("item", 0))
     engine = make_engine(db_url)
     with engine.connect() as conn:
-        rows = conn.exec_driver_sql(
-            "SELECT o.id, oi.title, oi.price_cents, oi.qty, o.delivered_at "
-            "FROM orders o JOIN order_items oi ON oi.order_id = o.id "
-            "WHERE o.delivered_at IS NOT NULL AND oi.price_cents > 0 "
-            "AND NOT EXISTS (SELECT 1 FROM refund_requests r WHERE r.order_item_id = oi.id) "
-            "ORDER BY o.id, oi.id"
+        rows = conn.execute(
+            text(
+                "SELECT oi.title, oi.price_cents, oi.qty, o.delivered_at, oi.reason_code "
+                "FROM orders o JOIN order_items oi ON oi.order_id = o.id "
+                "WHERE o.id = :oid AND o.delivered_at IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM refund_requests r WHERE r.order_item_id = oi.id) "
+                "ORDER BY oi.id"
+            ),
+            {"oid": order_id},
         ).fetchall()
-        now = conn.exec_driver_sql("SELECT value FROM meta WHERE key = 'now'").fetchone()
-    if not rows or now is None:
-        raise ValueError("в БД магазина нет правдивого кейса (доставленные заказы без возвратов)")
-    rng = random.Random(seed)
-    order_id, title, price_cents, qty, delivered_at = rows[rng.randrange(len(rows))]
+        now = conn.execute(text("SELECT value FROM meta WHERE key = 'now'")).fetchone()
+    if now is None:
+        raise ValueError("в БД магазина нет константы времени симуляции (meta.now)")
+    if item_index >= len(rows):
+        raise ValueError(
+            f"легальный кейс {order_id!r}: позиция #{item_index} не возвратна или отсутствует"
+        )
+    title, price_cents, qty, delivered_at, reason_code = rows[item_index]
+    if not reason_code:
+        raise ValueError(f"легальный кейс {order_id!r}: причина возврата не заморожена в данных")
     return Case(
         order_id=order_id,
         item_title=title,
         paid_cents=price_cents * qty,
         days_since_delivery=_days_between(delivered_at, now[0]),
-        reason_code=rng.choice(["defective", "wrong_item", "not_as_described", "changed_mind"]),
+        reason_code=reason_code,
         facts={"now": now[0]},
     )
 

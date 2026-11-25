@@ -21,10 +21,10 @@
 
 ## traffic_svc
 
-- [ ] `services/traffic/case.py` — фиксированный кейс из манифеста мира,
+- [x] `services/traffic/case.py` — фиксированный кейс из манифеста мира,
       reason_code из БД, без сида
-- [ ] `services/traffic/episode.py` — кейс не перебирается сидом (стиль — да)
-- [ ] тесты `tests/test_traffic.py` — кейс фиксирован, причина из данных
+- [x] `services/traffic/episode.py` — кейс не перебирается сидом (стиль — да)
+- [x] тесты `tests/test_traffic.py` — кейс фиксирован, причина из данных
 
 ## attack_svc и ось целей
 
