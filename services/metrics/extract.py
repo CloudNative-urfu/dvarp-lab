@@ -7,7 +7,12 @@ is never read here — only structured fields inside raw:
   estimator, taken from the highest-numbered turn that carries a verdict;
 - raw.guard_signals: {signal: count} per turn, summed over the episode; "detected" = a
   flag/block signal fired at least once (DETECT_SIGNALS of the prototype);
-- raw.run_id / raw.seed: optional run grouping for seed_spread.
+- raw.run_id / raw.seed: optional run grouping for seed_spread;
+- raw.events: defender-borne compute costs per episode, post-hoc over saved journals
+  (issue #11, NFR-2.9): agent llm_call tokens → C_ep (agent tariffs of the economics pin);
+  guard:* signal/error costs → C_guard (guard tariffs; non-LLM guards cost $0 — their
+  cpu/latency stay in the journal as time, never converted to money). Attacker-side
+  llm_call events are self-limited (NFR-2.9) and are excluded from both.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import formulas
+from . import economics, formulas
 
 
 @dataclass(frozen=True)
@@ -37,10 +42,37 @@ class Episode:
     run_id: str | None = None
     seed: int | None = None
     remote: bool = False
+    c_ep: float = 0.0  # USD: defender agent compute of the episode (economics pin)
+    c_guard: float = 0.0  # USD: guardrail compute of the episode (economics pin)
+    guard_cpu_ms: float = 0.0  # reported as time, never converted to money (#11)
 
 
 def _model_key(model_spec: dict[str, Any]) -> str:
     return json.dumps(model_spec, sort_keys=True, ensure_ascii=False)
+
+
+def _episode_costs(events: list[Any]) -> dict[str, float]:
+    """Defender-borne compute costs of one episode from its saved journal events (NFR-2.9).
+
+    - C_ep: agent `llm_call` cost dicts at the agent tariffs of the economics pin;
+    - C_guard: `guard:*` signal/error cost dicts at the guard tariffs; CPU seconds of
+      non-LLM guards are summed as time and never converted to money.
+    """
+    pin = economics.load_economics()
+    agent_t, guard_t = pin["agent_tariff"], pin["guard_tariff"]
+    c_ep = c_guard = cpu_ms = 0.0
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        component, cost = ev.get("component"), ev.get("cost") or {}
+        if not isinstance(cost, dict):
+            continue
+        if component == "agent" and ev.get("kind") == "llm_call":
+            c_ep += economics.money(cost, agent_t)
+        elif isinstance(component, str) and component.startswith("guard:"):
+            c_guard += economics.money(cost, guard_t)
+            cpu_ms += float(cost.get("cpu_ms") or 0.0)
+    return {"c_ep": c_ep, "c_guard": c_guard, "guard_cpu_ms": cpu_ms}
 
 
 def episodes_of(
@@ -69,6 +101,9 @@ def episodes_of(
                 "episode_id": row.episode_id,
                 "channel": row.channel,
                 "signals": {},
+                "c_ep": 0.0,
+                "c_guard": 0.0,
+                "guard_cpu_ms": 0.0,
             },
         )
         raw = row.raw or {}
@@ -83,6 +118,10 @@ def episodes_of(
         for opt in ("run_id", "seed"):
             if opt in raw:
                 ep[opt] = raw[opt]
+        costs = _episode_costs(raw.get("events") or [])
+        ep["c_ep"] += costs["c_ep"]
+        ep["c_guard"] += costs["c_guard"]
+        ep["guard_cpu_ms"] += costs["guard_cpu_ms"]
     out = []
     for key, ep in sorted(by_key.items()):
         if not include_remote and ep["episode_id"] in remote_ids:
@@ -104,6 +143,9 @@ def episodes_of(
                 run_id=ep.get("run_id"),
                 seed=ep.get("seed"),
                 remote=bool(ep.get("remote")),
+                c_ep=ep["c_ep"],
+                c_guard=ep["c_guard"],
+                guard_cpu_ms=ep["guard_cpu_ms"],
             )
         )
     return out
@@ -126,6 +168,9 @@ class Aggregate:
     V_n: int
     R: float
     E: float
+    c_ep: float  # mean defender agent compute, USD per episode (economics pin)
+    c_guard: float  # mean guardrail compute, USD per episode (economics pin)
+    guard_cpu_ms: float  # mean guardrail CPU, ms per episode (time, never money)
     detection: dict[str, Any] = field(default_factory=dict)
 
     def as_inputs(self, config: str | None = None) -> formulas.Inputs:
@@ -138,6 +183,8 @@ class Aggregate:
             V_n=self.V_n,
             R=self.R,
             E=self.E,
+            C_ep=self.c_ep,
+            C_guard=self.c_guard,
         )
 
 
@@ -151,6 +198,7 @@ def aggregate(eps: list[Episode]) -> Aggregate:
     v_k = sum(e.violation for e in att)
     r_k = sum(e.task_status == "unjustified_refusal" for e in legal)
     e_k = sum(e.escalated for e in eps)
+    mean = lambda attr: sum(getattr(e, attr) for e in eps) / n if n else 0.0
     return Aggregate(
         config=eps[0].config,
         model_spec=eps[0].model_spec,
@@ -165,6 +213,9 @@ def aggregate(eps: list[Episode]) -> Aggregate:
         V_n=n_a,
         R=r_k / n_l if n_l else 0.0,
         E=e_k / n if n else 0.0,
+        c_ep=mean("c_ep"),
+        c_guard=mean("c_guard"),
+        guard_cpu_ms=mean("guard_cpu_ms"),
         detection=formulas.detection([e.detected for e in att], [e.detected for e in legal]),
     )
 

@@ -1,15 +1,16 @@
 """Golden tests of the metric formulas copied from dvarp-prototype @ d5828df.
 
-Synthetic configs with known answers (base prices C_refuse=15, C_manual=6; w_A=0.5):
+Synthetic configs with known answers (base prices C_refuse=15, C_manual=2 — the pinned
+C_human, issue #11; w_A=0.5):
 
 - g0 (reference): V=0.4, R=0, E=0;
-- g_proc: V=0, R=0, E=0.1  → L* = (0.5·0·15 + 0.1·6) / (0.5·0.4) = 3.0, threshold;
-- g_in:   V=0, R=0.1, E=0.1 → L* = (0.5·0.1·15 + 0.1·6) / 0.2 = 6.75, threshold;
+- g_proc: V=0, R=0, E=0.1  → L* = (0.1·2) / (0.5·0.4) = 1.0, threshold;
+- g_in:   V=0, R=0.1, E=0.1 → L* = (0.5·0.1·15 + 0.1·2) / 0.2 = 4.75, threshold;
 - g_free: V=0, R=0, E=0    → numerator = 0 → pays_at_any_price, L* = 0;
 - g_same: V=0.4            → no_safety_gain (ΔV = 0);
 - g_neg:  V=0.5            → more_violations (ΔV < 0).
 
-Price bounds (g_proc): low (5, 3) → L* = 0.3/0.2 = 1.5; high (40, 15) → L* = 1.5/0.2 = 7.5.
+Price bounds (g_proc): low (5, 1) → L* = 0.1/0.2 = 0.5; high (40, 15) → L* = 1.5/0.2 = 7.5.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ GOLDEN = {
     "g_same": inp("g_same", 0.4),
     "g_neg": inp("g_neg", 0.5),
 }
-L_STAR_GOLDEN = {"g_proc": 3.0, "g_in": 6.75, "g_free": 0.0}
+L_STAR_GOLDEN = {"g_proc": 1.0, "g_in": 4.75, "g_free": 0.0}
 STATUS_GOLDEN = {
     "g_proc": "threshold",
     "g_in": "threshold",
@@ -62,13 +63,13 @@ def test_reference_is_itself():
 
 def test_pays_at_threshold():
     res = formulas.l_star(GOLDEN["g_proc"], REF, formulas.base_prices())
-    assert not formulas.pays_at(res, 3.0)
-    assert formulas.pays_at(res, 3.0 + 1e-9)
+    assert not formulas.pays_at(res, 1.0)
+    assert formulas.pays_at(res, 1.0 + 1e-9)
 
 
 def test_delta_net():
-    # ΔNet(g_proc) = 0.5·0.4·L_viol − 0.6: zero exactly at the golden threshold.
-    assert formulas.delta_net(GOLDEN["g_proc"], REF, formulas.base_prices(), 3.0) == pytest.approx(
+    # ΔNet(g_proc) = 0.5·0.4·L_viol − 0.2: zero exactly at the golden threshold.
+    assert formulas.delta_net(GOLDEN["g_proc"], REF, formulas.base_prices(), 1.0) == pytest.approx(
         0.0
     )
     assert formulas.delta_net(GOLDEN["g_proc"], REF, formulas.base_prices(), 10.0) > 0
@@ -79,8 +80,8 @@ def test_bounds_robust_and_span():
         {k: GOLDEN["g_proc"] for k in ("low", "base", "high")},
         {k: REF for k in ("low", "base", "high")},
     )
-    assert be["bounds"]["low"]["L_star"] == pytest.approx(1.5)
-    assert be["bounds"]["base"]["L_star"] == pytest.approx(3.0)
+    assert be["bounds"]["low"]["L_star"] == pytest.approx(0.5)
+    assert be["bounds"]["base"]["L_star"] == pytest.approx(1.0)
     assert be["bounds"]["high"]["L_star"] == pytest.approx(7.5)
     assert be["statuses_over_bounds"] == ["threshold"]
     assert be["prices_robust"] is True
@@ -90,8 +91,8 @@ def test_bounds_robust_and_span():
 def test_bounds_not_robust():
     # Status flips between pays_at_any_price and threshold over the price bounds:
     # refuse term grows with C_refuse, manual term (negative here) shrinks with C_manual.
-    ref_busy = inp("g0", 0.4, E=1.0)
-    cheap = inp("g_cheap", 0.2, R=1.0, E=0.0)
+    ref_busy = inp("g0", 0.4, R=0.4, E=0.4)
+    cheap = inp("g_cheap", 0.2, R=0.0, E=1.0)
     be = formulas.bounds(
         {k: cheap for k in ("low", "base", "high")}, {k: ref_busy for k in ("low", "base", "high")}
     )

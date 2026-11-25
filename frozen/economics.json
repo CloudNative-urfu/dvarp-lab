@@ -1,0 +1,17 @@
+{
+  "schema": "darp-economics-1",
+  "name": "economics",
+  "notes": "Economic pin (issue #11): declared market-average tariffs, not measured; sensitivity scales all prices together (±x2 / x0.5). p_att is a scenario constant of the real-shop attacker share (lab mix w_A=0.5 is internal and never fed to the queue model directly). C_churn and p_att are consumed by the queue model (#12).",
+  "agent_tariff": {
+    "input_per_million": 0.5,
+    "output_per_million": 1.5
+  },
+  "guard_tariff": {
+    "input_per_million": 0.15,
+    "output_per_million": 0.15
+  },
+  "C_human": 2.0,
+  "C_churn": 20.0,
+  "p_att_scenarios": [0.01, 0.03, 0.1],
+  "price_sensitivity_factors": [0.5, 2.0]
+}
