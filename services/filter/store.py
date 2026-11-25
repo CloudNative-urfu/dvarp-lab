@@ -60,9 +60,14 @@ def chain() -> Chain:
     return Chain(settings.chain_path)
 
 
+def has_record(session: Session, record_id: str) -> bool:
+    return session.query(Turn.id).filter(Turn.record_id == record_id).first() is not None
+
+
 def record_turn(
     session: Session,
     *,
+    record_id: str | None = None,
     episode_id: str,
     config_name: str,
     channel: str,
@@ -73,7 +78,7 @@ def record_turn(
     snapshot: dict | None,
 ) -> str:
     """Persist a turn, append a chain line, write cassette lines for raw.llm_calls."""
-    record_id = uuid.uuid4().hex
+    record_id = record_id or uuid.uuid4().hex
     row = Turn(
         record_id=record_id,
         episode_id=episode_id,
