@@ -109,6 +109,7 @@ def test_volume_endpoint(client):
         json={
             "spec": {
                 "configs": {"mode": "point", "point": "g0"},
+                "goals": {"mode": "point", "point": "refund_expired"},
                 "styles": {"mode": "point", "point": "patient"},
                 "tactics": {"mode": "point", "point": "direct_task"},
                 "agent_models": {"mode": "point", "point": "PLACEHOLDER-agent-1"},
@@ -132,7 +133,13 @@ def test_run_lifecycle_with_fake_campaign(client, monkeypatch):
                     "cells_done": 1,
                     "cells_total": 1,
                     "episodes_total": 1,
-                    "current": {"scenario": {"style": "patient", "tactic": "direct_task"}},
+                    "current": {
+                        "scenario": {
+                            "goal": "refund_expired",
+                            "style": "patient",
+                            "tactic": "direct_task",
+                        }
+                    },
                 }
             )
         return {"run_id": "run-x", "cells": [], "axes": {}, "episodes": [1]}
@@ -142,6 +149,7 @@ def test_run_lifecycle_with_fake_campaign(client, monkeypatch):
         "/api/run",
         json={
             "configs": {"mode": "point", "point": "g0"},
+            "goals": {"mode": "point", "point": "refund_expired"},
             "styles": {"mode": "point", "point": "patient"},
             "tactics": {"mode": "point", "point": "direct_task"},
             "agent_models": {"mode": "point", "point": "PLACEHOLDER-agent-1"},

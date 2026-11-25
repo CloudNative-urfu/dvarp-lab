@@ -75,6 +75,8 @@ def _spawn(ports: dict[int, str], tmp: Path, episodes: int, compute: bool) -> No
         "launcher",
         "--config",
         "g0",
+        "--goals",
+        "refund_expired",
         "--episodes",
         str(episodes),
         "--seed",

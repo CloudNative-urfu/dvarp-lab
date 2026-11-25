@@ -28,23 +28,23 @@
 
 ## attack_svc и ось целей
 
-- [ ] `frozen/corpus/goals.json` — 7 целей с привязкой к данным мира
-- [ ] `lab/world.py` — реестр целей (`load_goals`): 7 замороженных претензий,
+- [x] `frozen/corpus/goals.json` — 7 целей с привязкой к данным мира
+- [x] `lab/world.py` — реестр целей (`load_goals`): 7 замороженных претензий,
       проверка ссылок на заказы мира (fail-closed)
-- [ ] `services/attack/attacker.py`, `episode.py` — промпт «цель × метод × тон»
+- [x] `services/attack/attacker.py`, `episode.py` — промпт «цель × метод × тон»
       из манифеста мира, стартовая реплика = претензия; удалены
       `resolve_placeholders`/`start_prompt` с рандомом
-- [ ] тесты `tests/test_attack.py` — детерминизм промпта от «цель × метод ×
+- [x] тесты `tests/test_attack.py` — детерминизм промпта от «цель × метод ×
       тон» и независимость от сида, пин raw.goal, без обращений к shop
 
 ## launcher и UI
 
-- [ ] `launcher/axes.py` — ось `goals` (all/point/set/range), ячейка с goal
-- [ ] `launcher/campaign.py` — goal в attack /run-episode и probe, пин мира
+- [x] `launcher/axes.py` — ось `goals` (all/point/set/range), ячейка с goal
+- [x] `launcher/campaign.py` — goal в attack /run-episode и probe, пин мира
       (world + dataset_hash) в манифесте прогона
-- [ ] `services/ui/describe.py` — ось и поля целей, словарь терминов, сид —
+- [x] `services/ui/describe.py` — ось и поля целей, словарь терминов, сид —
       детерминизм прогона
-- [ ] тесты `tests/test_axes.py`, `tests/test_campaign.py`
+- [x] тесты `tests/test_axes.py`, `tests/test_campaign.py`
 
 ## Документация
 

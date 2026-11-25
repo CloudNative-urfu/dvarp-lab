@@ -1,4 +1,4 @@
-"""attack_svc: симуляция атаки (корпус заморожен, тактика из плана прогона, только текст)."""
+"""attack_svc: симуляция атаки — цель × метод × тон из frozen, промпт без брифа, только текст."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ class RunEpisode(BaseModel):
     tactic: str
     budget: int
     seed: int
+    goal: str  # ось целей: замороженная претензия поверх данных мира
     style: str | None = None
     run_id: str | None = None
     probe: bool = False
@@ -70,6 +71,7 @@ def run(body: RunEpisode) -> dict:
             probe=body.probe,
             remote_llm=body.remote_llm,
             run_id=body.run_id,
+            goal=body.goal,
             shop=Svc(SHOP_URL),
             filter_svc=Svc(FILTER_URL),
             attacker_base_url=os.environ.get("LAB_ATTACKER_LLM_BASE_URL"),

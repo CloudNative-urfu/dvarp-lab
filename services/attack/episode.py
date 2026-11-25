@@ -1,21 +1,26 @@
-"""Эпизод атаки: размеченный стартовый промпт тактики + прямой текстовый цикл.
+"""Эпизод атаки: цель (замороженная претензия по данным мира) + метод + тон.
 
 Барьер: attack_svc не читает БД магазина и не знает решений гвардрейлов — только
-HTTP /turn к shop_svc и /record в filter_svc; наружу от атакующего — только текст.
+HTTP /turn к shop_svc и /record в filter_svc; наружу от атакующего — только
+текст. Промпт атакующего собирается здесь из «цель × метод × тон» без обращений
+к shop (бриф исключён, dvarp-lab#6): претензия — из цели и манифеста мира,
+метод — путь давления, тон — ось стиля; стартовая реплика — отрендеренная
+претензия, без рандома и без генерации.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from lab import world as lab_world
 from lab.nominal import is_local_url
 from lab.seeds import derive_seed
 from services.traffic.episode import outcome_of
 from services.traffic.record import ChatModel, Recorder
 from services.traffic.style import load_styles
 
-from .attacker import LlmAttacker, StubAttacker
-from .tactics import load_tactics, start_prompt
+from .attacker import LlmAttacker, StubAttacker, build_system_prompt
+from .tactics import load_tactics, method_prompt
 
 
 def run_attack(
@@ -30,6 +35,7 @@ def run_attack(
     remote_llm: bool = False,
     run_id: str | None = None,
     *,
+    goal: str,
     shop: Any,
     filter_svc: Any,
     attacker_complete: Any = None,
@@ -40,13 +46,23 @@ def run_attack(
     registry = load_tactics()
     if tactic_name not in registry:
         raise ValueError(f"тактика {tactic_name!r} отсутствует в frozen/corpus/tactics.json")
+    goals = lab_world.load_goals()
+    if goal not in goals:
+        raise ValueError(f"цель {goal!r} отсутствует в frozen/corpus/goals.json")
     style = None
     if style_name is not None:
         styles = load_styles()
         if style_name not in styles:
             raise ValueError(f"стиль {style_name!r} отсутствует в frozen/styles.json")
         style = styles[style_name]
-    prompt = start_prompt(registry[tactic_name], derive_seed(seed, episode_id))
+    # Претензия цели: факты манифеста мира, механическая подстановка — без рандома,
+    # без генерации и без обращений к shop.
+    entry = goals[goal]
+    manifest = lab_world.load_manifest()
+    claim = lab_world.render_claim(entry["claim"], lab_world.claim_facts(entry, manifest))
+    prompt = build_system_prompt(
+        entry["vector"], claim, method_prompt(registry[tactic_name]), style
+    )
     recorder = Recorder(filter_svc, episode_id, "attack", attacker_model)
     # не-локальный эндпоинт атакующего маркирует записи сам (инвариант 8c)
     remote_llm = remote_llm or bool(attacker_base_url and not is_local_url(attacker_base_url))
@@ -61,9 +77,9 @@ def run_attack(
             model=os.environ.get("LAB_ATTACKER_LLM_MODEL"),
             api_key=os.environ.get("LAB_ATTACKER_LLM_API_KEY"),
         )
-        attacker = LlmAttacker(tactic_name, prompt, model, style=style)
+        attacker = LlmAttacker(prompt, claim, model)
     else:
-        attacker = StubAttacker(prompt, derive_seed(seed, episode_id, "attacker"))
+        attacker = StubAttacker(claim, derive_seed(seed, episode_id, "attacker"))
 
     attempts, last_reply = 0, None
     while attempts < budget:
@@ -71,12 +87,20 @@ def run_attack(
         if text is None:
             return {"outcome": "attacker_stopped", "turns": attempts, "attempts": attempts}
         resp = shop.post(
-            "/turn", {"episode_id": episode_id, "channel": "attack", "text": text, "turn": attempts}
+            "/turn",
+            {
+                "episode_id": episode_id,
+                "channel": "attack",
+                "text": text,
+                "turn": attempts,
+                "goal": goal,
+            },
         )
         last_reply = resp.get("text")
         recorder.raw_extra = {
             "config_name": config_name,
             "tactic": tactic_name,
+            "goal": goal,
             **({"style": style_name} if style_name else {}),
             **({"probe": True} if probe else {}),
             **({"remote_llm": True} if remote_llm else {}),

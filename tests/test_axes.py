@@ -46,6 +46,7 @@ def test_campaign_volume_and_guard():
     camp = resolve_campaign(
         {
             "configs": {"mode": "point", "point": "g0"},
+            "goals": {"mode": "point", "point": "refund_expired"},
             "styles": {"mode": "point", "point": "patient"},
             "tactics": {"mode": "point", "point": "direct_task"},
             "agent_models": {"mode": "point", "point": "PLACEHOLDER-agent-1"},
@@ -54,8 +55,21 @@ def test_campaign_volume_and_guard():
         }
     )
     cells, episodes = camp.volume()
-    assert cells == 3  # 3 сида × 1 × 1 × 1
+    assert cells == 3  # 3 сида × 1 цель × 1 × 1 × 1
     assert episodes == 6  # × 2 эпизода
     assert len(camp.cells()) == 3
     assert camp.cells()[1]["seed"] == 1
+    assert camp.cells()[0]["goal"] == "refund_expired"
     assert episodes > GUARD_VOLUME or GUARD_VOLUME == 1000
+
+
+def test_goals_axis_modes():
+    u = axis_universe("goals")
+    assert "refund_expired" in u and len(u) == 7
+    assert resolve_axis("goals", None) == u  # по умолчанию — все цели
+    assert resolve_axis("goals", {"mode": "point", "point": "refund_overprice"}) == [
+        "refund_overprice"
+    ]
+    assert resolve_axis("goals", {"mode": "set", "values": u[:2]}) == sorted(u[:2])
+    with pytest.raises(ValueError, match="отсутствует в frozen"):
+        resolve_axis("goals", {"mode": "point", "point": "no_such"})
