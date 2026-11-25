@@ -42,6 +42,8 @@ class RecordRequest(BaseModel):
     snapshot: dict[str, Any] | None = None
     # Not in docs/api.md; shop_svc pins the config per episode, metrics aggregate by it.
     config_name: str | None = None
+    # Idempotency key: a retried delivery with a known record_id is not appended twice.
+    record_id: str | None = None
 
 
 @app.get("/health")
@@ -58,8 +60,11 @@ def record(body: RecordRequest) -> dict:
         raise HTTPException(400, "config_name missing (top-level or raw.config_name)")
     store.init_db()
     with Session(store.engine()) as session:
+        if body.record_id and store.has_record(session, body.record_id):
+            return {"record_id": body.record_id, "duplicate": True}
         record_id = store.record_turn(
             session,
+            record_id=body.record_id,
             episode_id=body.episode_id,
             config_name=config_name,
             channel=body.channel,

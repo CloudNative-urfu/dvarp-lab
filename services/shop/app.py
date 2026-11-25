@@ -2,14 +2,18 @@
 
 Guardrails, reaction policy, agent tools, executor rights, escalation rules — ported from
 dvarp-prototype @ d5828df. The turn returns ONLY text; raw payloads (guardrail decisions,
-tool calls, journal events) plus a state snapshot are delivered to filter_svc POST /record
-from inside shop_svc. If filter_svc is unreachable, the episode is marked as error.
+tool calls, this turn's journal events) plus a state snapshot are delivered to filter_svc
+POST /record from inside shop_svc. A record that filter_svc does not accept waits in the
+episode outbox and goes first on the next delivery (idempotent by record_id), so the chain
+gets no holes; /reset and /snapshot/restore drain the outbox first or answer 503.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,6 +78,8 @@ class Episode:
     status: str = "open"
     model_spec: dict[str, Any] = field(default_factory=dict)
     llm_calls: list[dict] = field(default_factory=list)
+    sent_events: int = 0  # journal events of this episode already put into records
+    outbox: list[dict] = field(default_factory=list)  # records filter_svc has not accepted yet
 
 
 @dataclass
@@ -280,6 +286,7 @@ def health() -> dict:
 
 @app.post("/reset")
 def reset(body: ResetRequest) -> dict:
+    _drain()
     STATE.engine = _engine()
     STATE.engine_url = settings()["db_url"]
     # Мир один и от сида не зависит: сид детерминирует прогон, данные — нет (dvarp-lab#6).
@@ -356,8 +363,6 @@ def turn(body: TurnRequest) -> dict:
     if STATE.journal is None or STATE.engine is None:
         raise HTTPException(409, "shop db is not initialized: call POST /reset first")
     ep = _open_episode(body.episode_id, body.channel, body.goal)
-    if ep.status == "error":
-        raise HTTPException(409, f"episode {ep.episode_id} is marked error; filter_svc failed")
     ex = ep.executor
     marker = ex.execute("harness", "record_message", author="customer", body=body.text)
     if not marker.ok:
@@ -393,65 +398,76 @@ def turn(body: TurnRequest) -> dict:
     if raw_turn.closed:
         log.end_episode(ep.episode_id)
         ep.status = "closed"
-    session_status = {"open": "open", "closed": "closed", "error": "error"}[ep.status]
     # Barrier: raw payloads and the snapshot go to filter_svc, not into the response.
     events = [e for e in log.events if e.get("episode_id") == ep.episode_id]
     raw = {
         "config_name": STATE.config_name,
-        "events": [strip_chain(e) for e in events],
+        "events": [strip_chain(e) for e in events[ep.sent_events :]],  # delta of this turn
         "ticket_id": ep.ticket_id,
         "customer_id": ep.customer_id,
         "model_spec": ep.model_spec,
-        **({"llm_calls": ep.llm_calls} if ep.llm_calls else {}),
+        **({"llm_calls": list(ep.llm_calls)} if ep.llm_calls else {}),
+        # не-локальный эндпоинт агента маркирует записи сам (инвариант 8c)
+        **({"remote_llm": True} if "RESEARCH_LLM_BASE_URL" in remote_endpoints() else {}),
+        **({"run_id": body.run_id} if body.run_id else {}),
+        **({"seed": body.seed} if body.seed is not None else {}),
     }
-    snapshot = db.dump_state(STATE.engine)
-    delivered = _deliver(ep, body, reply, raw, snapshot)
-    if delivered:
-        ep.llm_calls.clear()
-    if not delivered:
-        ep.status = "error"
-        session_status = "error"
-    return {"text": reply, "ended": bool(raw_turn.closed), "session_status": session_status}
+    ep.sent_events = len(events)
+    ep.llm_calls.clear()
+    ep.outbox.append(
+        {
+            "record_id": uuid.uuid4().hex,
+            "episode_id": ep.episode_id,
+            "channel": ep.channel,
+            "turn": body.turn,
+            "text": reply,
+            "model_spec": ep.model_spec,
+            "raw": raw,
+            "snapshot": db.dump_state(STATE.engine),
+            "config_name": STATE.config_name,
+        }
+    )
+    _flush(ep)
+    return {"text": reply, "ended": bool(raw_turn.closed), "session_status": ep.status}
 
 
 def strip_chain(event: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in event.items() if k not in ("prev", "h")}
 
 
-def _deliver(
-    ep: Episode, body: TurnRequest, reply: str, raw: dict[str, Any], snapshot: dict[str, Any]
-) -> bool:
-    try:
-        _filter().post(
-            "/record",
-            {
-                "episode_id": ep.episode_id,
-                "channel": ep.channel,
-                "turn": body.turn,
-                "text": reply,
-                "model_spec": ep.model_spec,
-                "raw": {
-                    **raw,
-                    # не-локальный эндпоинт агента маркирует записи сам (инвариант 8c)
-                    **(
-                        {"remote_llm": True}
-                        if "RESEARCH_LLM_BASE_URL" in remote_endpoints()
-                        else {}
-                    ),
-                    **({"run_id": body.run_id} if body.run_id else {}),
-                    **({"seed": body.seed} if body.seed is not None else {}),
-                },
-                "snapshot": snapshot,
-                "config_name": STATE.config_name,
-            },
-        )
-        return True
-    except Exception as exc:  # noqa: BLE001 — any filter failure marks the episode error
-        STATE.journal.writer("runner").emit(
-            "svc_retry",
-            {"svc": "filter", "episode_id": ep.episode_id, "error": type(exc).__name__},
-        )
-        return False
+DELIVERY_ATTEMPTS = 3
+
+
+def _flush(ep: Episode) -> bool:
+    """Deliver the episode outbox in order; True when it is empty.
+
+    Every record keeps its record_id across attempts, so a retry after a lost response
+    does not duplicate the chain line in filter_svc.
+    """
+    while ep.outbox:
+        for attempt in range(DELIVERY_ATTEMPTS):
+            try:
+                _filter().post("/record", ep.outbox[0])
+                break
+            except Exception as exc:  # noqa: BLE001 — any filter failure keeps the record queued
+                STATE.journal.writer("runner").emit(
+                    "svc_retry",
+                    {"svc": "filter", "episode_id": ep.episode_id, "error": type(exc).__name__},
+                )
+                if attempt + 1 < DELIVERY_ATTEMPTS:
+                    time.sleep(0.2 * (attempt + 1))
+        else:
+            return False
+        ep.outbox.pop(0)
+    return True
+
+
+def _drain() -> None:
+    """Before episodes are dropped (reset/restore): every queued record reaches filter_svc."""
+    stuck = [ep for ep in STATE.episodes.values() if not _flush(ep)]
+    if stuck:
+        n = sum(len(ep.outbox) for ep in stuck)
+        raise HTTPException(503, f"filter_svc unavailable: {n} undelivered records kept, retry")
 
 
 @app.post("/snapshot")
@@ -485,6 +501,7 @@ def restore_snapshot(body: RestoreRequest) -> dict:
     snap = STATE.snapshots.get(body.snapshot_id)
     if snap is None:
         raise HTTPException(404, f"no snapshot {body.snapshot_id}")
+    _drain()
     loaded = db.load_snapshot(snap["path"])
     db.restore_snapshot(loaded, STATE.engine)
     STATE.episodes.clear()

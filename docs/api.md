@@ -19,7 +19,9 @@
   (фиктивный заказ → тикет без заказа); для legal — к фиксированному
   всегда-возвратному заказу легального кейса мира.
   Ответ возвращает только текст; сырьё (решения гвардрейлов, вызовы инструментов,
-  журнал) доставляется в `filter_svc` POST /record изнутри shop_svc.
+  журнал) доставляется в `filter_svc` POST /record изнутри shop_svc. Если filter недоступен,
+  запись хода ждёт в очереди эпизода и уходит первой при следующей доставке; /reset и
+  /snapshot/restore сначала дожимают очередь и при недоступном filter отвечают 503.
 - `GET /snapshot/{snapshot_id}` → снимок состояния (JSON).
 - `POST /snapshot/restore` `{snapshot_id: str}` → `{ok: true}`.
   (в dev — строка SQLAlchemy; у traffic_svc прямой читающий доступ разрешён схемой).
@@ -47,9 +49,12 @@
 
 ## filter_svc (порт 9414)
 
-- `POST /record` `{episode_id, channel, turn, text, model_spec, raw: {...}, snapshot: {...}}`
-  → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная строка
-  формируется из raw.llm_calls (запрос→ответ).
+- `POST /record` `{episode_id, channel, turn, text, model_spec, raw: {...}, snapshot: {...},
+  record_id?}` → `{record_id}` — сырьё и снимок в свою БД (хеш-цепочка lab.chain), кассетная
+  строка формируется из raw.llm_calls (запрос→ответ). `record_id` — ключ идемпотентности:
+  повтор с уже записанным ключом отвечает `{record_id, duplicate: true}` и в цепочку не пишет.
+  `raw.events` записи shop — события журнала только этого хода (дельта); история эпизода —
+  все его записи по порядку.
 - `GET /text/{episode_id}` → `{turns: [{turn, channel, text}]}` — только тексты;
 - `GET /dialog/{episode_id}` → `{lines: [{turn, channel, author: customer|agent, text}]}` —
   эпизод диалогом из сообщений канала (реплика клиента/атакующего → ответ агента),
