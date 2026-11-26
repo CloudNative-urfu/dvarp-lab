@@ -130,7 +130,7 @@ def test_manifest_drift_is_fail_closed(tmp_path):
     manifest = _mutated_manifest()
     manifest["orders"]["O-51001"]["items"][0]["price_cents"] = 999
     manifest_path = lab_world.world_dir("world_a") / "manifest.json"
-    original = manifest_path.read_text(encoding="utf-8")
+    original = manifest_path.read_bytes()
     try:
         manifest_path.write_text(
             _json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -138,7 +138,7 @@ def test_manifest_drift_is_fail_closed(tmp_path):
         with pytest.raises(lab_world.WorldError):
             db.load_world("world_a")
     finally:
-        manifest_path.write_text(original, encoding="utf-8")
+        manifest_path.write_bytes(original)  # байтово: text-режим съел бы CRLF заморозки
 
 
 def test_goals_reference_validation():
@@ -147,12 +147,12 @@ def test_goals_reference_validation():
 
     from lab.world import GOALS_PATH
 
-    original = GOALS_PATH.read_text(encoding="utf-8")
-    data = _json.loads(original)
+    original = GOALS_PATH.read_bytes()
+    data = _json.loads(GOALS_PATH.read_text(encoding="utf-8"))
     data["goals"][0]["order"] = "O-99999"
     try:
         GOALS_PATH.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         with pytest.raises(lab_world.WorldError, match="чужой заказ"):
             lab_world.load_goals()
     finally:
-        GOALS_PATH.write_text(original, encoding="utf-8")
+        GOALS_PATH.write_bytes(original)  # байтово: text-режим съел бы CRLF заморозки

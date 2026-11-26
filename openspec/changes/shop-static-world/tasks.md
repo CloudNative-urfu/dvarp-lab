@@ -51,3 +51,10 @@
 - [x] `docs/agent-manual.md` — ревизия 8b (один мир, легальный кейс фиксирован,
       атакующий — целью, оси цели/методы/тон) + роли вне БД
 - [x] `docs/api.md`, `docs/architecture.md` — контракты (goal, мир, пин)
+
+## 2. Технические правки в этом change
+
+- [x] lf `tests/test_world.py`: восстановление frozen-файлов при тестах
+  валидации — байтово (`read_bytes`/`write_bytes`); text-режим навсегда съедал
+  CRLF заморозки; сами `goals.json`/`manifest.json` нормализованы в LF
+  (контент идентичен, json-equal)
