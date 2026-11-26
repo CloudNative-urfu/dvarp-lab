@@ -43,7 +43,14 @@ if TYPE_CHECKING:
 # Ревизия 2 (K2.4): выключенные по умолчанию OSS-адаптеры допускаются в конфигурации только
 # если для них есть lock с ревизией и SHA-256 весов и кэш оценок живого вывода (офлайн-verify
 # воспроизводит детектор без весов). Прочие адаптеры по-прежнему отвергаются.
-MEASURED_ADAPTERS = ("deberta-pi-v2",)
+# dvarp-lab#21: LLM-гварды на позиции input — живые вызовы локального эндпоинта
+# (LAB_GUARD_LLM_BASE_URL); имя модели закреплено параметром плагина и входит в отпечаток.
+MEASURED_ADAPTERS = (
+    "deberta-pi-v2",
+    "qwen3guard-gen-4b",
+    "granite-guardian-3.1-2b",
+    "llama-guard-3-8b",
+)
 
 
 def _allow_measured(guards_spec: list) -> bool:

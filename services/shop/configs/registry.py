@@ -10,6 +10,8 @@
   `canon_terminate` — `_term`); пороги — умолчания плагинов;
 - `g_in_oss` — OSS-детектор DeBERTa в точке входа при той же реакции, что `g_in`
   (сравнение детекторов при фиксированной реакции);
+- `g_in_qwen` / `g_in_granite` / `g_in_llama` — LLM-гварды на той же позиции и с той же
+  политикой (dvarp-lab#21): сравнение детекторов внутри позиции input;
 - обязательные контроли §5 — повтор `g0` на другом seed и «чистый детектор» `g_in`;
 - leave-one-out `g_layered` (break-even §9.3, design.md §8), выводятся детерминированно.
 """
@@ -45,6 +47,14 @@ PLACEMENTS = {
         ("tool-arg-validator", ["tool"]),
         ("output-leak", ["output"]),
     ),
+}
+
+
+# dvarp-lab#21: LLM-детектор на позиции input вместо input-filter, политика g_in.
+LLM_INPUT_GUARDS = {
+    "g_in_qwen": "qwen3guard-gen-4b",
+    "g_in_granite": "granite-guardian-3.1-2b",
+    "g_in_llama": "llama-guard-3-8b",
 }
 
 
@@ -312,12 +322,23 @@ def preregistered() -> ConfigSet:
         "90c9989, ONNX, threshold 0.5 from the model card) at input with the "
         "g_in reaction policy canon_escalate.",
     )
+    llm_inputs = [
+        guarded(
+            name,
+            _gs((pid, ["input"])),
+            _policy(name, CANON_POLICIES[""], ["input"]),
+            notes=f"LLM guard {pid} at input with the g_in reaction policy canon_escalate "
+            "(dvarp-lab#21): detectors compared within one position.",
+        )
+        for name, pid in LLM_INPUT_GUARDS.items()
+    ]
     cfgs = [
         g0(),
         g0("g0_seed2", role="control", seed_label="repeat-2", control_of="g0"),
         g_proc(),
         *matrix.values(),
         g_in_oss,
+        *llm_inputs,
         detect_only(matrix["g_in"]),
         *leave_one_out(matrix["g_layered"]),
     ]

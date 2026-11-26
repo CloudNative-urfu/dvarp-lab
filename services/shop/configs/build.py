@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,7 @@ def assemble_defender(
     db_path: str | Path,
     episode_id: str | None = None,
     model: ChatModel | None = None,
+    guard_models: Mapping[str, Any] | None = None,
     agent_config: AgentConfig | None = None,
     ledger: ProcessLedger | None = None,
     arrival_min: float = 0.0,
@@ -104,6 +106,7 @@ def assemble_defender(
             policy=cfg.policy,
             task=task,
             episode_id=episode_id,
+            models=guard_models,
         )
     try:
         gate = None

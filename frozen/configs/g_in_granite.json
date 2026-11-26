@@ -1,0 +1,79 @@
+{
+  "control_of": null,
+  "defender": "agent",
+  "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
+  "family": "guarded",
+  "fingerprint": "6582fd4b4aabff04e7211d9486b052a5fb87f2121c46575be1772eb97b053af6",
+  "guards": [
+    {
+      "id": "granite-guardian-3.1-2b",
+      "params": {},
+      "stages": [
+        "input"
+      ]
+    }
+  ],
+  "name": "g_in_granite",
+  "notes": "LLM guard granite-guardian-3.1-2b at input with the g_in reaction policy canon_escalate (dvarp-lab#21): detectors compared within one position.",
+  "operational_definition": [
+    "input: [granite-guardian-3.1-2b] allow->continue, flag->escalate, block->terminate, error->continue",
+    "clarifications per episode: 2"
+  ],
+  "policy": {
+    "detect_only": false,
+    "max_clarifications": 2,
+    "name": "g_in_granite",
+    "stages": {
+      "input": {
+        "on": {
+          "allow": "continue",
+          "block": "terminate",
+          "error": "continue",
+          "flag": "escalate"
+        },
+        "score_block": null,
+        "score_flag": null
+      }
+    },
+    "version": "guard-policy-1"
+  },
+  "process": null,
+  "queue_discipline": "fifo",
+  "resolved": {
+    "guard_set_fingerprint": "3ce996686b259a4184fb03361448a867d1fb29edb2495840e32f86b9d6d19941",
+    "guards": [
+      {
+        "plugin": {
+          "deployment": "self_hosted",
+          "enabled_by_default": false,
+          "license": "Apache-2.0",
+          "mechanism": "llm_detector",
+          "origin": "catalog #8: ibm-granite/granite-guardian-3.1-2b (Hugging Face), served locally",
+          "params": {
+            "max_tokens": 8,
+            "model": "ibm-granite/granite-guardian-3.1-2b",
+            "risk_name": "jailbreak",
+            "yes": "block"
+          },
+          "plugin_id": "granite-guardian-3.1-2b",
+          "stages": [
+            "input",
+            "context",
+            "output"
+          ],
+          "version": "1.1"
+        },
+        "stages": [
+          "input"
+        ]
+      }
+    ],
+    "policy_fingerprint": "993a38f65e1a391abf760e4ab837bbce87460cd5068f4810c79210f648767051",
+    "policy_version": "guard-policy-1",
+    "process_fingerprint": null,
+    "process_version": null
+  },
+  "role": "main",
+  "schema": "darp-config-1",
+  "seed_label": "main"
+}

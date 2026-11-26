@@ -100,7 +100,10 @@
   независимо); `allow_remote_llm` устарел и игнорируется — не-локальный
   LLM-эндпоинт маркируется автоматически (пин в манифесте и записях, метрики
   пропускают, `include_remote` в `/compute`). Прогон пиннит версию мира
-  (`world` + `dataset_hash`) в манифесте; снапшот пары — от мира.
+  (`world` + `dataset_hash`) в манифесте; снапшот пары — от мира. Конфигурации с
+  LLM-гвардами (`g_in_qwen`/`g_in_granite`/`g_in_llama`, #21) требуют
+  `LAB_GUARD_LLM_BASE_URL` и дают в манифесте `guard_budget` (вызовы на эпизод,
+  потолок выходных токенов и его цена по `guard_tariff`).
 CLI: `python -m launcher --config g0 --goals refund_expired --episodes 2 --seed 0
 --compute` (флаги → та же спецификация). Каждая ячейка: `/reset` → `/configure`
 (номинальная проверка + пин model_spec) → `/snapshot` → парные прогоны →

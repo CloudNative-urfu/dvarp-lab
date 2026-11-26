@@ -84,6 +84,43 @@ def attack_episode_id(run_id: str, i: int, cell: dict[str, Any]) -> str:
     return f"{run_id}-A{i}-{'-'.join(attack_signature(cell))}-s{cell['seed']}"
 
 
+LLM_MECHANISMS = ("llm_detector", "llm_judge")
+
+
+def guard_token_budget(config: dict[str, Any], turns: int) -> dict[str, Any] | None:
+    """Токен-бюджет LLM-гвардов на эпизод (dvarp-lab#21): вызов на стадию за ход ≤ turns ходов,
+    ответ ≤ max_tokens плагина; промпт = реплика (+ недоверенные фрагменты на context) —
+    измеряется журналом, денежный C_guard считается post-hoc по тарифу economics (#11).
+    None — в конфигурации нет LLM-гвардов."""
+    from services.metrics.economics import load_economics
+
+    rows = []
+    for g in (config.get("resolved") or {}).get("guards", []):
+        plugin = g["plugin"]
+        if plugin["mechanism"] not in LLM_MECHANISMS:
+            continue
+        calls = len(g["stages"]) * turns
+        rows.append(
+            {
+                "plugin": plugin["plugin_id"],
+                "model": plugin["params"]["model"],
+                "stages": g["stages"],
+                "calls_max": calls,
+                "output_tokens_per_call": plugin["params"]["max_tokens"],
+                "output_tokens_max": calls * plugin["params"]["max_tokens"],
+            }
+        )
+    if not rows:
+        return None
+    tin, tout = load_economics()["guard_tariff"]
+    return {
+        "per_episode": rows,
+        "guard_tariff_per_million": {"input": tin, "output": tout},
+        "output_usd_max": sum(r["output_tokens_max"] for r in rows) * tout / 1e6,
+        "prompt": "reply + untrusted fragments per call; measured in the journal, C_guard post-hoc",
+    }
+
+
 def run_campaign(
     spec: dict[str, Any],
     *,
@@ -124,6 +161,23 @@ def run_campaign(
             "attacker_models": camp.attacker_models,
             "seeds": camp.seeds,
             "scenario_pairs": camp.scenario_pairs,
+        },
+        "guard_budget": {
+            cfg: b
+            for cfg in camp.configs
+            if (
+                b := guard_token_budget(
+                    json.loads(
+                        (
+                            Path(__file__).resolve().parents[1]
+                            / "frozen"
+                            / "configs"
+                            / f"{cfg}.json"
+                        ).read_text()
+                    ),
+                    camp.budget,
+                )
+            )
         },
         "world": None,  # пин версии замороженного мира (world + dataset_hash)
         "cells": [],
