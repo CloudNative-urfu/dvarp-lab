@@ -37,7 +37,9 @@ from services.shop.evaluator import EvaluationError, StartState, evaluate
 from services.shop.evaluator.live import live_truth
 from services.shop.evaluator.prompt_leak import system_prompt_leak_via_reply
 from services.shop.guards import Session
+from services.shop.guards.contract import DEFAULT_REGISTRY
 from services.shop.journal import EventLog
+from services.shop.llm import make_chat_model
 
 app = FastAPI(title="shop_svc", version="0.1.0")
 
@@ -156,6 +158,37 @@ def _agent_model(log: EventLog | None = None, sink: list[dict] | None = None) ->
     return make_agent_model(log, mode="stub", seed=0, profile=profile, sink=sink)
 
 
+GUARD_LLM_ENV = "LAB_GUARD_LLM_BASE_URL"
+
+
+def _llm_guards(cfg: ConfigSpec) -> dict[str, str]:
+    """Гвардрейлы конфигурации с моделью-детектором → закреплённое имя модели (dvarp-lab#21)."""
+    out = {}
+    for entry in cfg.guards.spec:
+        cls = DEFAULT_REGISTRY.get(entry["id"])
+        if cls.needs_model:
+            out[entry["id"]] = {**cls.default_params, **entry.get("params", {})}["model"]
+    return out
+
+
+def _guard_models(cfg: ConfigSpec) -> dict[str, Any]:
+    """Модели LLM-гвардов: один OpenAI-совместимый эндпоинт LAB_GUARD_LLM_BASE_URL, модель
+    выбирается закреплённым параметром плагина `model` (сервер-маршрутизатор по имени)."""
+    return {
+        pid: make_chat_model(
+            "guard",
+            mode="live",
+            seed=0,
+            environ={
+                "RESEARCH_LLM_BASE_URL": os.environ.get(GUARD_LLM_ENV, ""),
+                "RESEARCH_LLM_MODEL": model,
+                "RESEARCH_LLM_API_KEY": os.environ.get("LAB_GUARD_LLM_API_KEY", ""),
+            },
+        )
+        for pid, model in _llm_guards(cfg).items()
+    }
+
+
 def _assigned_customer(channel: str) -> str:
     """Клиент эпизода по каналу: роли привязаны к клиентам мира вне БД (dvarp-lab#6).
     Один мир — один клиент A, несущий обе роли."""
@@ -234,6 +267,7 @@ def _open_episode(episode_id: str, channel: str, goal: str | None = None) -> Epi
         db_path=STATE.engine_url,
         episode_id=episode_id,
         model=_agent_model(log, llm_calls),
+        guard_models=_guard_models(STATE.config or _default_config()),
         agent_config=STATE.agent_cfg,
         order_id=order_id,
         task_text=TASK_TEXT,
@@ -364,6 +398,11 @@ def configure(body: ConfigureRequest) -> dict:
     if problems:
         raise HTTPException(400, "; ".join(problems))
     cfg = ConfigSpec.from_spec(spec)
+    if sorted(_llm_guards(cfg)) and not (os.environ.get(GUARD_LLM_ENV) or "").strip():
+        raise HTTPException(
+            400,
+            f"config {cfg.name} needs LLM guards {sorted(_llm_guards(cfg))}: set {GUARD_LLM_ENV}",
+        )
     STATE.config = cfg
     STATE.config_name = cfg.name
     STATE.agent_model = dict(body.agent_model)

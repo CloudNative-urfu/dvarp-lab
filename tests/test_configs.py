@@ -83,7 +83,11 @@ class TestSpec(unittest.TestCase):
         self.assertEqual([c.name for c in cs if c.role == "baseline"], ["g0", "g_proc"])
         mains = [c for c in cs if c.family == "guarded" and c.role == "main"]
         # позиционная матрица §4: 5 наборов × 3 политики канона + OSS-детектор на входе
-        self.assertEqual(len(mains), 16)
+        # + три LLM-гварда на входе (#21)
+        self.assertEqual(len(mains), 19)
+        for name in ("g_in_qwen", "g_in_granite", "g_in_llama"):
+            self.assertEqual(cs[name].policy.stages, cs["g_in"].policy.stages, name)
+            self.assertEqual([e["stages"] for e in cs[name].guards.spec], [["input"]], name)
         for pos in ("g_in", "g_ctx", "g_tool", "g_out", "g_layered"):
             flags = [
                 {r.on["flag"] for r in cs[pos + sfx].policy.stages.values()}
@@ -164,7 +168,7 @@ class TestSpec(unittest.TestCase):
     def test_disabled_adapter_is_rejected(self):
         spec = _g_in_json()
         spec.pop("resolved"), spec.pop("fingerprint"), spec.pop("operational_definition")
-        spec["guards"] = [{"id": "qwen3guard-gen-4b", "stages": ["input"]}]
+        spec["guards"] = [{"id": "presidio-pii", "stages": ["input"]}]
         with self.assertRaises(ConfigError):
             ConfigSpec.from_spec(spec)
 

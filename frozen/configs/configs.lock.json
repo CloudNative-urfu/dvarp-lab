@@ -56,6 +56,14 @@
       "role": "control",
       "sha256": "7aee78ccc218658cc00c4d9ab768260f9828efc7036cde7da5d16f5b53b05406"
     },
+    "g_in_granite": {
+      "control_of": null,
+      "family": "guarded",
+      "file": "g_in_granite.json",
+      "fingerprint": "18077ad2b5f5e32372ee95d2988c103a35bcf5a2d339a882725f1b10376f60fe",
+      "role": "main",
+      "sha256": "c757b4861014fe44eed17bccfc456038de866213785bb5847ba4662a872668b9"
+    },
     "g_in_iso": {
       "control_of": null,
       "family": "guarded",
@@ -64,6 +72,14 @@
       "role": "main",
       "sha256": "d4e2e5f28b008f784d3a233161cf2ce19aea490ad1d8cd5f9b40917aab456512"
     },
+    "g_in_llama": {
+      "control_of": null,
+      "family": "guarded",
+      "file": "g_in_llama.json",
+      "fingerprint": "91ade8d06958aa9283a62edb6436710018452789ea8ae425da711e09a840937f",
+      "role": "main",
+      "sha256": "3097285a4552f313c2d13d4eedff84bf5ba374debfb309faac4664199f548210"
+    },
     "g_in_oss": {
       "control_of": null,
       "family": "guarded",
@@ -71,6 +87,14 @@
       "fingerprint": "fe02764222a70fef5b0dcadbbe8327cda26331139a2616d8e40526ec5ed520e8",
       "role": "main",
       "sha256": "a7343217e64eb765a64d02a113b266eb74ceabd4af18de20b5c6ef40dd55b8dc"
+    },
+    "g_in_qwen": {
+      "control_of": null,
+      "family": "guarded",
+      "file": "g_in_qwen.json",
+      "fingerprint": "85827f482a25f79db8cfc0c1aa89a0b98f21056e5b7aa7038b032e6fbc5c36e9",
+      "role": "main",
+      "sha256": "f21a334e9f3df6fd9d54e29b4f72bda64d5dfb6040c4c0c74a8a201c0ce613dd"
     },
     "g_in_term": {
       "control_of": null,
@@ -201,11 +225,11 @@
     "guard_policy": "9f4f839c825cad825a0d91b1d468483a87f9a0704bfb7b3584a2c353c48a2e08",
     "tools": "e06352fda06381a2c59d304fe016dfe9deb7cacfabbf5db2e3f5f12ee77b5dc0"
   },
-  "lock_fingerprint": "74a7a2a180cd43672d94815cb39e5ebef49de1325e12b4be0d3a6df630b97ddc",
-  "locked_at": "2026-11-18T16:37:56Z",
-  "note": "issue #60: isolate config data imports from defense runtime",
+  "lock_fingerprint": "a948645140421cf69d7d0c54978079b5ff7a495c258d65a515617539cbba069b",
+  "locked_at": "2026-11-26T15:40:00Z",
+  "note": "dvarp-lab#21: LLM guards at input (g_in_qwen, g_in_granite, g_in_llama)",
   "post_hoc": {},
   "preregistered": true,
   "schema": "darp-configs-lock-1",
-  "set_fingerprint": "fb866105a2b32d053077dda018275402d0b4980fb722d4019f98576ec29ca915"
+  "set_fingerprint": "3dc1ccf09269a9cff134c49f6ffa24b62bb1a08082feb004cf45f2597880362e"
 }
