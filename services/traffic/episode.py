@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from lab import world as lab_world
 from lab.nominal import is_local_url
 from lab.seeds import derive_seed
 
@@ -66,12 +67,17 @@ def run_episode(
     filter_svc: Any,
     customer_complete: Any = None,
     customer_base_url: str | None = None,
+    legal_case: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     styles = load_styles()
     if style_name not in styles:
         raise ValueError(f"стиль {style_name!r} отсутствует в frozen/styles.json")
     style = styles[style_name]
-    case = truthful_case(db_url, seed)
+    # Легальный кейс фиксирован (dvarp-lab#6): один всегда-возвратный заказ A
+    # из манифеста мира; сид не перебирает заказы — стиль варьируется, кейс нет.
+    if legal_case is None:
+        legal_case = lab_world.load_manifest()["legal_case"]
+    case = truthful_case(db_url, legal_case)
     # не-локальный эндпоинт клиента маркирует записи сам (инвариант 8c)
     remote_llm = remote_llm or bool(customer_base_url and not is_local_url(customer_base_url))
     recorder = Recorder(filter_svc, episode_id, "legal", agent_model)

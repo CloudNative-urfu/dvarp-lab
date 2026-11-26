@@ -23,7 +23,8 @@ def main() -> None:
     p.add_argument("--agent", default=None)
     p.add_argument("--attacker", default=None)
     p.add_argument("--styles", default=None, help="стили через запятую (default: все)")
-    p.add_argument("--tactics", default=None, help="тактики через запятую (default: все)")
+    p.add_argument("--goals", default=None, help="цели через запятую (default: все)")
+    p.add_argument("--tactics", default=None, help="методы через запятую (default: все)")
     p.add_argument("--pairs", default=None, help="пары style=tactic через запятую")
     p.add_argument("--tactics-split", default=None, choices=["dev", "holdout"])
     p.add_argument("--compute", action="store_true")
@@ -43,6 +44,8 @@ def main() -> None:
             spec["configs"] = {"mode": "point", "point": args.config}
         if args.styles:
             spec["styles"] = {"mode": "set", "values": args.styles.split(",")}
+        if args.goals:
+            spec["goals"] = {"mode": "set", "values": args.goals.split(",")}
         if args.tactics:
             spec["tactics"] = {"mode": "set", "values": args.tactics.split(",")}
         elif args.tactics_split:

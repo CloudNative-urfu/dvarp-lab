@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from launcher import probe as launcher_probe
 from launcher import run_campaign
 
@@ -19,7 +21,9 @@ class FakeSvc:
             return {"outcome": "budget_exhausted", "turns": 1, "attempts": 1}
         if path == "/snapshot":
             return {"snapshot_id": "snap-1", "state_hash": "snap-1", "label": json["label"]}
-        if path in ("/reset", "/configure", "/snapshot/restore", "/compute"):
+        if path == "/reset":
+            return {"ok": True, "world": "world_a", "dataset_hash": "hash-a"}
+        if path in ("/configure", "/snapshot/restore", "/compute"):
             return {"ok": True}
         return {}
 
@@ -38,6 +42,7 @@ class FakeSvc:
 
 SPEC = {
     "configs": {"mode": "point", "point": "g0"},
+    "goals": {"mode": "point", "point": "refund_expired"},
     "styles": {"mode": "point", "point": "patient"},
     "tactics": {"mode": "point", "point": "direct_task"},
     "agent_models": {"mode": "point", "point": "PLACEHOLDER-agent-1"},
@@ -60,17 +65,22 @@ def test_campaign_configure_seed_loop_manifest(tmp_path, monkeypatch):
     # сид-цикл: 2 ячейки с сидами 0 и 1
     seeds = [c["seed"] for c in manifest["cells"]]
     assert seeds == [0, 1]
-    # манифест пиннит оси и сид каждой пары
+    # манифест пиннит оси, сид и мир каждой пары
     assert manifest["axes"]["seeds"] == [0, 1]
+    assert manifest["axes"]["goals"] == ["refund_expired"]
     assert manifest["cells"][0]["episodes"][0]["episode"] == 1
     # эпизоды: legal + attack на каждую пару
     assert len(attack.calls) == 2
     body = attack.calls[0][2]
+    assert body["goal"] == "refund_expired"
     assert body["style"] == "patient" and body["run_id"] == manifest["run_id"]
     mf = json.loads(
         (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
     )
     assert mf["run_id"] == manifest["run_id"]
+    # пин версии замороженного мира: из ответа /reset каждой ячейки
+    assert manifest["world"] == {"name": "world_a", "dataset_hash": "hash-a"}
+    assert mf["world"] == manifest["world"]
 
 
 def test_campaign_guard_needs_confirm(tmp_path, monkeypatch):
@@ -98,6 +108,7 @@ def test_probe_marks_raw_and_skips_manifest(tmp_path, monkeypatch):
     result = launcher_probe(
         {
             "config": "g0",
+            "goal": "refund_expired",
             "tactic": "direct_task",
             "budget": 2,
             "agent_model": "PLACEHOLDER-agent-1",
@@ -107,7 +118,22 @@ def test_probe_marks_raw_and_skips_manifest(tmp_path, monkeypatch):
     assert result["outcome"] == "budget_exhausted"
     assert shop.calls[0][1] == "/reset"
     assert shop.calls[1][1] == "/configure"
+    assert attack.calls[0][2]["goal"] == "refund_expired"
     assert not list((tmp_path / "runs").glob("*/manifest.json"))  # манифест не пишется
+
+
+def test_probe_requires_goal():
+    shop, attack = FakeSvc(), FakeSvc()
+    with pytest.raises(SystemExit, match="цель"):
+        launcher_probe(
+            {
+                "config": "g0",
+                "tactic": "direct_task",
+                "budget": 2,
+                "agent_model": "PLACEHOLDER-agent-1",
+            },
+            services={"shop": shop, "attack": attack},
+        )
 
 
 def test_attack_ids_unique_on_full_grid(tmp_path, monkeypatch):

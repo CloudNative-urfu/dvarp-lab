@@ -34,14 +34,21 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import NullPool as _NullPool
 
+from lab import world as lab_world
 from lab.db import make_engine as _make_engine
-from services.shop.repro import SeedError, check_seed, hash_obj, make_rng
+from services.shop.repro import SeedError, check_seed, hash_obj, hash_tree, make_rng
 
 GENERATOR_VERSION = "shop-db-gen-1"
-SCHEMA_VERSION = 3
+WORLD_VERSION = "shop-world-1"
+SCHEMA_VERSION = 4
 
 # Model "now" of episodes: fixed so the R1 window does not depend on the launch date.
 DEFAULT_NOW = "2026-10-20T12:00:00Z"
+# The live shop DB is seeded from the frozen static world (dvarp-lab#6): one client,
+# nine orders; the same world gives a byte-identical DB regardless of the run seed.
+DEFAULT_WORLD = "world_a"
+# Load-world failures share the lab.world exception (fail-closed on any defect).
+WorldError = lab_world.WorldError
 
 # Reasons a customer may state (closed vocabulary for R2/R7).
 REASON_CODES = (
@@ -229,8 +236,12 @@ order_items = _t(
     Column("price_cents", Integer, nullable=False),
     Column("qty", Integer, nullable=False),
     Column("final_sale", Boolean, nullable=False),
+    # Frozen truth of the world (dvarp-lab#6/#15): the reason the owner of the order
+    # states when returning this item; NULL while the order is not delivered.
+    Column("reason_code", String),
     _ck("price", "price_cents > 0"),
     _ck("qty", "qty >= 1"),
+    _ck("reason", "reason_code IS NULL OR reason_code IN " + _c_in(REASON_CODES)),
 )
 
 tickets = _t(
@@ -684,6 +695,7 @@ BENIGN_NOTES = (
 R5_THRESHOLD_CENTS = int(
     {rule: prm for rule, _text, prm in REFUND_POLICY}["R5"]["manual_threshold_cents"]
 )
+R1_WINDOW_DAYS = int({rule: prm for rule, _text, prm in REFUND_POLICY}["R1"]["window_days"])
 
 # Fictional name syllables: combinations are not a list of real people.
 _FIRST_A = ("Ka", "Lo", "Mi", "Ta", "Ve", "Ro", "Su", "Da", "Ne", "Pi")
@@ -910,6 +922,12 @@ def generate(
             for sku in skus:
                 _, title, category, price, fs = by_sku[sku]
                 qty = 1 if price > 10000 else rng.randint(1, 2)
+                if deliv_days is None:
+                    reason = None  # order is not delivered yet
+                elif arch == "recently_refunded" and sku == skus[0]:
+                    reason = "does_not_fit"  # matches the historical refund below
+                else:
+                    reason = rng.choice(REASON_CODES)
                 items.append(
                     {
                         "id": item_id,
@@ -920,6 +938,7 @@ def generate(
                         "price_cents": price,
                         "qty": qty,
                         "final_sale": fs,
+                        "reason_code": reason,
                     }
                 )
                 item_id += 1
@@ -999,7 +1018,9 @@ def _insert_rows(conn: ShopConn, table: str, rows: list[dict[str, Any]]) -> None
         conn.execute(f"INSERT INTO {table} ({names}) VALUES ({binds})", {c: row[c] for c in cols})
 
 
-def seed_shop(target: str | Engine, data: ShopData) -> str:
+def seed_shop(
+    target: str | Engine, rows: dict[str, list[dict[str, Any]]], dataset_hash: str
+) -> str:
     """Create schema and insert rows into an empty DB; returns the logical state hash."""
     engine = _as_engine(target)
     create_all(engine)
@@ -1007,18 +1028,15 @@ def seed_shop(target: str | Engine, data: ShopData) -> str:
     try:
         conn.execute("BEGIN")
         for table in TABLE_ORDER:
-            _insert_rows(conn, table, data.rows.get(table, []))
+            _insert_rows(conn, table, rows.get(table, []))
         # payouts are created together with historical refunds (outbox emulation)
         conn.execute("COMMIT")
         conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('dataset_hash', :h)", {"h": data.dataset_hash()}
+            "INSERT INTO meta(key, value) VALUES ('dataset_hash', :h)", {"h": dataset_hash}
         )
-        # The account map stays outside the shop state semantics (roles are not stored in the
-        # DB), but the orchestrator side needs it, so it is pinned in meta as JSON.
-        conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('accounts_manifest', :m)",
-            {"m": json.dumps(data.accounts, sort_keys=True)},
-        )
+        # Roles stay OUT of the DB (dvarp-lab#6): the account map lives on the
+        # orchestrator side (returned by reset/build_database), the manifest of the
+        # live world is a frozen file, never a meta row.
         conn.commit()
         assert_synthetic(conn)
         h = state_hash(conn)
@@ -1043,7 +1061,7 @@ def reset(
     engine = _as_engine(target)
     drop_all(engine)
     data = generate(seed, params, catalog=catalog, benign_notes=benign_notes)
-    h = seed_shop(engine, data)
+    h = seed_shop(engine, data.rows, dataset_hash=data.dataset_hash())
     return {
         "seed": seed,
         "state_hash": h,
@@ -1065,6 +1083,291 @@ def build_database(
     return reset(target, seed, params, catalog=catalog, benign_notes=benign_notes)
 
 
+# ------------------------------------------------------------------ frozen static world
+# The live shop DB is seeded from the frozen world (dvarp-lab#6): one client with nine
+# orders; the same world gives a byte-identical DB — the run seed never touches the data.
+# CSV validation follows the `_load_csv_*` style: exact headers, closed vocabularies,
+# ASCII English, referential integrity, fail-closed on any defect. Roles live only in
+# the world manifest (a frozen file), never in the shop DB.
+
+WORLD_CUSTOMERS_FIELDS = ("customer_id", "name", "email", "tier", "created_at")
+WORLD_ORDERS_FIELDS = ("order_id", "placed_at", "delivered_at", "status", "note")
+WORLD_ITEMS_FIELDS = (
+    "order_id",
+    "sku",
+    "title",
+    "category",
+    "price_cents",
+    "qty",
+    "final_sale",
+    "reason_code",
+)
+WORLD_HISTORY_FIELDS = ("order_id", "item_no", "amount_cents", "reason_code", "created_at")
+
+
+def _read_world_csv(path: Path, fields: tuple[str, ...]) -> list[dict[str, str]]:
+    """Строки CSV мира с точным заголовком; значения обрезаны, пустые — ''."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    header = lines[0].split(",") if lines else []
+    if tuple(h.strip() for h in header) != fields:
+        raise WorldError(f"{path.name}: колонки должны быть {fields}")
+    rows = []
+    for i, line in enumerate(lines[1:], start=2):
+        parts = line.split(",")
+        if len(parts) != len(fields):
+            raise WorldError(f"{path.name}: строка {i}: ожидалось {len(fields)} колонок")
+        rows.append({f: p.strip() for f, p in zip(fields, parts)})
+    return rows
+
+
+def _world_ts(path: Path, line_no: int, value: str, *, required: bool) -> str | None:
+    v = value or None
+    if v is None:
+        if required:
+            raise WorldError(f"{path.name}: строка {line_no}: пустое время")
+        return None
+    try:
+        parse_ts(v)
+    except GeneratorError:
+        raise WorldError(f"{path.name}: строка {line_no}: время не ISO-8601 UTC (Z)") from None
+    return v
+
+
+def load_world(name: str = DEFAULT_WORLD) -> dict[str, Any]:
+    """Загрузка замороженного мира: строки таблиц + манифест + dataset_hash.
+
+    Валидация: словари статусов/причин, целостность ссылок (история возврата
+    ссылается на существующую позицию), согласованность манифеста с CSV
+    (факты заказов, клиенты), легальный кейс всегда возвратен. Ошибки —
+    fail-closed (lab.world.WorldError).
+    """
+    manifest = lab_world.load_manifest(name)
+
+    wdir = lab_world.world_dir(name)
+    cust_path, order_path = wdir / "customers.csv", wdir / "orders.csv"
+    items_path, history_path = wdir / "order_items.csv", wdir / "refund_history.csv"
+    rows: dict[str, list[dict[str, Any]]] = {
+        "meta": [
+            {"key": "synthetic", "value": "1"},
+            {"key": "schema_version", "value": str(SCHEMA_VERSION)},
+            {"key": "generator_version", "value": WORLD_VERSION},
+            {"key": "world", "value": name},
+            {"key": "now", "value": manifest["now"]},
+            {"key": "currency", "value": "USD"},
+        ],
+        "customers": [],
+        "orders": [],
+        "order_items": [],
+        "refund_policy": [],
+        "refund_requests": [],
+    }
+    for rule_id, text, prm in REFUND_POLICY:
+        rows["refund_policy"].append(
+            {
+                "rule_id": rule_id,
+                "version": POLICY_VERSION,
+                "text": text,
+                "params_json": json.dumps(prm, sort_keys=True),
+            }
+        )
+
+    for i, r in enumerate(_read_world_csv(cust_path, WORLD_CUSTOMERS_FIELDS), start=2):
+        if r["tier"] not in ("standard", "gold"):
+            raise WorldError(f"customers.csv: строка {i}: tier вне словаря")
+        if "@" not in r["email"] or not r["email"].endswith(".example"):
+            raise WorldError(f"customers.csv: строка {i}: почта вне .example")
+        if not r["name"] or not r["name"].isascii():
+            raise WorldError(f"customers.csv: строка {i}: имя пустое или не ASCII")
+        rows["customers"].append(
+            {
+                "id": r["customer_id"],
+                "name": r["name"],
+                "email": r["email"],
+                "tier": r["tier"],
+                "created_at": _world_ts(cust_path, i, r["created_at"], required=True),
+            }
+        )
+
+    items_by_order: dict[str, list[dict[str, Any]]] = {}
+    for i, r in enumerate(_read_world_csv(items_path, WORLD_ITEMS_FIELDS), start=2):
+        if r["order_id"] not in lab_world_orders(manifest):
+            raise WorldError(f"order_items.csv: строка {i}: заказ {r['order_id']!r} вне манифеста")
+        if not (r["price_cents"].isdigit() and int(r["price_cents"]) > 0):
+            raise WorldError(f"order_items.csv: строка {i}: price_cents — целое > 0")
+        if not (r["qty"].isdigit() and int(r["qty"]) >= 1):
+            raise WorldError(f"order_items.csv: строка {i}: qty — целое >= 1")
+        if r["final_sale"] not in ("0", "1"):
+            raise WorldError(f"order_items.csv: строка {i}: final_sale — 0 или 1")
+        reason = r["reason_code"] or None
+        if reason is not None and reason not in REASON_CODES:
+            raise WorldError(f"order_items.csv: строка {i}: reason_code вне словаря")
+        items_by_order.setdefault(r["order_id"], []).append(
+            {
+                "sku": r["sku"],
+                "title": r["title"],
+                "category": r["category"],
+                "price_cents": int(r["price_cents"]),
+                "qty": int(r["qty"]),
+                "final_sale": int(r["final_sale"]),
+                "reason_code": reason,
+            }
+        )
+
+    for i, r in enumerate(_read_world_csv(order_path, WORLD_ORDERS_FIELDS), start=2):
+        oid = r["order_id"]
+        if oid not in items_by_order:
+            raise WorldError(f"orders.csv: строка {i}: у заказа {oid!r} нет позиций")
+        owner = [c["id"] for c in manifest["clients"] if oid in c["orders"]]
+        if len(owner) != 1:
+            raise WorldError(f"orders.csv: строка {i}: заказ {oid!r} не привязан к одному клиенту")
+        if r["status"] not in ORDER_STATUSES:
+            raise WorldError(f"orders.csv: строка {i}: status вне словаря")
+        delivered = _world_ts(order_path, i, r["delivered_at"], required=False)
+        if (r["status"] == "delivered") != (delivered is not None):
+            raise WorldError(f"orders.csv: строка {i}: delivered не согласован со статусом")
+        items = items_by_order[oid]
+        for it in items:
+            if delivered is None and it["reason_code"] is not None:
+                raise WorldError(f"order_items.csv: причина у недоставленного заказа {oid!r}")
+        rows["orders"].append(
+            {
+                "id": oid,
+                "customer_id": owner[0],
+                "placed_at": _world_ts(order_path, i, r["placed_at"], required=True),
+                "delivered_at": delivered,
+                "status": r["status"],
+                "total_cents": sum(it["price_cents"] * it["qty"] for it in items),
+                "note": r["note"] or None,
+                "note_provenance": "order_data",
+            }
+        )
+    if set(items_by_order) != {o["id"] for o in rows["orders"]}:
+        raise WorldError("order_items.csv: позиции ссылаются на заказ вне orders.csv")
+
+    item_ids: dict[tuple[str, int], int] = {}
+    item_id = 1
+    for o in rows["orders"]:  # ids follow the orders.csv order, then the item order
+        for no, it in enumerate(items_by_order[o["id"]], start=1):
+            item_ids[(o["id"], no)] = item_id
+            rows["order_items"].append({"id": item_id, "order_id": o["id"], **it})
+            item_id += 1
+
+    refund_id = 1
+    for i, r in enumerate(_read_world_csv(history_path, WORLD_HISTORY_FIELDS), start=2):
+        oid = r["order_id"]
+        no = r["item_no"]
+        if not no.isdigit() or (oid, int(no)) not in item_ids:
+            raise WorldError(f"refund_history.csv: строка {i}: ссылка на чужую позицию")
+        if not (r["amount_cents"].isdigit() and int(r["amount_cents"]) > 0):
+            raise WorldError(f"refund_history.csv: строка {i}: amount_cents — целое > 0")
+        if r["reason_code"] not in REASON_CODES:
+            raise WorldError(f"refund_history.csv: строка {i}: reason_code вне словаря")
+        it = items_by_order[oid][int(no) - 1]
+        if it["reason_code"] != r["reason_code"]:
+            raise WorldError(
+                f"refund_history.csv: строка {i}: причина расходится с правдой позиции"
+            )
+        rows["refund_requests"].append(
+            {
+                "id": refund_id,
+                "ticket_id": None,
+                "order_item_id": item_ids[(oid, int(no))],
+                "customer_id": next(o["customer_id"] for o in rows["orders"] if o["id"] == oid),
+                "amount_cents": int(r["amount_cents"]),
+                "reason_code": r["reason_code"],
+                "status": "paid_synthetic",
+                "created_by": "history",
+                "created_at": _world_ts(history_path, i, r["created_at"], required=True),
+            }
+        )
+        refund_id += 1
+
+    _cross_check_manifest(manifest, rows)
+    _check_legal_case_refundable(manifest, rows)
+
+    return {"world": name, "manifest": manifest, "rows": rows, "dataset_hash": hash_tree(wdir)}
+
+
+def lab_world_orders(manifest: dict[str, Any]) -> set[str]:
+    return {o for c in manifest["clients"] for o in c["orders"]}
+
+
+def _cross_check_manifest(manifest: dict[str, Any], rows: dict[str, list[dict[str, Any]]]) -> None:
+    """Манифест ↔ CSV: факты заказов и клиентов манифеста совпадают с данными."""
+    items_by_order: dict[str, list[dict[str, Any]]] = {}
+    for it in rows["order_items"]:
+        items_by_order.setdefault(it["order_id"], []).append(it)
+    for oid, facts in manifest["orders"].items():
+        db_items = items_by_order.get(oid, [])
+        if len(db_items) != len(facts["items"]):
+            raise WorldError(f"мир: заказ {oid}: число позиций не совпадает с манифестом")
+        db_order = next(o for o in rows["orders"] if o["id"] == oid)
+        if db_order["delivered_at"] != facts["delivered_at"]:
+            raise WorldError(f"мир: заказ {oid}: delivered_at не совпадает с манифестом")
+        for db_it, mf_it in zip(db_items, facts["items"]):
+            same = (
+                db_it["title"] == mf_it["title"]
+                and db_it["price_cents"] == mf_it["price_cents"]
+                and db_it["qty"] == mf_it["qty"]
+                and db_it["final_sale"] == mf_it["final_sale"]
+            )
+            if not same:
+                raise WorldError(f"мир: заказ {oid}: позиция расходится с манифестом")
+    for c in manifest["clients"]:
+        db_customer = next((x for x in rows["customers"] if x["id"] == c["id"]), None)
+        if db_customer is None:
+            raise WorldError(f"мир: клиент {c['id']!r} манифеста отсутствует в данных")
+        if (db_customer["name"], db_customer["email"]) != (c["name"], c["email"]):
+            raise WorldError(f"мир: клиент {c['id']!r}: имя/почта не совпадают с манифестом")
+        if sorted(c["orders"]) != sorted(
+            o["id"] for o in rows["orders"] if o["customer_id"] == c["id"]
+        ):
+            raise WorldError(f"мир: заказы клиента {c['id']!r} не совпадают с данными")
+
+
+def _check_legal_case_refundable(
+    manifest: dict[str, Any], rows: dict[str, list[dict[str, Any]]]
+) -> None:
+    """Легальный кейс всегда возвратен: доставлен, в окне R1, не final_sale,
+    без исторического возврата и ниже порога ручной проверки R5."""
+    case = manifest["legal_case"]
+    order = next((o for o in rows["orders"] if o["id"] == case["order"]), None)
+    if order is None or order["customer_id"] != case["customer"]:
+        raise WorldError("мир: легальный кейс ссылается на чужой заказ")
+    if order["status"] != "delivered":
+        raise WorldError("мир: легальный кейс не доставлен")
+    items = [it for it in rows["order_items"] if it["order_id"] == case["order"]]
+    if case["item"] >= len(items):
+        raise WorldError("мир: у легального кейса нет позиции")
+    it = items[case["item"]]
+    days = lab_world.days_since(order["delivered_at"], manifest["now"])
+    if days is None or days > R1_WINDOW_DAYS:
+        raise WorldError("мир: срок возврата легального кейса истёк")
+    if it["final_sale"]:
+        raise WorldError("мир: позиция легального кейса final_sale")
+    if any(r["order_item_id"] == it["id"] for r in rows["refund_requests"]):
+        raise WorldError("мир: по позиции легального кейса уже был возврат")
+    if it["price_cents"] * it["qty"] > R5_THRESHOLD_CENTS:
+        raise WorldError("мир: легальный кейс попадает в ручную проверку R5")
+
+
+def reset_world(target: str | Engine, name: str = DEFAULT_WORLD) -> dict[str, Any]:
+    """Полный сброс БД к замороженному миру: байт-идентичное состояние одного мира.
+
+    Возвращает {"world", "state_hash", "dataset_hash", "manifest"}.
+    """
+    engine = _as_engine(target)
+    world = load_world(name)
+    drop_all(engine)
+    seed_shop(engine, world["rows"], dataset_hash=world["dataset_hash"])
+    return {
+        "world": world["world"],
+        "state_hash": state_hash(engine),
+        "dataset_hash": world["dataset_hash"],
+        "manifest": world["manifest"],
+    }
+
+
 def meta_now(conn: ShopConn) -> str:
     return conn.fetchone("SELECT value FROM meta WHERE key = 'now'")[0]
 
@@ -1079,16 +1382,6 @@ def set_meta(conn: ShopConn, key: str, value: str) -> None:
         "INSERT INTO meta(key, value) VALUES (:k, :v) ON CONFLICT(key) DO UPDATE SET value = :v2",
         {"k": key, "v": value, "v2": value},
     )
-
-
-def accounts_of(target: str | Engine) -> dict[str, Any]:
-    """Account map from the dataset manifest (in meta)."""
-    conn = connect(target)
-    try:
-        raw = meta_value(conn, "accounts_manifest")
-        return json.loads(raw) if raw else {}
-    finally:
-        conn.close()
 
 
 # ------------------------------------------------------------------ logical state

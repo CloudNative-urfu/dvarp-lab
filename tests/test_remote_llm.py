@@ -124,6 +124,7 @@ def test_services_self_mark_remote_endpoint():
             "direct_task",
             1,
             0,
+            goal="refund_expired",
             shop=Shop(),
             filter_svc=Filter(),
             attacker_complete=lambda m: "hi",
@@ -210,6 +211,7 @@ def test_probe_remote_model_off_roster(tmp_path, monkeypatch):
     result = probe(
         {
             "config": "g0",
+            "goal": "refund_expired",
             "tactic": "direct_task",
             "agent_model": "proxy/agent-x",
         },

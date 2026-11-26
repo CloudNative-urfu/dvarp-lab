@@ -1,11 +1,12 @@
 """Запускатель: перебор сетки «модель × конфигурация × сценарий», парные прогоны.
 
 Оси кампании — launcher.axes (point/range/all/all_limited над frozen-наборами).
-Ячейка = (config, style, tactic, agent_model, attacker_model, seed). На каждую
-ячейку: /configure (номинальная проверка + пин модели), /reset(seed), снимок
-исходного состояния, парные прогоны (легальный и атакующий эпизоды в одном
-стиле общения на одном исходном состоянии), манифест в runs/<run_id>/.
-Расчёт метрик — по флагу compute, в любое время (metrics_svc).
+Ячейка = (config, goal, style, tactic, agent_model, attacker_model, seed); мир
+один (frozen/seed_worlds) и от сида не зависит — сид детерминирует прогон. На
+каждую ячейку: /configure (номинальная проверка + пин модели), /reset(seed),
+снимок исходного состояния, парные прогоны (легальный и атакующий эпизоды в
+одном стиле общения на одном исходном состоянии), манифест в runs/<run_id>/
+с пином версии мира. Расчёт метрик — по флагу compute, в любое время.
 """
 
 from __future__ import annotations
@@ -116,6 +117,7 @@ def run_campaign(
         "episodes": camp.episodes,
         "axes": {
             "configs": camp.configs,
+            "goals": camp.goals,
             "styles": camp.styles,
             "tactics": camp.tactics,
             "agent_models": camp.agent_models,
@@ -123,6 +125,7 @@ def run_campaign(
             "seeds": camp.seeds,
             "scenario_pairs": camp.scenario_pairs,
         },
+        "world": None,  # пин версии замороженного мира (world + dataset_hash)
         "cells": [],
     }
     report({"stage": "start", "run_id": run_id, "cells": len(cells)})
@@ -143,7 +146,16 @@ def run_campaign(
             _model_spec(cell["attacker_model"], "attacker") if cell["attacker_model"] else agent
         )
 
-        shop.post("/reset", {"seed": seed})  # сначала reset: он инициализирует журнал shop
+        reset_info = shop.post("/reset", {"seed": seed})  # reset инициализирует журнал shop
+        if manifest["world"] is None:
+            manifest["world"] = {
+                "name": reset_info.get("world"),
+                "dataset_hash": reset_info.get("dataset_hash"),
+            }
+        elif manifest["world"]["name"] != reset_info.get("world") or manifest["world"][
+            "dataset_hash"
+        ] != reset_info.get("dataset_hash"):
+            raise SystemExit("мир shop_svc не совпадает с миром других ячеек прогона")
         shop.post("/configure", {"config_name": cfg, "agent_model": agent.as_dict()})
         snap = shop.post("/snapshot", {"label": f"{run_id}-start"})
         cell_result: dict[str, Any] = {
@@ -151,7 +163,11 @@ def run_campaign(
             "seed": seed,
             "agent_model": agent.as_dict(),
             "attacker_model": attacker.as_dict(),
-            "scenario": {"style": cell["style"], "tactic": cell["tactic"]},
+            "scenario": {
+                "goal": cell["goal"],
+                "style": cell["style"],
+                "tactic": cell["tactic"],
+            },
             "episodes": [],
         }
         for i in camp.episodes:
@@ -179,6 +195,7 @@ def run_campaign(
                     "config_name": cfg,
                     "attacker_model": attacker.as_dict(),
                     "tactic": cell["tactic"],
+                    "goal": cell["goal"],
                     "budget": camp.budget,
                     "seed": derive_seed(seed, cfg, *attack_signature(cell), i, "attack"),
                     "style": cell["style"],
@@ -242,6 +259,8 @@ def probe(
         raise SystemExit("номинальная проверка не пройдена:\n" + "\n".join(problems))
     seed = spec.get("seed")
     seed = int(seed) if seed is not None else derive_seed(0, cfg, spec["tactic"], 0, "probe")
+    if not spec.get("goal"):
+        raise SystemExit("probe требует цель (goal) из frozen/corpus/goals.json")
     shop.post("/reset", {"seed": seed})  # reset инициализирует журнал, затем configure
     shop.post("/configure", {"config_name": cfg, "agent_model": agent.as_dict()})
     return attack.post(
@@ -251,6 +270,7 @@ def probe(
             "config_name": cfg,
             "attacker_model": attacker.as_dict(),
             "tactic": spec["tactic"],
+            "goal": spec["goal"],
             "budget": int(spec.get("budget", 8)),
             "seed": derive_seed(seed, cfg, spec["tactic"], 0, "attack"),
             "style": spec.get("style"),

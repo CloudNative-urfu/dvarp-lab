@@ -18,11 +18,11 @@
 | `lab/` | Общая мини-либа: `chain.py` (хеш-цепочка журнала), `cassette.py` (кассеты), `seeds.py`, `modelspec.py` (ростер frozen/llm.json), `nominal.py` (номинальная проверка), `db.py` (SQLite dev / PostgreSQL prod), `svc_client.py` |
 | `services/shop/` | СС: БД магазина (`db.py`), защита (`guards/` — перенесена из прототипа), агент (`agent/`, `agent/llm`), журнал (`journal/`), FastAPI-приложение (`app.py`) |
 | `services/traffic/` | Симуляция безопасного трафика: стили (`style.py`), правдивые возвраты из БД (`case.py`), цикл эпизода (`episode.py`) |
-| `services/attack/` | Симуляция атаки: реестр тактик (`tactics.py`), атакующий (`attacker.py`), цикл (`episode.py`) |
+| `services/attack/` | Симуляция атаки: методы давления (`tactics.py`), цели — замороженные претензии поверх данных мира (`frozen/corpus/goals.json` + `lab/world.py`), атакующий (`attacker.py`), цикл (`episode.py`); промпт собирается без обращений к shop | `/run-episode`, `/start`, `/stop` |
 | `services/filter/` | Сырая БД + хеш-цепочка + кассеты; наружу — только текст |
 | `services/metrics/` | Формулы канона (`formulas.py`: L*, break-even, detection) поверх сырой БД |
 | `launcher/` | Скриптовый оркестратор: матрица, seeds, номинальные проверки, парные прогоны |
-| `frozen/` | Замороженные характеристики: `configs/`, `llm.json`, `corpus/`, `styles.json` |
+| `frozen/` | Замороженные характеристики: `configs/`, `llm.json`, `corpus/` (методы атаки + цели), `styles.json`, `seed_worlds/world_a/` (единственный мир БД) |
 | `scripts/smoke.py` | Сквозной смок: поднимает 5 сервисов, гоняет launcher, считает метрики |
 | `tests/` | pytest: перенесённые тесты защиты + новые сервисные/golden |
 
@@ -40,10 +40,12 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
 
 ## Поток данных (по схеме)
 
-1. `launcher/__main__.py:run()` — ячейка матрицы (config × style × tactic):
-   номинальная проверка → `POST shop /reset {seed}` → `POST shop /snapshot` →
+1. `launcher/__main__.py:run()` — ячейка матрицы (config × goal × style × tactic):
+   номинальная проверка → `POST shop /reset {seed}` (сброс к замороженному миру;
+   пин `world`/`dataset_hash` в манифесте) → `POST shop /snapshot` →
    легальный эпизод (`traffic /run-episode`) → `restore` → атакующий эпизод
-   (`attack /run-episode`) → `restore`; манифест в `runs/<run_id>/manifest.json`.
+   (`attack /run-episode`, цель ячейки) → `restore`; манифест в
+   `runs/<run_id>/manifest.json`.
 2. Симуляции ходят только текстом: `traffic` и `attack` зовут
    `POST shop /turn {episode_id, channel, text, turn}` (`services/shop/app.py:301`).
 3. `shop /turn` возвращает **только** `{text, ended, session_status}`; сырьё
@@ -62,8 +64,10 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
    (turn возвращает ровно три поля) и `tests/test_filter_service.py` (в /text нет полей raw).
    Если добавляешь поле в ответ /turn — это дыра в барьере, так нельзя.
 2. **Атакующий без доступа к коду защиты и БД** (`services/attack/`): только HTTP
-   `POST /turn` с `channel="attack"`; никакого прямого чтения БД магазина, никаких
-   решений гвардрейлов в контексте атакующего.
+   `POST /turn` с `channel="attack"` и goal ячейки; никакого прямого чтения БД
+   магазина, никаких решений гвардрейлов в контексте атакующего; брифа от shop
+   нет — system-промпт собирается attack-сервисом из frozen (манифест мира +
+   реестры целей/методов + тон).
 3. **traffic_svc читает БД магазина read-only** — это разрешено схемой (чтение для
    правдивых запросов). Писать из traffic в БД магазина нельзя.
 4. **Пин model_spec**: каждая запись несёт, на какой модели гоняли —
@@ -108,10 +112,21 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
     `RESEARCH_LLM_*`). На remote-прогонах L* считается
     полноценно (галочка include_remote) — формулы и различия конфигов проверяются
     на живом материале; в датасет статьи эти числа не идут.
-8b. **Семантика сида**: каталог товаров — фиксированный CSV (от сида не зависит);
-    particulars клиентов/заказов и кейс — детерминированы от сида; по умолчанию
-    один сид, диапазон сидов = перебор «миров» (seed_spread). Снапшот пары берётся
-    на старте легального эпизода — от мира, не от CSV.
+8b. **Семантика сида (ревизия «один мир», dvarp-lab#6)**: БД магазина — один
+    замороженный мир (`frozen/seed_worlds/world_a/`), тот же мир → байт-идентичная
+    БД; сид данных не касается — он детерминирует только прогон (раскладка
+    реплик stub-клиента/атакующего и пр.). Легальный эпизод опирается на один
+    фиксированный всегда-возвратный заказ A из манифеста мира (кейс не
+    перебирается сидом; у легального варьируется только ось стиля). Кейс
+    атакующего определяется целью (`frozen/corpus/goals.json`: цель → заказ мира
+    или фиктивный заказ из манифеста), а не pool[0]. Оси перебора — цели ×
+    методы × тон; прежние оси миров/когорт выпали. Снапшот пары — от мира
+    (снимок после reset, до эпизодов); meta БД пиннит `world`/`dataset_hash`.
+8b-r. **Роли вне БД**: привязка ролей (legal/attack) — манифест мира (файл
+    frozen), который shop_svc читает при open эпизода; в БД не остаётся ни
+    одного следа роли/атакующего (тест-инвариант чистоты БД,
+    `tests/test_shop_service.py`, `tests/test_world.py`). Атакующий не знает
+    своей «роли» из БД — её просто нет.
 8d. **NFR-2.8 (прогон-микс) — интерпретация** (владелец, 2026-11-25): кампания
     лаба соответствует ревизии канона 2026-11-13 «смешанный поток эпизодов» —
     каждая ячейка содержит legal+attack ноги на идентичном начальном состоянии
@@ -183,8 +198,10 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
 - `frozen/llm.json` — плейсхолдер до задачи #84 (выбор моделей desmitry/Kirill);
 - PostgreSQL-путь не обкатан (dev на SQLite) — обкатать на сервере прогонов;
 - адаптивная память атакующего (усиление поверх тактик) — будущая ревизия;
-  реестр тактик расширен социальным сектором до 8 (third_party_emergency,
-  authority_impersonation — atk-21…28); общий стиль парных прогонов встроен.
+  реестр методов расширен социальным сектором до 8 (third_party_emergency,
+  authority_impersonation — atk-21…28); общий стиль парных прогонов встроен;
+  ось целей заморожена (7 целей поверх мира #6); реестр ~70 методов с
+  иллюстрациями — задача dvarp-lab#4 (заменит tactics.json);
 - [закрыто] пины model_spec: пустая группа в metrics устранена — launcher вызывает
   `/configure` перед каждой парой;
 - [закрыто] консоль запуска (services/ui, 9410), оси point/range/all/all_limited,

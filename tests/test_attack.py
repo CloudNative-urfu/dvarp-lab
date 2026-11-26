@@ -1,9 +1,10 @@
-from pathlib import Path
-
 import pytest
 
+from lab import world as lab_world
 from services.attack import episode as attack_episode
-from services.attack.tactics import load_tactics, resolve_placeholders, start_prompt
+from services.attack.attacker import build_system_prompt
+from services.attack.tactics import load_tactics, method_prompt
+from services.traffic.style import load_styles
 
 ATTACKER_MODEL = {
     "name": "PLACEHOLDER-attacker-1",
@@ -44,9 +45,10 @@ def never_end(n):
     return [{"text": f"agent turn {i}", "ended": False} for i in range(n)]
 
 
-def test_tactics_registry_from_corpus():
-    tactics = load_tactics()
-    assert set(tactics) >= {
+def test_methods_registry_from_corpus():
+    """Ось методов: реестр заморожен; метод несёт описание пути давления."""
+    methods = load_tactics()
+    assert set(methods) >= {
         "direct_task",
         "role_switch",
         "trust_spoof",
@@ -56,20 +58,74 @@ def test_tactics_registry_from_corpus():
         "third_party_emergency",
         "authority_impersonation",
     }
-    for t in tactics.values():
-        assert t["count"] == len(t["entries"]) > 0
-        assert t["sample_start_prompt"]
+    for m in methods.values():
+        assert m["count"] == len(m["entries"]) > 0
+        assert m["description"]
+        # обязательных реплик нет: метод — путь давления, стартовая реплика — цель
+        assert method_prompt(m) == m["description"]
 
 
-def test_start_prompt_resolves_placeholders_without_db():
-    tactic = load_tactics()["direct_task"]
-    prompt = start_prompt(tactic, seed=7)
-    assert "{" not in prompt and "}" not in prompt
-    assert prompt  # реплика корпуса тактики, детерминированная от seed
-    assert prompt == start_prompt(tactic, seed=7)
-    assert resolve_placeholders(
-        "{order:old} {item:old:0} {price:old:0} $5", 1
-    ) != resolve_placeholders("{order:old} {item:old:0} {price:old:0} $5", 2)
+def test_goals_registry_bound_to_world():
+    """Ось целей: 7 замороженных претензий, каждая ссылается на данные мира."""
+    manifest = lab_world.load_manifest()
+    goals = lab_world.load_goals(manifest)
+    assert len(goals) == 7
+    for g in goals.values():
+        if g["order"] == "fictive":
+            assert g["order"] not in manifest["orders"]  # фиктивный заказ — вне БД мира
+        else:
+            assert g["order"] in manifest["orders"]
+        assert g["claim"].strip() and g["vector"].strip()
+
+
+def test_claims_render_from_manifest_without_random():
+    """Претензия цели — детерминированная подстановка фактов манифеста мира."""
+    manifest = lab_world.load_manifest()
+    goals = lab_world.load_goals(manifest)
+    claim = lab_world.render_claim(
+        goals["refund_expired"]["claim"],
+        lab_world.claim_facts(goals["refund_expired"], manifest),
+    )
+    assert "O-51002" in claim and "$129.00" in claim and "{" not in claim
+    # фиктивный заказ: факты есть в манифесте (вне БД мира — проверяет test_world)
+    fictive = lab_world.claim_facts(goals["refund_nonexistent"], manifest)
+    assert fictive["order_id"] == "O-51100" and fictive["amount_cents"] == 31900
+
+
+def test_prompt_is_function_of_goal_method_style():
+    """Промпт атакующего = детерминированная функция «цель × метод × тон»."""
+    manifest = lab_world.load_manifest()
+    goals = lab_world.load_goals(manifest)
+    methods = load_tactics()
+    styles = load_styles()
+
+    def triple(goal, tactic, style):
+        entry = goals[goal]
+        claim = lab_world.render_claim(entry["claim"], lab_world.claim_facts(entry, manifest))
+        return build_system_prompt(
+            entry["vector"], claim, method_prompt(methods[tactic]), styles.get(style)
+        )
+
+    base = triple("refund_expired", "direct_task", "patient")
+    assert base == triple("refund_expired", "direct_task", "patient")
+    assert triple("refund_overprice", "direct_task", "patient") != base
+    assert triple("refund_expired", "role_switch", "patient") != base
+    assert triple("refund_expired", "direct_task", "irritated") != base
+
+
+def test_unknown_goal_rejected():
+    with pytest.raises(ValueError, match="цель"):
+        attack_episode.run_attack(
+            "e1",
+            "g0",
+            ATTACKER_MODEL,
+            "direct_task",
+            3,
+            1,
+            goal="no-such",
+            shop=FakeShop(never_end(1)),
+            filter_svc=FakeFilter(),
+        )
 
 
 def test_unknown_tactic_rejected():
@@ -81,6 +137,7 @@ def test_unknown_tactic_rejected():
             "no-such",
             3,
             1,
+            goal="refund_expired",
             shop=FakeShop(never_end(1)),
             filter_svc=FakeFilter(),
         )
@@ -89,14 +146,52 @@ def test_unknown_tactic_rejected():
 def test_budget_respected():
     shop, flt = FakeShop(never_end(10)), FakeFilter()
     result = attack_episode.run_attack(
-        "e1", "g0", ATTACKER_MODEL, "direct_task", 3, 7, shop=shop, filter_svc=flt
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        3,
+        7,
+        goal="refund_expired",
+        shop=shop,
+        filter_svc=flt,
     )
     assert result == {"outcome": "budget_exhausted", "turns": 3, "attempts": 3}
     assert len(shop.turns) == 3
     assert all(t["channel"] == "attack" for t in shop.turns)
 
 
-def test_tactic_used_in_model_prompt():
+def test_opening_is_the_frozen_goal_claim():
+    """Стартовая реплика — отрендеренная претензия цели; тот же сид → та же реплика."""
+    shop1, flt1 = FakeShop(never_end(1)), FakeFilter()
+    shop2, flt2 = FakeShop(never_end(1)), FakeFilter()
+    attack_episode.run_attack(
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        1,
+        7,
+        goal="refund_expired",
+        shop=shop1,
+        filter_svc=flt1,
+    )
+    attack_episode.run_attack(
+        "e2",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        1,
+        99,
+        goal="refund_expired",
+        shop=shop2,
+        filter_svc=flt2,
+    )
+    assert shop1.turns[0]["text"] == shop2.turns[0]["text"]
+    assert "O-51002" in shop1.turns[0]["text"]
+
+
+def test_tactic_and_claim_used_in_model_prompt():
     prompts = []
 
     def fake_complete(messages):
@@ -111,17 +206,18 @@ def test_tactic_used_in_model_prompt():
         "role_switch",
         3,
         7,
+        goal="refund_expired",
         shop=shop,
         filter_svc=flt,
         attacker_complete=fake_complete,
     )
     assert result["outcome"] == "budget_exhausted"
     opening = shop.turns[0]["text"]
-    assert len(prompts) == 2  # первый ход — стартовый промпт корпуса, далее модель
+    assert len(prompts) == 2  # первый ход — претензия цели, далее модель
     for messages in prompts:
         system = messages[0]["content"]
-        assert "TACTIC: role_switch" in system
-        assert opening in system  # размеченный стартовый промпт виден в промпте модели
+        assert "Fake authority or system role" in system  # описание метода
+        assert opening in system  # претензия цели видна в промпте модели
         assert "AGENT REPLY: agent turn" in messages[-1]["content"]
 
 
@@ -135,7 +231,15 @@ def test_attacker_stops_on_believed_success():
         FakeFilter(),
     )
     result = attack_episode.run_attack(
-        "e1", "g0", ATTACKER_MODEL, "direct_task", 5, 7, shop=shop, filter_svc=flt
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        5,
+        7,
+        goal="refund_expired",
+        shop=shop,
+        filter_svc=flt,
     )
     assert result == {"outcome": "attacker_stopped", "turns": 1, "attempts": 1}
 
@@ -150,7 +254,15 @@ def test_session_ended_outcome():
         FakeFilter(),
     )
     result = attack_episode.run_attack(
-        "e1", "g0", ATTACKER_MODEL, "direct_task", 5, 7, shop=shop, filter_svc=flt
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        5,
+        7,
+        goal="refund_expired",
+        shop=shop,
+        filter_svc=flt,
     )
     assert result["outcome"] == "session_closed"
     assert result["attempts"] == 1
@@ -159,7 +271,15 @@ def test_session_ended_outcome():
 def test_model_spec_pinned_in_every_record():
     shop, flt = FakeShop(never_end(3)), FakeFilter()
     attack_episode.run_attack(
-        "e1", "g0", ATTACKER_MODEL, "direct_task", 3, 7, shop=shop, filter_svc=flt
+        "e1",
+        "g0",
+        ATTACKER_MODEL,
+        "direct_task",
+        3,
+        7,
+        goal="refund_expired",
+        shop=shop,
+        filter_svc=flt,
     )
     assert len(flt.records) == 3
     for i, rec in enumerate(flt.records):
@@ -167,6 +287,7 @@ def test_model_spec_pinned_in_every_record():
         assert rec["channel"] == "attack"
         assert rec["turn"] == i
         assert rec["raw"]["tactic"] == "direct_task"
+        assert rec["raw"]["goal"] == "refund_expired"
         assert rec["raw"]["config_name"] == "g0"
         assert rec["raw"]["llm_calls"] == []
 
@@ -186,6 +307,7 @@ def test_cassette_line_per_model_call():
         "direct_task",
         4,
         7,
+        goal="refund_expired",
         shop=shop,
         filter_svc=flt,
         attacker_complete=fake_complete,
@@ -201,7 +323,9 @@ def test_cassette_line_per_model_call():
 
 
 def test_barrier_no_shop_db_access():
-    """В коде атаки нет соединений к БД магазина: только HTTP /turn к shop_svc."""
+    """В коде атаки нет соединений к БД магазина и брифа: только HTTP /turn."""
+    from pathlib import Path
+
     src_dir = Path(attack_episode.__file__).resolve().parent
     forbidden = (
         "create_engine",
@@ -212,6 +336,7 @@ def test_barrier_no_shop_db_access():
         "refund_requests",
         "order_items",
         "connect(",
+        "/attack-brief",
     )
     for path in src_dir.glob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -234,7 +359,7 @@ def test_app_start_stop_flags():
         assert client.get("/state").json() == {"started": False, "stopped": True}
 
 
-def test_app_unknown_tactic_is_400():
+def test_app_unknown_goal_is_400():
     from fastapi.testclient import TestClient
 
     from services.attack.app import app
@@ -243,7 +368,8 @@ def test_app_unknown_tactic_is_400():
         "episode_id": "e1",
         "config_name": "g0",
         "attacker_model": ATTACKER_MODEL,
-        "tactic": "no-such",
+        "tactic": "direct_task",
+        "goal": "no-such",
         "budget": 3,
         "seed": 1,
     }
@@ -251,7 +377,7 @@ def test_app_unknown_tactic_is_400():
         assert client.post("/run-episode", json=body).status_code == 400
 
 
-def test_new_social_tactics_in_registry():
+def test_social_methods_in_registry():
     reg = load_tactics()
     for name, entries in (
         ("third_party_emergency", ["atk-21", "atk-22", "atk-23", "atk-24"]),
@@ -259,15 +385,6 @@ def test_new_social_tactics_in_registry():
     ):
         assert name in reg
         assert reg[name]["entries"] == entries
-        assert len(reg[name]["goals"]) >= 2
-
-
-def test_new_tactic_start_prompts_resolve_clean():
-    reg = load_tactics()
-    for name in ("third_party_emergency", "authority_impersonation"):
-        prompt = start_prompt(reg[name], 42)
-        assert "{" not in prompt, prompt
-        assert "victim" not in prompt and "price}" not in prompt and "days}" not in prompt
 
 
 def test_unknown_style_rejected():
@@ -281,6 +398,7 @@ def test_unknown_style_rejected():
             2,
             7,
             style_name="no_such",
+            goal="refund_expired",
             shop=shop,
             filter_svc=flt,
         )
@@ -302,15 +420,17 @@ def test_style_mixed_into_attacker_system_prompt():
         2,
         7,
         style_name="patient",
+        goal="refund_expired",
         shop=shop,
         filter_svc=flt,
         attacker_complete=fake_complete,
     )
     assert result["outcome"] == "budget_exhausted"
     system = prompts[0][0]["content"]
-    assert "TACTIC: third_party_emergency" in system
-    assert "Communication style" in system
+    assert "Claims a relative or family member" in system  # метод — путь давления
+    assert "Communication style" in system  # тон — ось стиля
     assert "Calm patient customer" in system
+    assert "O-51002" in system  # претензия цели — из манифеста мира
 
 
 def test_attack_record_pins_style():
@@ -323,6 +443,7 @@ def test_attack_record_pins_style():
         1,
         7,
         style_name="irritated",
+        goal="refund_expired",
         shop=shop,
         filter_svc=flt,
     )

@@ -17,12 +17,13 @@ NUMERIC_MODES = ["point", "range", "set", "all_limited"]
 
 AXES: list[dict[str, Any]] = [
     {"name": "configs", "label": "Конфигурации защиты"},
+    {"name": "goals", "label": "Цели атаки"},
     {"name": "styles", "label": "Стили общения"},
-    {"name": "tactics", "label": "Тактики атаки", "splits": ["dev", "holdout"]},
+    {"name": "tactics", "label": "Методы атаки", "splits": ["dev", "holdout"]},
     {"name": "agent_models", "label": "Модели агента", "free": True, "role": "agent"},
     {"name": "attacker_models", "label": "Модели атакующего", "free": True, "role": "attacker"},
     {"name": "episodes", "label": "Эпизоды на ячейку"},
-    {"name": "seeds", "label": "Сиды (миры)"},
+    {"name": "seeds", "label": "Сиды (детерминизм прогона)"},
 ]
 
 RUN_FIELDS: list[dict[str, Any]] = [
@@ -80,12 +81,13 @@ def probe_fields(ax: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     return [
         pick("configs", "config", "Конфигурация"),
-        pick("tactics", "tactic", "Тактика"),
+        pick("goals", "goal", "Цель"),
+        pick("tactics", "tactic", "Метод"),
         pick("styles", "style", "Стиль", optional=True),
         pick("agent_models", "agent_model", "Модель агента"),
         pick("attacker_models", "attacker_model", "Модель атакующего", optional=True),
         {"name": "budget", "label": "Бюджет ходов", "type": "int", "default": 8, "min": 1},
-        {"name": "seed", "label": "Сид (пусто — от тактики)", "type": "int", "default": None},
+        {"name": "seed", "label": "Сид (пусто — от метода)", "type": "int", "default": None},
     ]
 
 
@@ -100,7 +102,7 @@ def presets(ax: list[dict[str, Any]]) -> list[dict[str, Any]]:
         },
         {
             "name": "pilot",
-            "label": "Пилот: все тактики, один конфиг и стиль",
+            "label": "Пилот: все методы, один конфиг, цель и стиль",
             "spec": {**point, "tactics": {"mode": "all"}, "budget": 8, "compute": False},
         },
     ]
@@ -111,15 +113,17 @@ TERMS: dict[str, str] = {
     "configs": "Конфигурация защиты: набор гвардрейлов и политика (frozen/configs)",
     "config": "Конфигурация защиты: набор гвардрейлов и политика",
     "config_name": "Конфигурация защиты, на которой шёл эпизод",
+    "goals": "Цель атаки: замороженная претензия поверх данных мира (frozen/corpus/goals.json)",
+    "goal": "Цель атаки: что требовать (данные претензии заморожены в мире)",
     "styles": "Стиль общения клиента; общий для легальной и атакующей ноги пары",
     "style": "Стиль общения: тон обеих ног пары",
-    "tactics": "Тактика атаки из замороженного корпуса",
-    "tactic": "Тактика атаки из замороженного корпуса",
+    "tactics": "Метод атаки: путь давления, КАК давить (frozen/corpus/tactics.json)",
+    "tactic": "Метод атаки: путь давления, КАК давить",
     "agent_models": "Модель агента поддержки (защищаемая сторона)",
     "attacker_models": "Модель атакующего; пусто — та же, что у агента",
     "episodes": "Эпизодов (пар legal+attack) на ячейку",
-    "seeds": "Сид = «мир»: вариант детерминированных данных магазина и кейса",
-    "seed": "Сид = «мир»: вариант детерминированных данных магазина и кейса",
+    "seeds": "Сид = детерминизм прогона; мир один и от сида не зависит",
+    "seed": "Сид = детерминизм прогона; мир один и от сида не зависит",
     "budget": "Максимум ходов атакующего в эпизоде",
     "split": "Раздел корпуса тактик: dev — разработка, holdout — отложенная проверка",
     "point": "Одно значение",

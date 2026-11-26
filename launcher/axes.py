@@ -16,7 +16,7 @@ from lab.modelspec import FROZEN_DIR
 
 GUARD_VOLUME = 1000
 
-ENUM_AXES = ("configs", "styles", "tactics", "agent_models", "attacker_models")
+ENUM_AXES = ("configs", "goals", "styles", "tactics", "agent_models", "attacker_models")
 NUMERIC_AXES = ("episodes", "seeds")
 
 
@@ -25,6 +25,12 @@ def _sorted_configs() -> list[str]:
     return sorted(
         p.stem for p in (FROZEN_DIR / "configs").glob("*.json") if p.stem not in ("configs.lock",)
     )
+
+
+def _sorted_goals() -> list[str]:
+    """Ось целей: замороженные претензии поверх данных мира (frozen/corpus/goals.json)."""
+    data = json.loads((FROZEN_DIR / "corpus" / "goals.json").read_text(encoding="utf-8"))
+    return sorted(g["name"] for g in data["goals"])
 
 
 def _sorted_styles() -> list[str]:
@@ -73,6 +79,8 @@ def _sorted_models(role: str) -> list[str]:
 def axis_universe(axis: str) -> list[Any]:
     if axis == "configs":
         return _sorted_configs()
+    if axis == "goals":
+        return _sorted_goals()
     if axis == "styles":
         return _sorted_styles()
     if axis == "tactics":
@@ -148,6 +156,7 @@ def resolve_axis(axis: str, spec: dict[str, Any] | None) -> list[Any]:
 @dataclass
 class Campaign:
     configs: list[str]
+    goals: list[str]
     styles: list[str]
     tactics: list[str]
     agent_models: list[str]
@@ -162,19 +171,21 @@ class Campaign:
         out = []
         for cfg in self.configs:
             for style, tactic in pairs:
-                for am in self.agent_models:
-                    for am_att in self.attacker_models or [None]:
-                        for seed in self.seeds:
-                            out.append(
-                                {
-                                    "config": cfg,
-                                    "style": style,
-                                    "tactic": tactic,
-                                    "agent_model": am,
-                                    "attacker_model": am_att,
-                                    "seed": seed,
-                                }
-                            )
+                for goal in self.goals:
+                    for am in self.agent_models:
+                        for am_att in self.attacker_models or [None]:
+                            for seed in self.seeds:
+                                out.append(
+                                    {
+                                        "config": cfg,
+                                        "goal": goal,
+                                        "style": style,
+                                        "tactic": tactic,
+                                        "agent_model": am,
+                                        "attacker_model": am_att,
+                                        "seed": seed,
+                                    }
+                                )
         return out
 
     def volume(self) -> tuple[int, int]:
@@ -190,6 +201,7 @@ def resolve_campaign(spec: dict[str, Any]) -> Campaign:
     attacker = resolve_axis("attacker_models", spec.get("attacker_models"))
     return Campaign(
         configs=resolve_axis("configs", spec.get("configs")),
+        goals=resolve_axis("goals", spec.get("goals")),
         styles=resolve_axis("styles", spec.get("styles")),
         tactics=resolve_axis("tactics", spec.get("tactics")),
         agent_models=resolve_axis("agent_models", spec.get("agent_models")),

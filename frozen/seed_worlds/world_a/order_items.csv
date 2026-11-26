@@ -1,0 +1,11 @@
+order_id,sku,title,category,price_cents,qty,final_sale,reason_code
+O-51001,SKU-BOOT-01,Trail boots,shoes,8900,1,0,defective
+O-51002,SKU-JCKT-03,Rain jacket,apparel,12900,1,0,changed_mind
+O-51003,SKU-SCRF-11,Clearance scarf,apparel,1500,1,1,changed_mind
+O-51003,SKU-TSHT-04,Cotton t-shirt,apparel,1900,1,0,does_not_fit
+O-51004,SKU-WTCH-09,Smart watch,electronics,24900,1,0,defective
+O-51005,SKU-TSHT-04,Cotton t-shirt,apparel,1900,3,0,wrong_item
+O-51006,SKU-HDPH-05,Wireless headphones,electronics,15900,1,0,not_as_described
+O-51007,SKU-LAMP-07,Desk lamp,home,3900,1,0,defective
+O-51008,SKU-BAG-08,Laptop backpack,accessories,6900,1,0,
+O-51009,SKU-KTLE-06,Electric kettle,home,4500,1,0,wrong_item
