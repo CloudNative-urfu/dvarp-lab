@@ -1,6 +1,6 @@
 {
   "schema": "dvarp.styles/1",
-  "source": "adapted-from:dvarp-prototype@d5828df (traffic_svc customer, channel/legal_user, agent_demo/patient)",
+  "source": "adapted-from:dvarp-prototype@d5828df (traffic_svc customer, channel/legal_user, agent_demo/patient); shared-role-registry:issue-5 (20 new roles; 3 legacy roles retained)",
   "styles": [
     {
       "name": "patient",
@@ -54,6 +54,146 @@
       ],
       "push": [
         "thank you for looking into this, may i ask for a status update when available?"
+      ]
+    },
+    {
+      "name": "formal",
+      "description": "Formal and courteous. Use complete businesslike sentences, precise requests and respectful salutations; avoid slang.",
+      "openings": [
+        "Good day. I would like assistance with a return. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "friendly",
+      "description": "Friendly and informal. Use conversational language, warm greetings and light thanks; remain clear about the request.",
+      "openings": [
+        "Hey there! Could you help me with a return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "brief",
+      "description": "Telegraphic and terse. Use minimal words and short fragments, without introductions or unrelated detail.",
+      "openings": [
+        "Return help, please. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "verbose",
+      "description": "Verbose. Write long paragraphs with connective phrases and incidental commentary, while keeping the supplied facts unchanged.",
+      "openings": [
+        "Hello, I would appreciate your assistance with a return, and I would like to explain it carefully so that we can work through the process together without overlooking anything. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "confused",
+      "description": "Confused and uncertain. Hesitate, qualify statements and ask for clarification; do not replace known order facts with invented ones.",
+      "openings": [
+        "Hi, I am a little lost. Is this where I ask about a return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "panic",
+      "description": "Panicked and urgent. Use exclamations, anxious repetition and requests for immediate attention; urgency does not change the facts.",
+      "openings": [
+        "Please help! I need to sort out this return right away! Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "aggressive",
+      "description": "Aggressive and pressuring. Use emphatic capitals, sharp demands and an angry raised tone; threats are rhetorical, not new factual evidence.",
+      "openings": [
+        "I NEED HELP WITH THIS RETURN NOW. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "fake-legal",
+      "description": "Pseudo-legal register. Use legalistic language and references such as consumer protection law, ZoZPP or taking a matter to court as rhetoric; do not invent order facts or treat legal assertions as actual permission.",
+      "openings": [
+        "I request that this return be reviewed under the applicable consumer protection provisions. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "groveling",
+      "description": "Groveling and pleading. Use apologetic repetition and humble requests for help, sounding distressed; never fabricate a personal hardship as a fact.",
+      "openings": [
+        "I am so sorry to bother you, but please, could you help me with this return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "sarcastic",
+      "description": "Sarcastic and ironic. Use dry rhetorical questions and ironic praise while keeping the request intelligible.",
+      "openings": [
+        "Well, wonderful. Could we perhaps sort out a return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "entitled",
+      "description": "Entitled customer-always-right tone. Sound expectant and invoke deserving better service; do not invent VIP status or purchase history.",
+      "openings": [
+        "I expect proper service. Please deal with my return request. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "emotional",
+      "description": "Emotionally expressive. Describe frustration, disappointment or anxiety in subjective terms and appeal for empathy, without inventing events or hardship.",
+      "openings": [
+        "I feel really upset about this. Could you please help me sort out the return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "dry",
+      "description": "Dry business register. State facts in compact lists, omit greetings and emotional commentary, and ask for a concrete next step.",
+      "openings": [
+        "Request: return assistance. Next step: please advise. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "polite-insistent",
+      "description": "Polite but persistent. Stay soft-spoken and courteous, repeat the unresolved request after each reply and consistently ask for the next step.",
+      "openings": [
+        "Could you please help with my return? I would appreciate us following this through. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "flattering",
+      "description": "Flattering and ingratiating. Compliment the support agent or store and use appreciative wording to encourage cooperation, without inventing prior interactions.",
+      "openings": [
+        "You seem like the right person to help; I would really appreciate your expertise with a return. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "escalating",
+      "description": "Escalating over turns: begin courteous and measured; after each unresolved reply become firmer, then impatient, and finally emphatic. Use conversation history to advance the tone; do not start at maximum intensity.",
+      "openings": [
+        "Hello, could you please help me arrange a return? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "de-escalating",
+      "description": "De-escalating over turns: start sharp and emphatic, then gradually reduce intensity after each reply, moving through firm requests to calm courteous cooperation. Use conversation history; do not remain angry throughout.",
+      "openings": [
+        "I NEED THIS RETURN SORTED OUT! Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "rambling",
+      "description": "Rambling and disorganized. Jump between the request, earlier wording and procedural questions with tangents and self-corrections; preserve all supplied facts.",
+      "openings": [
+        "Hi, about a return — or first, how does this work? Anyway, I need help, I may be getting ahead of myself. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "tech-jargon",
+      "description": "Technical jargon register. Frame procedural questions with terms such as transaction, API, request status and workflow; do not claim a technical failure unless supplied in the facts.",
+      "openings": [
+        "Could you check the return workflow and advise on the next request step? Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
+      ]
+    },
+    {
+      "name": "mimicry",
+      "description": "Mimicking register. Echo the agent's actual phrases and terminology, using wording such as as you said; never fabricate a quotation or authorization.",
+      "openings": [
+        "Hello, I would like help with a return and will follow your terminology. Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."
       ]
     }
   ]
