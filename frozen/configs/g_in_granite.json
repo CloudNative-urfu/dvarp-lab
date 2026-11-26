@@ -3,7 +3,7 @@
   "defender": "agent",
   "executor_boundary": "8e46eeb0bbeb37c007f60ecb01f733fa16281d130c9fabf40b89ae3b4515c8bd",
   "family": "guarded",
-  "fingerprint": "18077ad2b5f5e32372ee95d2988c103a35bcf5a2d339a882725f1b10376f60fe",
+  "fingerprint": "6582fd4b4aabff04e7211d9486b052a5fb87f2121c46575be1772eb97b053af6",
   "guards": [
     {
       "id": "granite-guardian-3.1-2b",
@@ -40,7 +40,7 @@
   "process": null,
   "queue_discipline": "fifo",
   "resolved": {
-    "guard_set_fingerprint": "578cd2c1ac7d292bd9d6b1956559ae0844fe421bd25f1c843dac97fed1475a62",
+    "guard_set_fingerprint": "3ce996686b259a4184fb03361448a867d1fb29edb2495840e32f86b9d6d19941",
     "guards": [
       {
         "plugin": {
@@ -61,7 +61,7 @@
             "context",
             "output"
           ],
-          "version": "1.0"
+          "version": "1.1"
         },
         "stages": [
           "input"

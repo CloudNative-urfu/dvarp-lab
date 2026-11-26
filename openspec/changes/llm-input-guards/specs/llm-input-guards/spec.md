@@ -20,6 +20,17 @@ A non-local guard endpoint SHALL mark the run remote.
 - **WHEN** `/configure` is called with `g_in_llama` and `LAB_GUARD_LLM_BASE_URL` is empty
 - **THEN** the shop answers 400 naming the variable
 
+### Requirement: Granite risk through the chat template
+The Granite Guardian adapter SHALL send its `risk_name` as `guardian_config` in
+`chat_template_kwargs` of the model request, not as a chat message: the pilot showed
+that the template ignores a `risk_name: …` system message and judges the default
+`harm` risk.
+
+#### Scenario: Jailbreak risk reaches the template
+- **WHEN** `granite-guardian-3.1-2b` inspects an input with default params
+- **THEN** the request carries `chat_template_kwargs.guardian_config.risk_name = "jailbreak"`
+  and the messages hold only the conversation
+
 ### Requirement: Guard token budget in the manifest
 The campaign manifest SHALL record, per configuration with LLM guards, the per-episode
 call cap (stages × turns), the output-token cap (plugin `max_tokens` × calls) and its

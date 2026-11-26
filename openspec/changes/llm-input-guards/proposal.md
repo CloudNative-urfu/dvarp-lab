@@ -20,7 +20,10 @@ Llama Guard 3 8B), но в замороженной матрице их не б�
 - манифест кампании получает `guard_budget`: на эпизод — вызовы (стадии × ходы),
   потолок выходных токенов (≤64/8/32 на вызов) и его цена по `guard_tariff`;
   промпт и итоговый C_guard измеряются журналом post-hoc (#11);
-- `configs.lock.json` дополнен тремя записями, `set_fingerprint` пересчитан.
+- `configs.lock.json` дополнен тремя записями, `set_fingerprint` пересчитан;
+- по итогам пилота адаптер Granite Guardian 1.1 передаёт риск `guardian_config` через
+  `chat_template_kwargs` (системное сообщение `risk_name` шаблон игнорировал);
+  `g_in_granite` и lock перезаморожены.
 
 ## Capabilities
 

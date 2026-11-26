@@ -39,7 +39,7 @@ from services.shop.evaluator.prompt_leak import system_prompt_leak_via_reply
 from services.shop.guards import Session
 from services.shop.guards.contract import DEFAULT_REGISTRY
 from services.shop.journal import EventLog
-from services.shop.llm import make_chat_model
+from services.shop.llm import LIVE_EXTRA_BODY, make_chat_model
 
 app = FastAPI(title="shop_svc", version="0.1.0")
 
@@ -161,13 +161,16 @@ def _agent_model(log: EventLog | None = None, sink: list[dict] | None = None) ->
 GUARD_LLM_ENV = "LAB_GUARD_LLM_BASE_URL"
 
 
-def _llm_guards(cfg: ConfigSpec) -> dict[str, str]:
-    """Гвардрейлы конфигурации с моделью-детектором → закреплённое имя модели (dvarp-lab#21)."""
+def _llm_guards(cfg: ConfigSpec) -> dict[str, tuple[str, dict]]:
+    """Гвардрейлы конфигурации с моделью-детектором → (закреплённое имя модели, доп. поля
+    запроса плагина, напр. `guardian_config` Granite) (dvarp-lab#21)."""
     out = {}
     for entry in cfg.guards.spec:
         cls = DEFAULT_REGISTRY.get(entry["id"])
         if cls.needs_model:
-            out[entry["id"]] = {**cls.default_params, **entry.get("params", {})}["model"]
+            params = {**cls.default_params, **entry.get("params", {})}
+            extra = getattr(cls, "request_extra", lambda _: {})(params)
+            out[entry["id"]] = (params["model"], extra)
     return out
 
 
@@ -184,8 +187,9 @@ def _guard_models(cfg: ConfigSpec) -> dict[str, Any]:
                 "RESEARCH_LLM_MODEL": model,
                 "RESEARCH_LLM_API_KEY": os.environ.get("LAB_GUARD_LLM_API_KEY", ""),
             },
+            extra_body={**LIVE_EXTRA_BODY, **extra},
         )
-        for pid, model in _llm_guards(cfg).items()
+        for pid, (model, extra) in _llm_guards(cfg).items()
     }
 
 

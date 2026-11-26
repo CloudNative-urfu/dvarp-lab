@@ -819,9 +819,13 @@ class AdapterTests(_Base):
         )
         r = self.host.run(p, GuardInput("context", "refund pls", self.task, ctx))
         self.assertEqual((r.signal.signal, r.signal.targets), ("block", (1,)))
-        self.assertEqual(seen[0][0], ("system", "risk_name: jailbreak"))
+        self.assertEqual([r for r, _ in seen[0]], ["user"])  # риск — guardian_config, не сообщение
+        self.assertEqual(
+            p.request_extra(p.params),
+            {"chat_template_kwargs": {"guardian_config": {"risk_name": "jailbreak"}}},
+        )
         self.assertNotIn(
-            "rules", seen[0][1][1].split("] ", 1)[1]
+            "rules", seen[0][0][1].split("] ", 1)[1]
         )  # доверенный фрагмент не отправлен
         self.assertEqual(
             self.host.run(p, GuardInput("input", "boots", self.task)).signal.signal, "allow"

@@ -14,7 +14,9 @@
   промпта https://dev.meta.ai/llama/docs/model-cards-and-prompt-formats/llama-guard-3/;
 - Granite Guardian 3.1: ответ `Yes`/`No` («Is the user message harmful based on the risk
   definition?»), риск задаётся `guardian_config` в шаблоне чата — карточка
-  https://huggingface.co/ibm-granite/granite-guardian-3.1-2b.
+  https://huggingface.co/ibm-granite/granite-guardian-3.1-2b. Сервер получает его полем
+  `chat_template_kwargs` (`request_extra`): пилот dvarp-lab#21 показал, что системное
+  сообщение `risk_name: …` шаблон игнорирует и модель судит риск по умолчанию `harm`.
 
 Неразобранный ответ модели — исключение `DetectorOutputError`: хост вернёт политике
 `GuardResult(status="error")` с затратами, а fail-open/closed выберет политика.
@@ -194,7 +196,7 @@ def parse_granite(content: str) -> bool:
 @register
 class GraniteGuardianAdapter(GuardPlugin):
     plugin_id = "granite-guardian-3.1-2b"
-    version = "1.0"
+    version = "1.1"
     mechanism = "llm_detector"
     stages = ("input", "context", "output")
     deployment = "self_hosted"
@@ -209,11 +211,13 @@ class GraniteGuardianAdapter(GuardPlugin):
         "max_tokens": 8,
     }
 
+    @staticmethod
+    def request_extra(params: dict) -> dict:
+        """Поля запроса модели: риск — `guardian_config` шаблона чата (dvarp-lab#21)."""
+        return {"chat_template_kwargs": {"guardian_config": {"risk_name": params["risk_name"]}}}
+
     def inspect(self, inp: GuardInput, rt: GuardRuntime) -> GuardSignal:
-        # Упрощение: risk_name передаётся системным сообщением, а не guardian_config шаблона
-        # (ChatModel не передаёт chat_template_kwargs) — см. simplifications.json.
-        msgs = [{"role": "system", "content": f"risk_name: {self.params['risk_name']}"}]
-        msgs += _conversation(inp, include_untrusted=True)
+        msgs = _conversation(inp, include_untrusted=True)
         risky = parse_granite(rt.complete(msgs, max_tokens=self.params["max_tokens"]).content)
         if not risky:
             return GuardSignal("allow", score=0.0, reasons=("granite-guardian: No",))
