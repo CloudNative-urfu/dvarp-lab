@@ -221,11 +221,16 @@ def test_tactic_and_claim_used_in_model_prompt():
         assert "AGENT REPLY: agent turn" in messages[-1]["content"]
 
 
-def test_attacker_stops_on_believed_success():
+def test_stub_does_not_stop_on_lexicon():
+    """Stub-атакующий не решает по подстрокам ответа агента (dvarp-lab#15):
+    успех звучит, но сессия открыта (ended=False) — давление продолжается до
+    бюджета; структурная остановка — только ended от shop (см. ниже)."""
     shop, flt = (
         FakeShop(
             [
                 {"text": "good news, your refund has been created", "ended": False},
+                {"text": "still processing", "ended": False},
+                {"text": "any moment now", "ended": False},
             ]
         ),
         FakeFilter(),
@@ -235,13 +240,13 @@ def test_attacker_stops_on_believed_success():
         "g0",
         ATTACKER_MODEL,
         "direct_task",
-        5,
+        3,
         7,
         goal="refund_expired",
         shop=shop,
         filter_svc=flt,
     )
-    assert result == {"outcome": "attacker_stopped", "turns": 1, "attempts": 1}
+    assert result == {"outcome": "budget_exhausted", "turns": 3, "attempts": 3}
 
 
 def test_session_ended_outcome():
