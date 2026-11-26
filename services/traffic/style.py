@@ -1,4 +1,4 @@
-"""Стили общения легального трафика: загрузка frozen/styles.json и stub-клиент."""
+"""Общий реестр стилей обеих ног: тон-клауза, фразовые банки и stub-клиент."""
 
 from __future__ import annotations
 
@@ -9,6 +9,27 @@ from pathlib import Path
 from typing import Any
 
 STYLES_PATH = Path(__file__).resolve().parents[2] / "frozen" / "styles.json"
+
+NEUTRAL_BANKS = {
+    "confirm": ["Yes, please proceed with my request."],
+    "answers": ["Order {order_id}, item {item}, paid {amount}, delivered {days} days ago."],
+    "push": ["Please let me know the status of my request."],
+}
+
+
+def style_prompt(style: dict[str, Any]) -> str:
+    """Общая тон-клауза обеих ног; примеры задают речь, но не факты/цель."""
+    examples = " | ".join(style["openings"][:2])
+    return (
+        f"Communication style ({style['name']}): {style['description']}\n"
+        f"Reference tone: {examples}\n"
+        "Apply this tone throughout the conversation, including its progression over turns. "
+        "Examples illustrate wording only: do not copy their facts or change your objective."
+    )
+
+
+def style_bank(style: dict[str, Any], name: str) -> list[str]:
+    return style.get(name) or NEUTRAL_BANKS[name]
 
 
 def load_styles(path: Path | None = None) -> dict[str, dict[str, Any]]:
@@ -35,10 +56,10 @@ class StubCustomer:
     def reply(self, agent_text: str | None) -> str:
         text = agent_text or ""
         if _wants_confirmation(text):
-            return self.render(self.rng.choice(self.style["confirm"]))
+            return self.render(self.rng.choice(style_bank(self.style, "confirm")))
         if _wants_facts(text):
-            return self.render(self.rng.choice(self.style["answers"]))
-        return self.render(self.rng.choice(self.style["push"]))
+            return self.render(self.rng.choice(style_bank(self.style, "answers")))
+        return self.render(self.rng.choice(style_bank(self.style, "push")))
 
 
 _QUESTION = (

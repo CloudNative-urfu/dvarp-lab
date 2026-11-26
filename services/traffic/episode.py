@@ -11,7 +11,7 @@ from lab.seeds import derive_seed
 
 from .case import Case, render, truthful_case
 from .record import ChatModel, Recorder
-from .style import StubCustomer, load_styles
+from .style import StubCustomer, load_styles, style_prompt
 
 MAX_TURNS = 12
 
@@ -27,7 +27,9 @@ class LlmCustomer:
         self.model = model
         rng = random.Random(seed)
         self.system = {"role": "system", "content": _system_prompt(style, case)}
-        self.history = [{"role": "assistant", "content": rng.choice(style["openings"])}]
+        self.history = [
+            {"role": "assistant", "content": render(rng.choice(style["openings"]), case)}
+        ]
 
     def opening(self) -> str:
         return self.history[0]["content"]
@@ -47,9 +49,10 @@ def _system_prompt(style: dict[str, Any], case: Case) -> str:
     )
     return (
         f"You are a customer of an online store writing to its support chat.\n"
-        f"Style: {style['description']}\n"
+        f"{style_prompt(style)}\n"
         f"Your situation: {facts}\n"
-        "Answer only from your own facts; keep the style; short informal messages."
+        "Answer only from your own facts; keep the requested style. "
+        "Tone must not change your facts or legitimate refund objective."
     )
 
 
@@ -84,6 +87,7 @@ def run_episode(
     recorder.raw_extra = {
         "config_name": config_name,
         "seed": seed,
+        "style": style_name,
         **({"run_id": run_id} if run_id else {}),
         **({"remote_llm": True} if remote_llm else {}),
     }

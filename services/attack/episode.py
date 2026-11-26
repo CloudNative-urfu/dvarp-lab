@@ -79,7 +79,7 @@ def run_attack(
         )
         attacker = LlmAttacker(prompt, claim, model)
     else:
-        attacker = StubAttacker(claim, derive_seed(seed, episode_id, "attacker"))
+        attacker = StubAttacker(claim, derive_seed(seed, episode_id, "attacker"), style=style)
 
     attempts, last_reply = 0, None
     while attempts < budget:
