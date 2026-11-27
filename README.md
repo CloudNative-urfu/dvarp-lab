@@ -89,7 +89,7 @@ uv run python -m launcher --config g0 --episodes 2    # CLI: та же камп�
 | [`frozen/llm.json`](frozen/llm.json) | Ростер моделей и их закреплённые характеристики. Новые модели добавляются осознанным изменением заморозки. |
 | [`frozen/corpus/darp_corpus_v2.jsonl`](frozen/corpus/darp_corpus_v2.jsonl), [`darp_corpus_v2_ext.jsonl`](frozen/corpus/darp_corpus_v2_ext.jsonl) | Основной и дополнительный наборы корпуса атак. |
 | [`frozen/corpus/MANIFEST.json`](frozen/corpus/MANIFEST.json), [`MANIFEST_ext.json`](frozen/corpus/MANIFEST_ext.json) | Манифесты соответствующих наборов корпуса. |
-| [`frozen/corpus/tactics.json`](frozen/corpus/tactics.json) | Каталог тактик атак. |
+| [`frozen/corpus/tactics.json`](frozen/corpus/tactics.json) | Реестр методов атаки: описание + примеры-иллюстрации из корпуса. |
 | [`frozen/styles.json`](frozen/styles.json) | Зафиксированные стили общения. |
 
 ### Данные прогонов

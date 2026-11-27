@@ -106,8 +106,9 @@ def test_every_style_runs_in_both_legs(tmp_path, style_name, live):
     for turn in legal_shop.turns + attack_shop.turns:
         assert turn["text"] and "{order_id}" not in turn["text"]
     if live:
+        # легальный старт — по скрипту, атакующий пишет и первую реплику (dvarp-lab#4)
+        assert (len(prompts["legal"]), len(prompts["attack"])) == (3, 4)
         for leg in prompts.values():
-            assert len(leg) == 3
             assert style_prompt(STYLES[style_name]) in leg[0][0]["content"]
         system = prompts["attack"][0][0]["content"]
         assert "METHOD" in system and "YOUR CLAIM" in system
