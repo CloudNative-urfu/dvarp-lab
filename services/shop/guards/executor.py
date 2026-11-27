@@ -496,6 +496,7 @@ class Executor:
                     "clarifications": t[4],
                 },
                 "messages": msgs,
+                "model_time": self._now(),
             },
             "session ticket",
         )
