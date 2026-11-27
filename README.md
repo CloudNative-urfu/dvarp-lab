@@ -91,6 +91,7 @@ uv run python -m launcher --config g0 --episodes 2    # CLI: та же камп�
 | [`frozen/corpus/MANIFEST.json`](frozen/corpus/MANIFEST.json), [`MANIFEST_ext.json`](frozen/corpus/MANIFEST_ext.json) | Манифесты соответствующих наборов корпуса. |
 | [`frozen/corpus/tactics.json`](frozen/corpus/tactics.json) | Реестр методов атаки: описание + примеры-иллюстрации из корпуса. |
 | [`frozen/styles.json`](frozen/styles.json) | Зафиксированные стили общения. |
+| [`frozen/corpus/confusion.json`](frozen/corpus/confusion.json) | Режимы честной путаницы легального трафика с якорем `none` (dvarp-lab#56): события правдивы (формулировки, не факты), редки — FP на таком трафике настоящий, якорь сохраняет нижнюю границу вреда. |
 
 ### Данные прогонов
 
