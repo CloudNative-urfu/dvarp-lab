@@ -139,7 +139,7 @@ def test_probe_requires_goal():
 
 
 def test_attack_ids_unique_on_full_grid(tmp_path, monkeypatch):
-    """#20: атакующий id и сид — от полной сценарной сигнатуры; легальный id ключуется (стиль, i)."""
+    """#20/#50: id обеих ног пары — от полной сценарной сигнатуры ячейки."""
     monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path / "runs"))
     spec = {
         **SPEC,
@@ -155,10 +155,15 @@ def test_attack_ids_unique_on_full_grid(tmp_path, monkeypatch):
     assert len(styles) > 1 and len(tactics) > 1
     eps = [e for c in manifest["cells"] for e in c["episodes"]]
     attack_ids = [e["attack_episode_id"] for e in eps]
-    assert len(attack_ids) == len(styles) * len(tactics) * 2 == len(set(attack_ids))
-    assert {e["legal_episode_id"] for e in eps} == {
-        f"{manifest['run_id']}-L{i}-{s}-s0" for s in styles for i in (1, 2)
-    }
+    n_cells = len(styles) * len(tactics) * 2  # × 1 цель SPEC
+    assert len(attack_ids) == n_cells == len(set(attack_ids))
+    # legal id несёт ту же сигнатуру, что и attack id пары (dvarp-lab#50)
+    legal_ids = [e["legal_episode_id"] for e in eps]
+    assert len(legal_ids) == n_cells == len(set(legal_ids))
+    assert {
+        lid.replace(f"-L{i}-", f"-A{i}-", 1)
+        for lid, i in zip(legal_ids, [e["episode"] for e in eps])
+    } == set(attack_ids)
     attack_calls = [c[2] for c in svcs["attack"].calls if c[1] == "/run-episode"]
     assert [c["episode_id"] for c in attack_calls] == attack_ids
     assert len({c["seed"] for c in attack_calls}) == len(attack_calls)

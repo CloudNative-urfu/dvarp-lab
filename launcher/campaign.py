@@ -84,6 +84,13 @@ def attack_episode_id(run_id: str, i: int, cell: dict[str, Any]) -> str:
     return f"{run_id}-A{i}-{'-'.join(attack_signature(cell))}-s{cell['seed']}"
 
 
+def legal_episode_id(run_id: str, i: int, cell: dict[str, Any]) -> str:
+    """Легальная нога пары несёт ту же сценарную сигнатуру, что и атакующая
+    (dvarp-lab#50): без сигнатуры все ноги одного (run, стиль, сид) сворачиваются
+    метриками в один эпизод, а финал переживает только последнюю."""
+    return f"{run_id}-L{i}-{'-'.join(attack_signature(cell))}-s{cell['seed']}"
+
+
 LLM_MECHANISMS = ("llm_detector", "llm_judge")
 
 
@@ -225,10 +232,11 @@ def run_campaign(
             "episodes": [],
         }
         for i in camp.episodes:
+            legal_id = legal_episode_id(run_id, i, cell)
             legal = traffic.post(
                 "/run-episode",
                 {
-                    "episode_id": f"{run_id}-L{i}-{cell['style']}-s{seed}",
+                    "episode_id": legal_id,
                     "config_name": cfg,
                     "agent_model": agent.as_dict(),
                     "style": cell["style"],
@@ -240,9 +248,7 @@ def run_campaign(
             )
             shop.post("/snapshot/restore", {"snapshot_id": snap["snapshot_id"]})
             attack_id = attack_episode_id(run_id, i, cell)
-            legal["outcome"] = _final_outcome(
-                flt, f"{run_id}-L{i}-{cell['style']}-s{seed}"
-            ) or legal.get("outcome")
+            legal["outcome"] = _final_outcome(flt, legal_id) or legal.get("outcome")
             attacked = attack.post(
                 "/run-episode",
                 {
@@ -264,7 +270,7 @@ def run_campaign(
             cell_result["episodes"].append(
                 {
                     "episode": i,
-                    "legal_episode_id": f"{run_id}-L{i}-{cell['style']}-s{seed}",
+                    "legal_episode_id": legal_id,
                     "attack_episode_id": attack_id,
                     "legal": legal,
                     "attack": attacked,
