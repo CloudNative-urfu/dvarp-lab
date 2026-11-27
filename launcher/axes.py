@@ -16,7 +16,15 @@ from lab.modelspec import FROZEN_DIR
 
 GUARD_VOLUME = 1000
 
-ENUM_AXES = ("configs", "goals", "styles", "tactics", "agent_models", "attacker_models")
+ENUM_AXES = (
+    "configs",
+    "goals",
+    "styles",
+    "tactics",
+    "agent_models",
+    "attacker_models",
+    "confusion",
+)
 NUMERIC_AXES = ("episodes", "seeds")
 
 
@@ -71,6 +79,12 @@ def _sorted_tactics(split: str | None = None) -> list[str]:
     return names
 
 
+def _sorted_confusion() -> list[str]:
+    """Ось confusion легальной ноги: честная путаница с якорем none (dvarp-lab#56)."""
+    data = json.loads((FROZEN_DIR / "corpus" / "confusion.json").read_text(encoding="utf-8"))
+    return sorted(m["name"] for m in data["modes"])
+
+
 def _sorted_models(role: str) -> list[str]:
     roster = json.loads((FROZEN_DIR / "llm.json").read_text())["models"]
     return sorted(m["name"] for m in roster if m.get("role") == role)
@@ -89,6 +103,8 @@ def axis_universe(axis: str) -> list[Any]:
         return _sorted_models("agent")
     if axis == "attacker_models":
         return _sorted_models("attacker")
+    if axis == "confusion":
+        return _sorted_confusion()
     raise ValueError(f"неизвестная перечислимая ось {axis!r}")
 
 
@@ -164,6 +180,7 @@ class Campaign:
     episodes: list[int]
     seeds: list[int]
     budget: int
+    confusion: list[str]
     scenario_pairs: list[tuple[str, str]] | None = None
 
     def cells(self) -> list[dict[str, Any]]:
@@ -175,17 +192,19 @@ class Campaign:
                     for am in self.agent_models:
                         for am_att in self.attacker_models or [None]:
                             for seed in self.seeds:
-                                out.append(
-                                    {
-                                        "config": cfg,
-                                        "goal": goal,
-                                        "style": style,
-                                        "tactic": tactic,
-                                        "agent_model": am,
-                                        "attacker_model": am_att,
-                                        "seed": seed,
-                                    }
-                                )
+                                for conf in self.confusion:
+                                    out.append(
+                                        {
+                                            "config": cfg,
+                                            "goal": goal,
+                                            "style": style,
+                                            "tactic": tactic,
+                                            "agent_model": am,
+                                            "attacker_model": am_att,
+                                            "seed": seed,
+                                            "confusion": conf,
+                                        }
+                                    )
         return out
 
     def volume(self) -> tuple[int, int]:
@@ -208,6 +227,10 @@ def resolve_campaign(spec: dict[str, Any]) -> Campaign:
         attacker_models=attacker or [None],
         episodes=resolve_axis("episodes", spec.get("episodes")),
         seeds=resolve_axis("seeds", spec.get("seeds")),
+        # confusion: по умолчанию якорь none — старые спеки кампаний не меняют объём
+        confusion=resolve_axis(
+            "confusion", spec.get("confusion", {"mode": "point", "point": "none"})
+        ),
         budget=int(spec.get("budget", 8)),
         scenario_pairs=pairs,
     )

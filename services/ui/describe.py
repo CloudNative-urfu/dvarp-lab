@@ -19,6 +19,7 @@ AXES: list[dict[str, Any]] = [
     {"name": "configs", "label": "Конфигурации защиты"},
     {"name": "goals", "label": "Цели атаки"},
     {"name": "styles", "label": "Стили общения"},
+    {"name": "confusion", "label": "Путаница легального трафика (якорь none)"},
     {"name": "tactics", "label": "Методы атаки", "splits": ["dev", "holdout"]},
     {"name": "agent_models", "label": "Модели агента", "free": True, "role": "agent"},
     {"name": "attacker_models", "label": "Модели атакующего", "free": True, "role": "attacker"},

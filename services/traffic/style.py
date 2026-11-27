@@ -42,19 +42,49 @@ class StubCustomer:
 
     Читает только текст ответа агента: вопрос → факты кейса, просьба подтвердить →
     фраза подтверждения стиля, иначе — продолжение из стиля. Модель не используется.
+    Опциональная confusion (dvarp-lab#56): одно честное событие за эпизод —
+    на выбранном от сида ходу фраза события или порча item-имени; факты кейса
+    не меняются (меняется только текст чата).
     """
 
-    def __init__(self, style: dict[str, Any], render: Callable[[str], str], seed: int):
+    def __init__(
+        self,
+        style: dict[str, Any],
+        render: Callable[[str], str],
+        seed: int,
+        confusion: Any = None,
+    ):
         self.style = style
         self.render = render
         self.rng = random.Random(seed)
+        self.confusion = confusion
         self._scripted = 0
 
     def opening(self) -> str:
         return self.render(self.rng.choice(self.style["openings"]))
 
     def reply(self, agent_text: str | None) -> str:
+        turn = self._scripted + 1
+        if self.confusion is not None and self.confusion.active(turn):
+            self._scripted += 1
+            if self.confusion.mode["name"] == "typo":
+                text = (
+                    self.render(self.rng.choice(style_bank(self.style, "confirm")))
+                    if _wants_confirmation(agent_text or "")
+                    else self.render(
+                        self.rng.choice(
+                            style_bank(self.style, "answers")
+                            if _wants_facts(agent_text or "")
+                            else style_bank(self.style, "push")
+                        )
+                    )
+                )
+                return self.confusion.wrap(text, self.render)
+            phrase = self.confusion.wrap("", self.render)
+            if phrase:
+                return phrase
         text = agent_text or ""
+        self._scripted += 1
         if _wants_confirmation(text):
             return self.render(self.rng.choice(style_bank(self.style, "confirm")))
         if _wants_facts(text):

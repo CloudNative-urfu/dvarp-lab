@@ -24,6 +24,7 @@ class RunEpisode(BaseModel):
     agent_model: dict[str, Any]
     style: str
     seed: int
+    confusion: str = "none"
     group_seed: int | None = None
     run_id: str | None = None
     remote_llm: bool = False
@@ -43,6 +44,7 @@ def run(body: RunEpisode) -> dict:
             body.agent_model,
             body.style,
             body.seed,
+            confusion=body.confusion,
             group_seed=body.group_seed,
             run_id=body.run_id,
             remote_llm=body.remote_llm,
