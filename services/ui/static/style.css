@@ -154,6 +154,9 @@ main { max-width: var(--w-page); margin: 0 auto; padding: var(--s-4); }
 .btn.ghost:hover { background: var(--c-accent-quiet); }
 .btn.small { padding: var(--s-1) var(--s-2h); font-size: var(--fs-tiny); }
 .back { margin-bottom: var(--s-4); }
+.btn.big { padding: var(--s-3) var(--s-8); font-size: var(--fs-h2); }
+.launch .row { margin-top: 0; }
+.lead-hint { margin: 0 0 var(--s-2); }
 
 /* ---------- значки статуса: значок + текст ---------- */
 .badge {

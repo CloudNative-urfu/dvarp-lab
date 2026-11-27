@@ -144,10 +144,23 @@
   <section v-show="tab === 'run'">
     <div class="page-head">
       <h1 class="display">Новый прогон</h1>
-      <p class="lede">Выберите защиту, чего добивается атакующий и как он давит. Полигон проведёт пару диалогов:
-        честного клиента и атакующего с той же легендой.</p>
+      <p class="lede">Нажмите «Запустить»: полигон проведёт пару диалогов, честного клиента и атакующего с той же легендой.
+        Защиту, цель и метод можно поменять ниже.</p>
     </div>
+    <div class="card launch">
+      <div class="row">
+        <button class="btn primary big" :disabled="status.status === 'running'" @click="run(false)">{{ status.status === "running" ? "Идёт прогон..." : "Запустить" }}</button>
+        <span class="hint" role="status">{{ volumeText }}</span>
+      </div>
+      <div v-if="status.status && status.status !== 'idle'" class="run-box">
+        <run-status :s="status"></run-status>
+        <button v-if="status.status === 'done'" class="btn" @click="showRun(status.manifest.run_id)">Открыть диалоги прогона</button>
+      </div>
+    </div>
+
     <div class="card">
+      <h2 class="card-h">Что запустится</h2>
+      <p class="hint lead-hint">Поля уже заполнены, менять их не обязательно.</p>
       <div v-for="f in simpleFields" :key="f.axis" class="simple">
         <span class="field-label">{{ f.label }}</span>
         <template v-if="spec[f.axis].mode === 'point'">
@@ -162,14 +175,6 @@
         <p v-else class="hint">Задано в расширенных настройках.</p>
       </div>
       <p class="hint">{{ modelLine }}</p>
-      <div class="row actions">
-        <button class="btn primary" :disabled="status.status === 'running'" @click="run(false)">{{ status.status === "running" ? "Идёт прогон..." : "Запустить" }}</button>
-        <span class="hint" role="status">{{ volumeText }}</span>
-      </div>
-      <div v-if="status.status && status.status !== 'idle'" class="run-box">
-        <run-status :s="status"></run-status>
-        <button v-if="status.status === 'done'" class="btn" @click="showRun(status.manifest.run_id)">Открыть диалоги прогона</button>
-      </div>
     </div>
 
     <details class="card advanced">

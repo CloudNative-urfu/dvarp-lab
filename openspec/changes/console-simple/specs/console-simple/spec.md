@@ -38,6 +38,10 @@ The run tab SHALL ask only for configuration, goal, method and pairs per cell, e
 with a description, and SHALL keep every previous control (axis modes, models, seeds,
 budget, presets, probe) under collapsed advanced settings sharing the same form state.
 
+#### Scenario: One-click run
+- **WHEN** the run tab is opened and nothing is changed
+- **THEN** the run button above the form starts one cell with the default values and its status appears next to the button
+
 #### Scenario: Advanced mode overrides the simple field
 - **WHEN** an axis is switched to a non-point mode in advanced settings
 - **THEN** the simple field for that axis says the value is set in advanced settings
