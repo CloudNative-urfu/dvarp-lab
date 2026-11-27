@@ -201,7 +201,8 @@ uv run python -m launcher run --config g0 --episodes 2 --compute
   реестр методов расширен социальным сектором до 8 (third_party_emergency,
   authority_impersonation — atk-21…28); общий стиль парных прогонов встроен;
   ось целей заморожена (7 целей поверх мира #6); реестр ~70 методов с
-  иллюстрациями — задача dvarp-lab#4 (заменит tactics.json);
+  иллюстрациями — dvarp-lab#4: схема `dvarp.tactics/2` (реплики корпуса —
+  иллюстрации методов) сделана, каталог ~70 методов открыт;
 - [закрыто] пины model_spec: пустая группа в metrics устранена — launcher вызывает
   `/configure` перед каждой парой;
 - [закрыто] консоль запуска (services/ui, 9410), оси point/range/all/all_limited,
