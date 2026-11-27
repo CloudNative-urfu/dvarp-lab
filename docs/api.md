@@ -126,18 +126,28 @@ Probe: одна атака без парной ноги — требует `goal
 ## ui_svc (порт 9410)
 
 Консоль полигона: статическая страница на vendored Vue (`static/vendor/vue.global.prod.js`,
-MIT, без node/билда) + `/api/*`. **Фронт только рисует**: оси, режимы, поля, пресеты
-и словарь терминов описаны данными (`services/ui/describe.py`) — новая ось/пресет/термин
+MIT, без node/билда) + `/api/*`. **Фронт только рисует**: оси, режимы, поля, пресеты,
+словарь терминов и подписи для людей (конфигурации, цели, исходы, ключевые метрики,
+сервисы) описаны данными (`services/ui/describe.py`) — новая ось/пресет/термин/подпись
 без правки JS. **Инвариант: только читатель/вызыватель — ноль расчётов и ноль
 оркестрации**: запуск идёт через те же `launcher.campaign.run_campaign/probe`, расчёт —
 через `metrics /compute` и `/preview`.
 
-- `GET /` — страница (Запуск / Прогоны / Трейс / Метрики / Система);
+- `GET /` — страница (Результаты / Диалоги / Запуск / Система); оси, модели, сиды,
+  пресеты и probe — в «Расширенных настройках» вкладки «Запуск»;
 - `GET /api/meta` — описание формы: `axes` (name, label, kind enum|numeric, modes
   point/range/set/all/all_limited, universe, default, free — имена вне ростера),
   `run_fields`, `probe_fields`, `presets` (полные спецификации осей), `terms` (словарь
   тултипов), `guard`, `remote_models`, `remote_endpoints` (имена env-переменных, без
-  URL), `health` 5 сервисов;
+  URL), `health` 5 сервисов, `labels` (подписи: `configs`, `goals`, `tactics`,
+  `outcomes` legal/attack с тоном, `key_metrics`, `detection_metrics`, `break_even`,
+  `services`);
+- `GET /api/summary` — таблица «Результаты»: сохранённые группы метрик всех
+  конфигураций юниверса (`/metrics/{config}`), только роль agent; remote-группы
+  входят (metrics `/configs` их скрывает);
+- `GET /api/pairs?config=&attack=&run_id=&limit=100` — пары эпизодов из манифестов
+  плоским списком (run_id, config, сценарий, id и исходы обеих ног) с фильтрами;
+  `total`, `pairs` (первые `limit`), `configs` и `runs` для фильтров;
 - `POST /api/volume` — объём кампании до запуска (cells, episodes);
 - `POST /api/run` — спецификация осей; фоновый поток, один прогон за раз
   (409, если уже идёт); объём сверх guard требует `confirm: true`;
