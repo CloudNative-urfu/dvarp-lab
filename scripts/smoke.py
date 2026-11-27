@@ -77,6 +77,8 @@ def _spawn(ports: dict[int, str], tmp: Path, episodes: int, compute: bool) -> No
         "g0",
         "--goals",
         "refund_expired",
+        "--tactics",
+        "direct_task",  # пин метода: ось all после каталога v3 (#52) раздувает объём
         "--episodes",
         str(episodes),
         "--seed",

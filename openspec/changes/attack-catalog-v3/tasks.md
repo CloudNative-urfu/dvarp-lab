@@ -13,4 +13,5 @@
 - [x] ruff (check + format) зелёный
 - [x] `uv run pytest` полный набор зелёный
 - [x] `openspec validate --all` зелёный
+- [x] техправка: `scripts/smoke.py` пинит `direct_task` — ось `tactics` (all = 70 после каталога) раздувала объём смока до 1610 > guard 1000
 - [ ] калибровка desmitry (живая LLM): прирост V(g0) — открытый пункт #4
