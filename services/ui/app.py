@@ -159,12 +159,13 @@ def metrics(config_name: str) -> dict:
     m = _svc(METRICS_URL).get(f"/metrics/{config_name}")
     groups: dict[str, dict[str, Any]] = {}
     for r in m.get("results", []):
-        key = json.dumps(r["model_spec"], sort_keys=True)
+        key = json.dumps(r["model_spec"], sort_keys=True) + ":" + r.get("mode", "local")
         g = groups.setdefault(
             key,
             {
                 "config_name": config_name,
                 "model_spec": r["model_spec"],
+                "mode": r.get("mode", "local"),
                 "computed_at": r["computed_at"],
                 "final": {},
             },

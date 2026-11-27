@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -71,7 +71,15 @@ def metrics_engine() -> Engine:
 
 
 def init_metrics_db() -> None:
-    Base.metadata.create_all(metrics_engine())
+    engine = metrics_engine()
+    Base.metadata.create_all(engine)
+    if "mode" not in {c["name"] for c in inspect(engine).get_columns("metric_results")}:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE metric_results ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'all'"
+                )
+            )
 
 
 class ComputeIn(BaseModel):
@@ -99,13 +107,6 @@ def _read_episodes(
         return extract.episodes_of(
             session, include_probe=include_probe, include_remote=include_remote
         )
-
-
-def _reference_rows(
-    groups: dict[tuple[str, str], list[extract.Episode]], model_key: str
-) -> extract.Aggregate | None:
-    key = (REFERENCE_CONFIG, model_key)
-    return extract.aggregate(groups[key]) if key in groups else None
 
 
 def _break_even(agg: extract.Aggregate, ref: extract.Aggregate | None) -> dict[str, Any]:
@@ -142,17 +143,26 @@ def _break_even(agg: extract.Aggregate, ref: extract.Aggregate | None) -> dict[s
     return out
 
 
-def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, Any]]:
+def _metric_rows(
+    agg: extract.Aggregate, be: dict[str, Any], spread: dict[str, Any], mode: str
+) -> list[dict[str, Any]]:
     spec = json.loads(agg.model_spec)
 
     def row(metric: str, value: Any) -> dict[str, Any]:
-        return {"config_name": agg.config, "model_spec": spec, "metric": metric, "value": value}
+        return {
+            "config_name": agg.config,
+            "model_spec": spec,
+            "mode": mode,
+            "metric": metric,
+            "value": value,
+        }
 
     d = agg.detection
     q = agg.queue
     return [
         row("n_attack", agg.n_attack),
         row("n_legal", agg.n_legal),
+        row("n_remote", agg.n_remote),
         row("w_A", agg.w_A),
         row("V", agg.V),
         row("R", agg.R),
@@ -184,7 +194,52 @@ def _metric_rows(agg: extract.Aggregate, be: dict[str, Any]) -> list[dict[str, A
         row("break_even", be),
         row("L_star_real", be.get("L_star_real")),
         row("detection", d),
+        row("seed_spread", spread),
     ]
+
+
+def _seed_spread(eps: list[extract.Episode], reference: list[extract.Episode]) -> dict[str, Any]:
+    """Compare seed groups only with g0 of the same run, seed and mode."""
+    by_seed: dict[tuple[str, int], list[extract.Episode]] = {}
+    refs: dict[tuple[str, int], list[extract.Episode]] = {}
+    for e in eps:
+        if e.run_id is not None and e.seed is not None:
+            by_seed.setdefault((e.run_id, e.seed), []).append(e)
+    for e in reference:
+        if e.run_id is not None and e.seed is not None:
+            refs.setdefault((e.run_id, e.seed), []).append(e)
+    rows = []
+    for (run_id, seed), group in sorted(by_seed.items()):
+        agg = extract.aggregate(group)
+        ref = extract.aggregate(refs[run_id, seed]) if (run_id, seed) in refs else None
+        be = _break_even(agg, ref)
+        rows.append(
+            {
+                "run_id": run_id,
+                "seed": seed,
+                "V": agg.V,
+                "R": agg.R,
+                "L_star": be["L_star"],
+                "status": be["status"],
+            }
+        )
+    return formulas.seed_spread(rows)
+
+
+def _mode_groups(
+    eps: list[extract.Episode], include_remote: bool
+) -> dict[tuple[str, str, str], list[extract.Episode]]:
+    groups = {}
+    for (cfg, model), episodes in extract.group(eps).items():
+        local = [e for e in episodes if not e.remote]
+        remote = [e for e in episodes if e.remote]
+        if local:
+            groups[cfg, model, "local"] = local
+        if include_remote and remote:
+            groups[cfg, model, "remote"] = remote
+            if local:
+                groups[cfg, model, "all"] = episodes
+    return groups
 
 
 def _computed(
@@ -199,18 +254,19 @@ def _computed(
     up in the full raw data, so L* survives a config-filtered computation.
     """
     all_eps = _read_episodes(include_probe=include_probe, include_remote=include_remote)
-    groups_all = extract.group(all_eps)
+    groups_all = _mode_groups(all_eps, include_remote)
     eps = all_eps
     if model_spec is not None:
         eps = [e for e in eps if e.model_spec == json.dumps(model_spec, sort_keys=True)]
     if config_name is not None:
         eps = [e for e in eps if e.config == config_name]
     out = []
-    for (cfg, mkey), group_eps in sorted(extract.group(eps).items()):
+    for (cfg, mkey, mode), group_eps in sorted(_mode_groups(eps, include_remote).items()):
         agg = extract.aggregate(group_eps)
-        # L* needs the reference config of the same pinned model in the same data.
-        ref = _reference_rows(groups_all, mkey) if cfg != REFERENCE_CONFIG else None
-        out.append((agg, _metric_rows(agg, _break_even(agg, ref))))
+        reference = groups_all.get((REFERENCE_CONFIG, mkey, mode), [])
+        ref = extract.aggregate(reference) if reference else None
+        be = _break_even(agg, ref)
+        out.append((agg, _metric_rows(agg, be, _seed_spread(group_eps, reference), mode)))
     return out
 
 
@@ -230,11 +286,11 @@ def compute(
         for r in group_rows
     ]
     with Session(metrics_engine()) as session:
-        for cfg, spec in {
-            (r["config_name"], json.dumps(r["model_spec"], sort_keys=True)) for r in rows
+        for cfg, spec, mode in {
+            (r["config_name"], json.dumps(r["model_spec"], sort_keys=True), r["mode"]) for r in rows
         }:
             session.query(MetricRow).filter(
-                MetricRow.config_name == cfg, MetricRow.model_spec == spec
+                MetricRow.config_name == cfg, MetricRow.model_spec == spec, MetricRow.mode == mode
             ).delete()
             session.flush()
         for r in rows:
@@ -242,6 +298,7 @@ def compute(
                 MetricRow(
                     config_name=r["config_name"],
                     model_spec=json.dumps(r["model_spec"], sort_keys=True),
+                    mode=r["mode"],
                     metric=r["metric"],
                     value=json.dumps(r["value"]),
                 )
@@ -280,10 +337,23 @@ def preview_endpoint(body: ComputeIn) -> dict:
             {
                 "config_name": agg.config,
                 "model_spec": json.loads(agg.model_spec),
+                "mode": rows[0]["mode"],
                 "final": {r["metric"]: r["value"] for r in rows},
+                "seed_spread": next(r["value"] for r in rows if r["metric"] == "seed_spread"),
                 "raw": {
                     k: getattr(agg, k)
-                    for k in ("n_attack", "n_legal", "V_k", "V_n", "w_A", "w_L", "V", "R", "E")
+                    for k in (
+                        "n_attack",
+                        "n_legal",
+                        "n_remote",
+                        "V_k",
+                        "V_n",
+                        "w_A",
+                        "w_L",
+                        "V",
+                        "R",
+                        "E",
+                    )
                 },
             }
             for agg, rows in groups
@@ -318,7 +388,7 @@ def metrics(config_name: str) -> dict:
         rows = (
             session.query(MetricRow)
             .filter(MetricRow.config_name == config_name)
-            .order_by(MetricRow.model_spec, MetricRow.metric, MetricRow.id)
+            .order_by(MetricRow.model_spec, MetricRow.mode, MetricRow.metric, MetricRow.id)
             .all()
         )
     return {
@@ -326,6 +396,7 @@ def metrics(config_name: str) -> dict:
         "results": [
             {
                 "model_spec": json.loads(r.model_spec),
+                "mode": r.mode,
                 "metric": r.metric,
                 "value": json.loads(r.value),
                 "computed_at": r.computed_at.isoformat(),

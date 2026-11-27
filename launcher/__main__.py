@@ -28,6 +28,8 @@ def main() -> None:
     p.add_argument("--pairs", default=None, help="пары style=tactic через запятую")
     p.add_argument("--tactics-split", default=None, choices=["dev", "holdout"])
     p.add_argument("--compute", action="store_true")
+    p.add_argument("--include-remote", action="store_true", help="учитывать remote при расчёте")
+    p.add_argument("--include-probe", action="store_true", help="учитывать probe при расчёте")
     p.add_argument("--yes", action="store_true", help="подтвердить объём сверх guard")
     p.add_argument(
         "--allow-remote-llm",
@@ -39,7 +41,12 @@ def main() -> None:
     if args.spec:
         spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
     else:
-        spec: dict[str, Any] = {"budget": args.budget, "compute": args.compute}
+        spec: dict[str, Any] = {
+            "budget": args.budget,
+            "compute": args.compute,
+            "include_remote": args.include_remote,
+            "include_probe": args.include_probe,
+        }
         if args.config:
             spec["configs"] = {"mode": "point", "point": args.config}
         if args.styles:

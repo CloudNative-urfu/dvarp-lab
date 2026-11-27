@@ -74,6 +74,8 @@ def test_campaign_configure_seed_loop_manifest(tmp_path, monkeypatch):
     body = attack.calls[0][2]
     assert body["goal"] == "refund_expired"
     assert body["style"] == "patient" and body["run_id"] == manifest["run_id"]
+    assert [c[2]["group_seed"] for c in traffic.calls] == [0, 1]
+    assert [c[2]["group_seed"] for c in attack.calls] == [0, 1]
     mf = json.loads(
         (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
     )

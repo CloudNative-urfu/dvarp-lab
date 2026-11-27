@@ -64,6 +64,7 @@ def run_episode(
     seed: int,
     run_id: str | None = None,
     remote_llm: bool = False,
+    group_seed: int | None = None,
     *,
     shop: Any,
     db_url: str,
@@ -86,7 +87,7 @@ def run_episode(
     recorder = Recorder(filter_svc, episode_id, "legal", agent_model)
     recorder.raw_extra = {
         "config_name": config_name,
-        "seed": seed,
+        "seed": seed if group_seed is None else group_seed,
         "style": style_name,
         **({"run_id": run_id} if run_id else {}),
         **({"remote_llm": True} if remote_llm else {}),

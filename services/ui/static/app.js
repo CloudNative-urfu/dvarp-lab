@@ -303,13 +303,13 @@ const app = createApp({
       }
       return this.guard(api.post("/api/preview", this.filters()).then((r) => {
         this.metricsNote = `рассчитано без сохранения: ${r.groups.length} групп`;
-        this.metricGroups = r.groups.map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec), ephemeral: true }));
+        this.metricGroups = r.groups.map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec) + g.mode, ephemeral: true }));
       }));
     },
     async loadStored() {
       const cfgs = (await api.get("/api/metric-configs")).configs || [];
       const all = await Promise.all(cfgs.map((c) => api.get(`/api/metrics/${encodeURIComponent(c)}`)));
-      this.metricGroups = all.flatMap((m) => m.groups || []).map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec) }));
+      this.metricGroups = all.flatMap((m) => m.groups || []).map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec) + g.mode }));
       this.metricsNote = this.metricGroups.length ? "сохранённые результаты" : "сохранённых результатов нет";
     },
     async loadSystem() {

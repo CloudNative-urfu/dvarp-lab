@@ -72,15 +72,21 @@
 
 ## metrics_svc (порт 9415)
 
-- `POST /compute` `{config_name: str, model_spec?: model_spec}` → `{computed: n}` —
-  пересчёт метрик (L*, break-even, detection) из read-only доступа к сырой БД
-  filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
-- `POST /preview` (тело как у `/compute`) → `{groups: [{config_name, model_spec, final, raw}]}` —
+- `POST /compute` `{config_name?: str, model_spec?: model_spec, include_probe?: bool,
+  include_remote?: bool}` → `{computed: n}` —
+   пересчёт метрик (L*, break-even, detection) из read-only доступа к сырой БД
+   filter_svc; результат — в свою БД; правка формул не требует перезапуска прогонов.
+   По умолчанию только `mode=local`; с `include_remote=true` локальные и удалённые
+   группы считаются раздельно, а `mode=all` явно помечает общий расчёт. Каждая
+   группа содержит `n_remote` и `seed_spread` по `(run_id, seed)` с L* относительно
+   g0 того же сида и режима.
+- `POST /preview` (тело как у `/compute`) → `{groups: [{config_name, model_spec, mode,
+  final, seed_spread, raw}]}` —
   одноразовый расчёт по фильтрам: вычислить и вернуть, **ничего не пишет** в
   metric_results; `raw` — собранные агрегаты (n_attack, n_legal, V_k, V_n, w_A, w_L, V, R, E,
   C_ep, C_guard, E_attack, E_legal, ql_abandon + состояние аналитической очереди);
 - `GET /models` → `{models: [model_spec]}` — пины моделей, по которым есть записи;
-- `GET /metrics/{config_name}` → агрегаты по config × model;
+- `GET /metrics/{config_name}` → строки по config × model × mode (local/remote/all);
 - `GET /configs` → `{configs: [...]}` — конфигурации, по которым есть прогоны
   (для оглавления-чекпоинтов в консоли).
 
@@ -95,11 +101,13 @@
 - числовые оси: `episodes` (point = N эпизодов с 1-го), `seeds` (point = один
   сид; диапазон — повторение ячеек для детерминизма прогона: мир один и от
   сида не зависит); режим `all` на них запрещён (неограничены);
-- глобально: `budget`, `compute`, `confirm` (подтверждение объёма сверх guard
+- глобально: `budget`, `compute`, `include_remote`, `include_probe`, `confirm` (подтверждение объёма сверх guard
   1000), `scenario_pairs` (явные пары style=tactic; ось целей перемножается
   независимо); `allow_remote_llm` устарел и игнорируется — не-локальный
   LLM-эндпоинт маркируется автоматически (пин в манифесте и записях, метрики
-  пропускают, `include_remote` в `/compute`). Прогон пиннит версию мира
+  пропускают, `include_remote` в `/compute`). CLI `--include-remote` /
+  `--include-probe` передаёт флаги в расчёт без изменения процедуры кампании.
+  Прогон пиннит версию мира
   (`world` + `dataset_hash`) в манифесте; снапшот пары — от мира. Конфигурации с
   LLM-гвардами (`g_in_qwen`/`g_in_granite`/`g_in_llama`, #21) требуют
   `LAB_GUARD_LLM_BASE_URL` и дают в манифесте `guard_budget` (вызовы на эпизод,

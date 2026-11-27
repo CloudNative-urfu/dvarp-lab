@@ -133,7 +133,7 @@
       </div>
     </div>
     <div v-for="g in metricGroups" :key="g.key" class="card">
-      <div class="card-title"><span class="mono">{{ g.config_name }}</span> · {{ g.model_spec.name }} · {{ g.model_spec.role }} · {{ g.model_spec.revision }}
+      <div class="card-title"><span class="mono">{{ g.config_name }}</span> · {{ g.model_spec.name }} · {{ g.model_spec.role }} · {{ g.model_spec.revision }} · {{ g.mode }}
         <span v-if="g.ephemeral" class="badge warn">не сохранено</span></div>
       <div class="grid2">
         <div><div class="hint">итог</div><value-view :v="g.final" :terms="meta.terms"></value-view></div>

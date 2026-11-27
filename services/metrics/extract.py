@@ -209,7 +209,7 @@ def episodes_of(
                 detected=detected,
                 run_id=ep.get("run_id"),
                 seed=ep.get("seed"),
-                remote=bool(ep.get("remote")),
+                remote=ep["episode_id"] in remote_ids,
                 c_ep=ep["c_ep"],
                 c_guard=ep["c_guard"],
                 guard_cpu_ms=ep["guard_cpu_ms"],
@@ -230,6 +230,7 @@ class Aggregate:
     seed: int | None
     n_attack: int
     n_legal: int
+    n_remote: int
     w_A: float
     w_L: float
     V: float
@@ -345,6 +346,7 @@ def aggregate(eps: list[Episode]) -> Aggregate:
         seed=eps[0].seed,
         n_attack=n_a,
         n_legal=n_l,
+        n_remote=sum(e.remote for e in eps),
         w_A=w_a,
         w_L=1.0 - w_a,
         V=v_k / n_a if n_a else 0.0,
