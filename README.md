@@ -29,6 +29,29 @@ uv run python -m launcher --config g0 --episodes 2    # CLI: та же камп�
 
 Тесты: `uv run pytest`.
 
+## Документация модулей
+
+Для исследования по документации начните с ядра «магазин → сырьё → расчёт»,
+затем переходите к ногам пары и управлению кампанией. README описывают реализацию,
+схемы и ограничения с привязкой к исходникам; общий контекст — в
+[архитектуре](docs/architecture.md), контракты — в [API](docs/api.md).
+
+| Модуль | Что можно выяснить без чтения исходников |
+| --- | --- |
+| [Shop](services/shop/README.md) | Конвейер хода, таблицы магазина, журнал, truth/verdict, outbox, канарейка и снимки |
+| [Filter](services/filter/README.md) | turns/episode_finals, chain.jsonl, кассеты, идемпотентность и представления текста |
+| [Metrics](services/metrics/README.md) | Агрегация, полный список метрик, L*, очередь, экономика и local/remote |
+| [Traffic](services/traffic/README.md) | Правдивый кейс, общий стиль, Recorder и остановка legal-ноги |
+| [Attack](services/attack/README.md) | Цель × метод × тон, старт stub/live, текстовый барьер и кассеты |
+| [Lab](lab/README.md) | Пины моделей, номинальная проверка, seed, мир, цепочка и HTTP-примитивы |
+| [Frozen](frozen/README.md) | Карта заморозки, пины и границы их автоматической проверки |
+| [Launcher](launcher/README.md) | Оси, сигнатуры ID, процедура пары, манифест и guard объёма |
+| [UI](services/ui/README.md) | Описания формы, прокси, прогресс и ограничения консоли |
+
+Правило актуализации — [дисциплина документации](docs/agent-manual.md#дисциплина).
+Сверка с findings аудита #43 и границы проверки —
+[в change module-readmes](openspec/changes/module-readmes/design.md#сверка-с-аудитом-43).
+
 ## Карта репозитория
 
 ### Верхний уровень
