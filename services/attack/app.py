@@ -28,6 +28,7 @@ class RunEpisode(BaseModel):
     tactic: str
     budget: int
     seed: int
+    group_seed: int | None = None
     goal: str  # ось целей: замороженная претензия поверх данных мира
     style: str | None = None
     run_id: str | None = None
@@ -67,6 +68,7 @@ def run(body: RunEpisode) -> dict:
             body.tactic,
             body.budget,
             body.seed,
+            group_seed=body.group_seed,
             style_name=body.style,
             probe=body.probe,
             remote_llm=body.remote_llm,

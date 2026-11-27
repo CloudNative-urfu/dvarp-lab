@@ -302,14 +302,18 @@ def g_tau_gate(rate: float | None) -> str | None:
 
 # ------------------------------------------------------------------- seed spread (analysis.py)
 def seed_spread(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Spread of key metrics across repeated runs of the same config × model_spec.
+    """Spread across (run_id, seed) groups, not reproducibility of a live LLM.
 
-    Each row carries V, R, L_star and the break-even status of one run; runs are separated
-    by raw.run_id when shop_svc provides one. No decision overlay here — just the floor.
+    A live seed labels a sampling group; it does not guarantee identical reruns.
     """
+    out: dict[str, Any] = {
+        "runs": len(rows),
+        "groups": [dict(r) for r in rows],
+        "seeds": [r.get("seed") for r in rows],
+    }
     if len(rows) < 2:
-        return {"runs": len(rows), "note": "seed spread needs at least two runs"}
-    out: dict[str, Any] = {"runs": len(rows), "seeds": [r.get("seed") for r in rows]}
+        out["note"] = "seed spread needs at least two (run_id, seed) groups"
+        return out
     for key in ("V", "R", "L_star"):
         vals = [r[key] for r in rows if r.get(key) is not None and math.isfinite(r[key])]
         out[key] = {

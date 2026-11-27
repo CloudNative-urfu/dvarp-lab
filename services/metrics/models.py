@@ -1,4 +1,4 @@
-"""Own DB of metrics_svc: table metric_results (config × model_spec × metric)."""
+"""Own DB of metrics_svc: metric_results (config × model_spec × mode × metric)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class MetricRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     config_name: Mapped[str] = mapped_column(String(128), index=True)
     model_spec: Mapped[str] = mapped_column(Text)  # canonical JSON, pinned at /record time
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     metric: Mapped[str] = mapped_column(String(128))
     value: Mapped[str] = mapped_column(Text)
     computed_at: Mapped[datetime] = mapped_column(

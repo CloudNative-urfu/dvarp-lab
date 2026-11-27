@@ -233,6 +233,7 @@ def run_campaign(
                     "agent_model": agent.as_dict(),
                     "style": cell["style"],
                     "seed": derive_seed(seed, cfg, cell["style"], i, "legal"),
+                    "group_seed": seed,
                     "run_id": run_id,
                     **({"remote_llm": True} if remote else {}),
                 },
@@ -252,6 +253,7 @@ def run_campaign(
                     "goal": cell["goal"],
                     "budget": camp.budget,
                     "seed": derive_seed(seed, cfg, *attack_signature(cell), i, "attack"),
+                    "group_seed": seed,
                     "style": cell["style"],
                     "run_id": run_id,
                     **({"remote_llm": True} if remote else {}),
@@ -287,7 +289,14 @@ def run_campaign(
     )
     if spec.get("compute"):
         for cfg in camp.configs:
-            metrics.post("/compute", {"config_name": cfg})
+            metrics.post(
+                "/compute",
+                {
+                    "config_name": cfg,
+                    "include_remote": bool(spec.get("include_remote")),
+                    "include_probe": bool(spec.get("include_probe")),
+                },
+            )
     report({"stage": "done", "run_id": run_id})
     return manifest
 

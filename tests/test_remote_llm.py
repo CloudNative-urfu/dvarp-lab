@@ -65,6 +65,37 @@ def test_campaign_remote_pin_in_manifest_and_records(tmp_path, remote_env, monke
     assert traffic_body["remote_llm"] is True and attack_body["remote_llm"] is True
 
 
+def test_campaign_forwards_compute_filters(tmp_path, remote_env, monkeypatch):
+    monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path / "runs"))
+
+    class FakeSvc:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, path, json=None):
+            self.calls.append((path, json))
+            if path == "/snapshot":
+                return {"snapshot_id": "s1"}
+            return {"ok": True}
+
+    svcs = {k: FakeSvc() for k in ("shop", "traffic", "attack", "metrics")}
+    run_campaign(
+        {
+            "configs": {"mode": "point", "point": "g0"},
+            "styles": {"mode": "point", "point": "patient"},
+            "tactics": {"mode": "point", "point": "direct_task"},
+            "episodes": {"mode": "point", "point": 1},
+            "compute": True,
+            "include_remote": True,
+            "include_probe": True,
+        },
+        services=svcs,
+    )
+    assert svcs["metrics"].calls == [
+        ("/compute", {"config_name": "g0", "include_remote": True, "include_probe": True})
+    ]
+
+
 def test_campaign_local_run_has_no_remote_pin(tmp_path, local_env, monkeypatch):
     monkeypatch.setenv("LAB_RUNS_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("LAB_ATTACKER_LLM_BASE_URL", "http://127.0.0.1:8000/v1")
@@ -304,17 +335,19 @@ def test_metrics_skips_remote_records(tmp_path, monkeypatch):
             )
             assert fclient.post("/record", json=r).status_code == 200
 
-    n_attack = lambda: [
-        r["value"] for r in client.get("/metrics/g0").json()["results"] if r["metric"] == "n_attack"
-    ]
+    n_attack = lambda: {
+        r["mode"]: r["value"]
+        for r in client.get("/metrics/g0").json()["results"]
+        if r["metric"] == "n_attack"
+    }
     client.post("/compute", json={"config_name": "g0"})
-    assert n_attack() == [1]  # по умолчанию: только обычный эпизод
+    assert n_attack() == {"local": 1}  # по умолчанию: только обычный эпизод
     client.post("/compute", json={"config_name": "g0", "include_remote": True})
-    assert n_attack() == [2]  # + remote-эпизод (probe по-прежнему исключён)
+    assert n_attack() == {"local": 1, "remote": 1, "all": 2}
     client.post(
         "/compute", json={"config_name": "g0", "include_remote": True, "include_probe": True}
     )
-    assert n_attack() == [4]  # все четыре эпизода
+    assert n_attack() == {"local": 2, "remote": 2, "all": 4}
 
     # remote — свойство эпизода: одна remote-запись (напр. shop-агента) исключает весь эпизод
     mixed = dict(base, episode_id="e-mixed")
@@ -327,4 +360,4 @@ def test_metrics_skips_remote_records(tmp_path, monkeypatch):
     )
     assert fclient.post("/record", json=shop_row).status_code == 200
     client.post("/compute", json={"config_name": "g0"})
-    assert n_attack() == [1]
+    assert n_attack()["local"] == 1

@@ -34,6 +34,7 @@ def run_attack(
     probe: bool = False,
     remote_llm: bool = False,
     run_id: str | None = None,
+    group_seed: int | None = None,
     *,
     goal: str,
     shop: Any,
@@ -104,7 +105,7 @@ def run_attack(
             **({"style": style_name} if style_name else {}),
             **({"probe": True} if probe else {}),
             **({"remote_llm": True} if remote_llm else {}),
-            "seed": seed,
+            "seed": seed if group_seed is None else group_seed,
             **({"run_id": run_id} if run_id else {}),
         }
         recorder.flush(attempts, last_reply or "")

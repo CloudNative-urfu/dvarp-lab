@@ -97,6 +97,7 @@ def test_compute_and_preview_forward_all_filters(client, monkeypatch):
         {
             "config_name": "g0",
             "model_spec": {"name": "m"},
+            "mode": "local",
             "computed_at": "t",
             "final": {"V": 0.5, "R": 0.0},
         }
