@@ -29,7 +29,7 @@ from launcher import (
     run_campaign,
 )
 from launcher import probe as launcher_probe
-from launcher.axes import GUARD_VOLUME, resolve_campaign
+from launcher.axes import GUARD_VOLUME, axis_universe, resolve_campaign
 from launcher.campaign import _runs_dir
 from services.ui.describe import describe
 
@@ -235,6 +235,55 @@ def run_detail(run_id: str) -> dict:
         if m.get("run_id") == run_id:
             return m
     raise HTTPException(404, f"прогон {run_id} не найден")
+
+
+@app.get("/api/summary")
+def summary() -> dict:
+    """Таблица «Результаты»: сохранённые группы метрик всех конфигураций, роль agent.
+
+    Перебор по юниверсу конфигураций, а не по metrics /configs: тот список скрывает
+    remote-прогоны, а сохранённые метрики remote-кампании показывать нужно. Группа
+    attacker не выводится: у неё нет легальной ноги (артефакт группировки по model_spec).
+    """
+    rows = []
+    for name in axis_universe("configs"):
+        rows += [g for g in metrics(name)["groups"] if g["model_spec"].get("role") == "agent"]
+    return {"rows": rows}
+
+
+@app.get("/api/pairs")
+def pairs(
+    config: str | None = None,
+    attack: str | None = None,
+    run_id: str | None = None,
+    limit: int = 100,
+) -> dict:
+    """Вкладка «Диалоги»: пары эпизодов из манифестов плоским списком с фильтрами."""
+    found, configs, run_ids = [], set(), []
+    for m in _manifests():
+        run_ids.append(m.get("run_id"))
+        for cell in m.get("cells", []):
+            configs.add(cell.get("config"))
+            if (run_id and m.get("run_id") != run_id) or (config and cell.get("config") != config):
+                continue
+            for e in cell.get("episodes", []):
+                if attack and (e.get("attack") or {}).get("outcome") != attack:
+                    continue
+                found.append(
+                    {
+                        "run_id": m.get("run_id"),
+                        "remote_llm": bool(m.get("remote_llm")),
+                        "config": cell.get("config"),
+                        **(cell.get("scenario") or {}),
+                        **e,
+                    }
+                )
+    return {
+        "total": len(found),
+        "pairs": found[:limit],
+        "configs": sorted(c for c in configs if c),
+        "runs": run_ids,
+    }
 
 
 class ProbeIn(BaseModel):

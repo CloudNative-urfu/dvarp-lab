@@ -1,5 +1,5 @@
-/* Консоль dvarp-lab: только рисует. Оси, поля, пресеты и словарь терминов приходят из
-   /api/meta; запуск, расчёт и трейс - вызовы /api/*. Расчётов и оркестрации здесь нет. */
+/* Консоль dvarp-lab: только рисует. Оси, поля, пресеты, подписи и словарь терминов приходят из
+   /api/meta; результаты, пары, запуск и диалоги - вызовы /api/*. Расчётов и оркестрации здесь нет. */
 "use strict";
 
 const { createApp, reactive } = Vue;
@@ -49,7 +49,7 @@ const Pick = {
     },
   },
   template: `<span class="pick" @focusout="(e) => { if (!$el.contains(e.relatedTarget)) open = false }">
-    <button ref="btn" type="button" class="pick-btn mono" :aria-label="label" aria-haspopup="listbox" :aria-expanded="open"
+    <button ref="btn" type="button" class="pick-btn" :aria-label="label" aria-haspopup="listbox" :aria-expanded="open"
       :title="terms && current ? terms[current.value] : null" @click="toggle" @keydown="key">
       {{ current ? current.label : (label || "выбрать") }}<span class="caret" aria-hidden="true"></span></button>
     <ul v-if="open" class="pick-list" role="listbox" :aria-label="label">
@@ -64,19 +64,6 @@ const Pick = {
 const TermLabel = {
   props: { k: String, terms: Object },
   template: `<span v-if="terms && terms[k]" class="term" tabindex="0" :data-ru="terms[k]" :aria-label="terms[k]"><slot>{{ k }}</slot></span><span v-else><slot>{{ k }}</slot></span>`,
-};
-
-const Outcome = {
-  props: { o: String, terms: Object },
-  computed: {
-    cls() {
-      if (["refund_granted", "violation"].includes(this.o)) return "bad";
-      if (["refused", "closed", "attacker_stopped"].includes(this.o)) return "ok";
-      if (["escalated", "turn_limit", "budget_exhausted"].includes(this.o)) return "warn";
-      return "";
-    },
-  },
-  template: `<span class="badge" :class="cls" :title="terms ? terms[o] : null">{{ o || "?" }}</span>`,
 };
 
 /* ---------- значение любой формы: число, строка, список, словарь (рекурсивно) ---------- */
@@ -171,18 +158,52 @@ const FieldControl = {
   </label>`,
 };
 
+/* ---------- значок lucide (inline SVG, currentColor) ---------- */
+const Icon = {
+  props: { name: String },
+  template: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path v-if="name === 'ok'" d="M20 6 9 17l-5-5"/>
+    <g v-else-if="name === 'bad'"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></g>
+    <g v-else-if="name === 'warn'"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></g>
+    <path v-else-if="name === 'back'" d="m15 18-6-6 6-6"/>
+    <path v-else d="M5 12h14"/></svg>`,
+};
+
+const pct = (x) => (typeof x === "number" ? `${(100 * x).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} %` : "нет данных");
+const money = (x) => (typeof x === "number" ? x.toLocaleString("ru-RU", { maximumFractionDigits: 1 }) : "?");
+const plural = (n, one, few, many) => {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  return m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many;
+};
+
+/* ---------- исход ноги: значок и подпись, тон не единственный носитель смысла ---------- */
+const Verdict = {
+  props: { leg: String, o: String, outcomes: Object },
+  computed: {
+    d() { return ((this.outcomes || {})[this.leg] || {})[this.o] || { label: this.o || "нет данных", tone: "" }; },
+  },
+  template: `<span class="badge" :class="d.tone" :title="o"><icon :name="d.tone || 'none'"></icon>{{ d.label }}</span>`,
+};
+
+/* ---------- доля: число и полоска ---------- */
+const MeterBar = {
+  props: { v: null, tone: String },
+  computed: { w() { return typeof this.v === "number" ? `${Math.min(100, Math.max(0, 100 * this.v))}%` : "0"; } },
+  setup: () => ({ pct }),
+  template: `<span class="meter"><span class="meter-v mono">{{ pct(v) }}</span><span class="meter-track" aria-hidden="true"><i :class="tone" :style="{width: w}"></i></span></span>`,
+};
+
 const RunStatus = {
-  props: { s: Object, terms: Object },
+  props: { s: Object },
   computed: { pct() { return this.s.cells_total ? Math.round((100 * this.s.cells_done) / this.s.cells_total) : 0; } },
-  template: `<div>
-    <p v-if="!s.status || s.status === 'idle'" class="hint">прогон не выполняется</p>
-    <template v-else-if="s.status === 'running'">
-      <div>ячейка {{ s.cells_done || 0 }}/{{ s.cells_total || "?" }}, эпизодов {{ s.episodes_total || "?" }} <span class="mono hint">{{ s.run_id }}</span></div>
+  template: `<div class="run-status">
+    <template v-if="s.status === 'running'">
+      <div>Идёт прогон<template v-if="s.cells_total">: ячейка {{ s.cells_done || 0 }} из {{ s.cells_total }}</template> <span class="mono hint">{{ s.run_id }}</span></div>
       <div class="bar" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100"><i :style="{width: pct + '%'}"></i></div>
-      <div v-if="s.current" class="mono hint">{{ s.current.config }} · {{ s.current.scenario.style }} · {{ s.current.scenario.tactic }} · сид {{ s.current.seed }}</div>
     </template>
-    <p v-else-if="s.status === 'done'"><span class="badge ok">готово</span> <span class="mono">{{ s.manifest.run_id }}</span></p>
-    <p v-else-if="s.status === 'error'"><span class="badge bad">ошибка</span> <span class="mono">{{ s.error }}</span></p>
+    <p v-else-if="s.status === 'done'"><span class="badge ok"><icon name="ok"></icon>готово</span> <span class="mono">{{ s.manifest.run_id }}</span></p>
+    <p v-else-if="s.status === 'error'"><span class="badge bad"><icon name="bad"></icon>ошибка</span> <span class="mono">{{ s.error }}</span></p>
   </div>`,
 };
 
@@ -190,47 +211,137 @@ const RunStatus = {
 const app = createApp({
   data: () => ({
     tabs: [
-      { id: "run", label: "Запуск" }, { id: "runs", label: "Прогоны" }, { id: "trace", label: "Трейс" },
-      { id: "metrics", label: "Метрики" }, { id: "system", label: "Система" },
+      { id: "results", label: "Результаты" }, { id: "dialogs", label: "Диалоги" },
+      { id: "run", label: "Запуск" }, { id: "system", label: "Система" },
     ],
-    tab: "run",
-    meta: { terms: {} },
+    tab: "results",
+    meta: { terms: {}, labels: {} },
     spec: {},
     probeSpec: {},
     volumeText: "",
     probeOut: "",
     status: { status: "idle" },
-    runs: [],
-    runDetail: null,
-    episodes: [],
-    episodePick: "",
+    rows: [],
+    summaryLoaded: false,
+    model: null,
+    openKey: null,
+    withRemote: true,
+    busy: false,
+    resultsNote: "",
+    df: { config: null, attack: null, run_id: null },
+    limit: 100,
+    pairsRes: { total: 0, pairs: [], configs: [], runs: [] },
+    pair: null,
     trace: [],
-    models: [],
-    mf: { config_name: null, model_spec: null, include_probe: false, include_remote: false },
-    metricGroups: [],
-    metricsNote: "",
     health: {},
     chain: null,
     error: "",
     timer: null,
   }),
   computed: {
-    cellCols: () => ["config", "style", "tactic", "seed", "agent_models", "attacker_models"],
-    episodeOptions() {
-      return this.episodes.map((e) => ({ value: e.episode_id, label: `${e.episode_id} · ${e.config_name} · ${e.channels.join("+")} · ${e.n_turns} ходов` }));
+    L() { return this.meta.labels || {}; },
+    healthTotal() { return Object.keys(this.meta.health || {}).length; },
+    healthUp() { return Object.values(this.meta.health || {}).filter((v) => v === "ok").length; },
+    healthOk() { return this.healthTotal > 0 && this.healthUp === this.healthTotal; },
+    modelOptions() {
+      const seen = new Map();
+      for (const g of this.rows) seen.set(JSON.stringify(g.model_spec), g.model_spec);
+      return [...seen].map(([k, m]) => ({ value: k, label: m.name }));
     },
-    configOptions() { return [{ value: null, label: "все" }, ...this.meta.axes[0].universe]; },
-    modelOptions() { return [{ value: null, label: "все" }, ...this.models.map((m) => ({ value: m, label: `${m.name} · ${m.role} · ${m.revision}` }))]; },
+    shownRows() {
+      const order = this.meta.axes ? this.meta.axes[0].universe : [];
+      const rows = this.rows.filter((g) => JSON.stringify(g.model_spec) === this.model);
+      const ref = rows.find((g) => g.config_name === "g0");
+      // сначала строки с тем же набором атак, что у эталона; несопоставимые - в конце
+      const rank = (g) => (ref && g.final.n_attack !== ref.final.n_attack ? 1 : 0);
+      return rows.sort((a, b) => rank(a) - rank(b) || order.indexOf(a.config_name) - order.indexOf(b.config_name));
+    },
+    shownRemote() { return this.shownRows.some((g) => g.mode === "remote"); },
+    dConfigOptions() { return [{ value: null, label: "все" }, ...this.pairsRes.configs.map((c) => ({ value: c, label: `${this.cfgLabel(c)} (${c})` }))]; },
+    attackOptions() {
+      const o = (this.L.outcomes || {}).attack || {};
+      return [{ value: null, label: "любой" }, ...Object.keys(o).map((k) => ({ value: k, label: o[k].label }))];
+    },
+    runOptions() { return [{ value: null, label: "все прогоны" }, ...this.pairsRes.runs.map((r) => ({ value: r, label: r }))]; },
+    pairsNote() {
+      const { total, pairs } = this.pairsRes;
+      if (!total) return "Пар с такими условиями нет.";
+      const head = `Найдено ${total} ${plural(total, "пара", "пары", "пар")}`;
+      return total > pairs.length ? `${head}, показаны первые ${pairs.length}.` : `${head}.`;
+    },
+    simpleFields() {
+      if (!this.meta.axes) return [];
+      const uni = Object.fromEntries(this.meta.axes.map((a) => [a.name, a.universe || []]));
+      return [
+        { axis: "configs", label: "Защита", options: uni.configs.map((v) => ({ value: v, label: `${this.cfgLabel(v)} (${v})` })), about: (v) => this.cfgAbout(v) },
+        { axis: "goals", label: "Чего добивается атакующий", options: uni.goals.map((v) => ({ value: v, label: this.goalLabel(v) })), about: (v) => `Код цели: ${v}.` },
+        { axis: "tactics", label: "Как давит", options: uni.tactics, about: (v) => (this.L.tactics || {})[v] || "" },
+      ];
+    },
+    modelLine() {
+      const m = this.meta.remote_models || {};
+      return m.agent
+        ? `Модель агента: ${m.agent}, модель атакующего: ${m.attacker || "та же"}.`
+        : "Модели не подключены: вместо LLM работает заглушка, прогон займёт секунды. Модели задаются переменными окружения (README).";
+    },
+  },
+  watch: {
+    df: { deep: true, handler() { this.limit = 100; this.guard(this.loadPairs()); } },
+    spec: { deep: true, handler() { if (this.meta.axes) this.volume(); } },
   },
   methods: {
+    pct, money,
     guard(p) { this.error = ""; return p.catch((e) => { this.error = e.message; }); },
+    cfgLabel(c) { return ((this.L.configs || {})[c] || {}).label || c; },
+    cfgAbout(c) { return ((this.L.configs || {})[c] || {}).about || ""; },
+    goalLabel(g) { return (this.L.goals || {})[g] || g; },
     open(id) {
       this.tab = id;
-      if (id === "runs") this.guard(this.loadRuns());
-      if (id === "trace") this.guard(this.loadEpisodes());
-      if (id === "metrics") this.guard(Promise.all([this.loadModels(), this.loadStored()]));
+      if (id === "results") this.guard(this.loadSummary());
+      if (id === "dialogs") this.guard(this.loadPairs());
       if (id === "system") this.guard(this.loadSystem());
     },
+    rowKey(g) { return g.config_name + JSON.stringify(g.model_spec) + g.mode; },
+    // разный знаменатель атак с эталоном g0 той же модели: доли и L* несопоставимы
+    otherSet(g) {
+      const ref = this.shownRows.find((r) => r.config_name === "g0");
+      return ref && g !== ref && ref.final.n_attack !== g.final.n_attack;
+    },
+    toggleRow(g) { this.openKey = this.openKey === this.rowKey(g) ? null : this.rowKey(g); },
+    breakEven(g) {
+      const t = (this.L.break_even || {})[g.final.break_even_status];
+      return t ? t.replace("{L}", money(g.final.L_star)) : "нет данных";
+    },
+    async loadSummary() {
+      this.rows = (await api.get("/api/summary")).rows || [];
+      this.summaryLoaded = true;
+      if (!this.modelOptions.some((o) => o.value === this.model)) this.model = this.modelOptions.length ? this.modelOptions[0].value : null;
+    },
+    recompute() {
+      this.busy = true;
+      this.resultsNote = "";
+      return this.guard(api.post("/api/compute", { config_name: null, model_spec: null, include_probe: false, include_remote: this.withRemote })
+        .then((r) => { this.resultsNote = `Пересчитано, сохранено строк: ${r.computed}.`; return this.loadSummary(); }))
+        .finally(() => { this.busy = false; });
+    },
+    async loadPairs() {
+      const q = new URLSearchParams({ limit: this.limit });
+      for (const [k, v] of Object.entries(this.df)) if (v) q.set(k, v);
+      this.pairsRes = await api.get(`/api/pairs?${q}`);
+    },
+    morePairs() { this.limit += 100; return this.guard(this.loadPairs()); },
+    openPair(p) {
+      this.pair = p;
+      const legs = [
+        { id: p.legal_episode_id, channel: "legal", outcome: p.legal && p.legal.outcome },
+        { id: p.attack_episode_id, channel: "attack", outcome: p.attack && p.attack.outcome },
+      ].filter((l) => l.id);
+      this.trace = [];
+      window.scrollTo(0, 0);
+      return this.guard(Promise.all(legs.map((l) => api.get(`/api/dialog/${encodeURIComponent(l.id)}`).then((t) => ({ ...l, episode_id: l.id, lines: t.lines || [] }))))
+        .then((t) => { this.trace = t; }));
+    },
+    showRun(runId) { this.pair = null; this.df.run_id = runId; this.open("dialogs"); },
     fill(spec) {
       // состояние формы = спецификация осей + запасные ключи всех режимов, чтобы переключение режима не теряло значений
       for (const a of this.meta.axes) {
@@ -241,7 +352,7 @@ const app = createApp({
       }
       for (const f of this.meta.run_fields) this.spec[f.name] = f.name in spec ? spec[f.name] : f.default;
     },
-    applyPreset(p) { this.fill(p.spec); this.volumeText = `пресет: ${p.label}`; },
+    applyPreset(p) { this.fill(p.spec); },
     payload() {
       const out = {};
       for (const a of this.meta.axes) {
@@ -253,19 +364,19 @@ const app = createApp({
       return out;
     },
     volume() {
-      return this.guard(api.post("/api/volume", { spec: this.payload() }).then((v) => { this.volumeText = `${v.cells} ячеек, ${v.episodes} эпизодов`; }));
+      return api.post("/api/volume", { spec: this.payload() })
+        .then((v) => { this.volumeText = `Будет ${v.episodes} ${plural(v.episodes, "пара", "пары", "пар")} диалогов в ${v.cells} ${plural(v.cells, "ячейке", "ячейках", "ячейках")}.`; })
+        .catch((e) => { this.volumeText = `Настройки не сходятся: ${e.message}`; });
     },
     run(confirm) {
       const body = { ...this.payload(), ...(confirm ? { confirm: true } : {}) };
       return this.guard(api.post("/api/run", body).then((r) => {
         if (r.needs_confirm) {
-          if (window.confirm(`Объём ${r.episodes} эпизодов выше guard ${r.guard}. Запустить?`)) return this.run(true);
+          if (window.confirm(`Объём ${r.episodes} эпизодов выше порога ${r.guard}. Запустить?`)) return this.run(true);
           return null;
         }
-        this.volumeText = `запущено: ${r.episodes} эпизодов`;
-        this.poll();
-        this.open("runs");
-        return null;
+        this.volumeText = `Запущено: ${r.episodes} ${plural(r.episodes, "пара", "пары", "пар")}.`;
+        return this.poll();
       }));
     },
     probe() {
@@ -279,56 +390,29 @@ const app = createApp({
     async poll() {
       clearTimeout(this.timer);
       this.status = await api.get("/api/run/status").catch(() => this.status);
-      if (this.status.status === "running") this.timer = setTimeout(() => this.poll(), 2000);
-      else if (this.status.status === "done" && this.tab === "runs") this.loadRuns();
-    },
-    async loadRuns() { this.runs = (await api.get("/api/runs")).runs || []; },
-    async openRun(id) { this.runDetail = await this.guard(api.get(`/api/runs/${encodeURIComponent(id)}`)) || null; },
-    async loadEpisodes() { this.episodes = (await api.get("/api/episodes")).episodes || []; },
-    openPair(e) {
-      const legs = [];
-      if (e.legal_episode_id) legs.push({ id: e.legal_episode_id, channel: e.attack_episode_id ? "legal" : "", outcome: e.legal && e.legal.outcome });
-      if (e.attack_episode_id) legs.push({ id: e.attack_episode_id, channel: "attack", outcome: e.attack && e.attack.outcome });
-      this.tab = "trace";
-      return this.guard(Promise.all(legs.map((l) => api.get(`/api/dialog/${encodeURIComponent(l.id)}`).then((t) => ({ ...l, episode_id: l.id, lines: t.lines || [] }))))
-        .then((t) => { this.trace = t; }));
-    },
-    async loadModels() { this.models = (await api.get("/api/metric-models")).models || []; },
-    filters() {
-      return { config_name: this.mf.config_name, model_spec: this.mf.model_spec, include_probe: this.mf.include_probe, include_remote: this.mf.include_remote };
-    },
-    compute(persist) {
-      if (persist) {
-        return this.guard(api.post("/api/compute", this.filters()).then((r) => { this.metricsNote = `сохранено строк: ${r.computed}`; return this.loadStored(); }));
-      }
-      return this.guard(api.post("/api/preview", this.filters()).then((r) => {
-        this.metricsNote = `рассчитано без сохранения: ${r.groups.length} групп`;
-        this.metricGroups = r.groups.map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec) + g.mode, ephemeral: true }));
-      }));
-    },
-    async loadStored() {
-      const cfgs = (await api.get("/api/metric-configs")).configs || [];
-      const all = await Promise.all(cfgs.map((c) => api.get(`/api/metrics/${encodeURIComponent(c)}`)));
-      this.metricGroups = all.flatMap((m) => m.groups || []).map((g) => ({ ...g, key: g.config_name + JSON.stringify(g.model_spec) + g.mode }));
-      this.metricsNote = this.metricGroups.length ? "сохранённые результаты" : "сохранённых результатов нет";
+      if (this.status.status === "running") this.timer = setTimeout(() => this.poll(), 1000);
     },
     async loadSystem() {
-      this.health = (await api.get("/api/meta")).health;
+      this.meta.health = this.health = (await api.get("/api/meta")).health;
       this.chain = await api.get("/api/chain").catch(() => ({ error: true }));
     },
   },
   async mounted() {
     await this.guard(api.get("/api/meta").then((m) => {
       this.meta = m;
+      this.health = m.health;
       this.fill({});
       for (const f of m.probe_fields) this.probeSpec[f.name] = f.default;
     }));
     this.poll();
+    this.open("results");
   },
 });
 app.component("pick", Pick);
 app.component("term-label", TermLabel);
-app.component("outcome", Outcome);
+app.component("icon", Icon);
+app.component("verdict", Verdict);
+app.component("meter-bar", MeterBar);
 app.component("value-view", ValueView);
 app.component("axis-control", AxisControl);
 app.component("field-control", FieldControl);
