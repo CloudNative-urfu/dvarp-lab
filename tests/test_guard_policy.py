@@ -296,6 +296,18 @@ class _Base(unittest.TestCase):
 class TestG0AndCompatibility(_Base):
     """FR-1.9: подключение/отключение гвардрейла не требует изменения агента."""
 
+    def test_read_ticket_returns_model_time(self):
+        """dvarp-lab#65: агент получает модельное время — опору для арифметики окна."""
+        ep, _, _, agent, _ = self.run_ep([], preset("none"), [CLEAN])
+        reads = dict(agent.tb.reads)
+        mt = reads["read_ticket"]["model_time"]
+        self.assertTrue(mt and mt.startswith("20"))  # ISO-дата модели
+        conn = sqlite3.connect(_db_path(ep.db))
+        shop_now = conn.execute("SELECT value FROM meta WHERE key='now'").fetchone()[0]
+        conn.close()
+        self.assertEqual(mt, shop_now)  # опора — доверенное meta.now мира
+        self.assertNotIn("model_time", reads["read_order"])  # чтение заказа не расширено
+
     def test_empty_guardset_is_transparent(self):
         ep0, p0, d0, a0, t0 = self.run_ep([], preset("none"), [CLEAN], raw=True)
         ep1, p1, d1, a1, t1 = self.run_ep([], preset("layered"), [CLEAN])
