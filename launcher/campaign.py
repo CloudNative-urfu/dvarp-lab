@@ -167,6 +167,7 @@ def run_campaign(
             "agent_models": camp.agent_models,
             "attacker_models": camp.attacker_models,
             "seeds": camp.seeds,
+            "confusion": camp.confusion,
             "scenario_pairs": camp.scenario_pairs,
         },
         "guard_budget": {
@@ -239,8 +240,9 @@ def run_campaign(
                     "episode_id": legal_id,
                     "config_name": cfg,
                     "agent_model": agent.as_dict(),
+                    "confusion": cell["confusion"],
                     "style": cell["style"],
-                    "seed": derive_seed(seed, cfg, cell["style"], i, "legal"),
+                    "seed": derive_seed(seed, cfg, cell["confusion"], cell["style"], i, "legal"),
                     "group_seed": seed,
                     "run_id": run_id,
                     **({"remote_llm": True} if remote else {}),

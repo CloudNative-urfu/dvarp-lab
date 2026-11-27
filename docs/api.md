@@ -29,11 +29,13 @@
 
 ## traffic_svc (порт 9412)
 
-- `POST /run-episode` `{episode_id, config_name, agent_model, style: str, seed: int}`
+- `POST /run-episode` `{episode_id, config_name, agent_model, style: str, seed: int, confusion: str?}`
   → `{outcome: str, turns: int, transcript_ids: [...]}` — правдивые возвраты на основе
   БД магазина (читает напрямую), стиль из frozen/styles.json; легальный кейс
   фиксирован (всегда-возвратный заказ мира), причина возврата — из данных БД.
-  Каждый ход — через shop_svc /turn (channel="legal").
+  `confusion` — режим честной путаницы из frozen/corpus/confusion.json (якорь
+  `none` по умолчанию; события правдивы и редки — формулировки, не факты);
+  режим пинится в `raw.confusion`. Каждый ход — через shop_svc /turn (channel="legal").
 
 ## attack_svc (порт 9413)
 

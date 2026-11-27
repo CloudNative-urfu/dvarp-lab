@@ -272,6 +272,17 @@ class LiveBackendTest(unittest.TestCase):
             sent[2], {"role": "tool", "content": '{"status": "delivered"}', "tool_call_id": "c1"}
         )
 
+    def test_null_arguments_of_parameterless_tool(self):
+        # Groq и др. отдают arguments "null" у инструмента без параметров.
+        call = {
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "finish_case", "arguments": "null"},
+        }
+        srv = FakeServer([{"role": "assistant", "content": None, "tool_calls": [call]}])
+        c = live_model(srv).complete([{"role": "user", "content": "done"}], TOOLS)
+        self.assertEqual((c.tool_calls[0].name, c.tool_calls[0].arguments), ("finish_case", {}))
+
     def test_missing_usage_estimated(self):
         srv = FakeServer(usage=False)
         c = live_model(srv).complete([{"role": "user", "content": "x" * 40}])

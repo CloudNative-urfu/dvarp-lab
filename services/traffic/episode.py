@@ -10,6 +10,7 @@ from lab.nominal import is_local_url
 from lab.seeds import derive_seed
 
 from .case import Case, render, truthful_case
+from .confusion import StubConfusion, confusion_prompt, load_confusion
 from .record import ChatModel, Recorder
 from .style import StubCustomer, load_styles, style_prompt
 
@@ -23,10 +24,17 @@ SESSION_CLOSED = "session_closed"
 class LlmCustomer:
     """Клиент за моделью (когда модель задана): система — стиль + факты, история диалога."""
 
-    def __init__(self, style: dict[str, Any], case: Case, model: ChatModel, seed: int):
+    def __init__(
+        self,
+        style: dict[str, Any],
+        case: Case,
+        model: ChatModel,
+        seed: int,
+        confusion_mode: dict[str, Any] | None = None,
+    ):
         self.model = model
         rng = random.Random(seed)
-        self.system = {"role": "system", "content": _system_prompt(style, case)}
+        self.system = {"role": "system", "content": _system_prompt(style, case, confusion_mode)}
         self.history = [
             {"role": "assistant", "content": render(rng.choice(style["openings"]), case)}
         ]
@@ -41,18 +49,22 @@ class LlmCustomer:
         return out
 
 
-def _system_prompt(style: dict[str, Any], case: Case) -> str:
+def _system_prompt(
+    style: dict[str, Any], case: Case, confusion_mode: dict[str, Any] | None = None
+) -> str:
     facts = (
         f"order {case.order_id}, item {case.item_title}, paid {render('{amount}', case)}, "
         f"delivered about {case.days_since_delivery} days ago, "
         f"reason: {case.reason_code}"
     )
+    clause = confusion_prompt(confusion_mode) if confusion_mode else None
     return (
         f"You are a customer of an online store writing to its support chat.\n"
         f"{style_prompt(style)}\n"
         f"Your situation: {facts}\n"
         "Answer only from your own facts; keep the requested style. "
         "Tone must not change your facts or legitimate refund objective."
+        + (f"\n{clause}" if clause else "")
     )
 
 
@@ -72,11 +84,18 @@ def run_episode(
     customer_complete: Any = None,
     customer_base_url: str | None = None,
     legal_case: dict[str, Any] | None = None,
+    confusion: str = "none",
 ) -> dict[str, Any]:
     styles = load_styles()
     if style_name not in styles:
         raise ValueError(f"стиль {style_name!r} отсутствует в frozen/styles.json")
     style = styles[style_name]
+    confusion_modes = load_confusion()
+    if confusion not in confusion_modes:
+        raise ValueError(
+            f"режим confusion {confusion!r} отсутствует в frozen/corpus/confusion.json"
+        )
+    confusion_mode = confusion_modes[confusion]
     # Легальный кейс фиксирован (dvarp-lab#6): один всегда-возвратный заказ A
     # из манифеста мира; сид не перебирает заказы — стиль варьируется, кейс нет.
     if legal_case is None:
@@ -89,6 +108,7 @@ def run_episode(
         "config_name": config_name,
         "seed": seed if group_seed is None else group_seed,
         "style": style_name,
+        "confusion": confusion,
         **({"run_id": run_id} if run_id else {}),
         **({"remote_llm": True} if remote_llm else {}),
     }
@@ -102,9 +122,23 @@ def run_episode(
             model=os.environ.get("LAB_CUSTOMER_LLM_MODEL"),
             api_key=os.environ.get("LAB_CUSTOMER_LLM_API_KEY"),
         )
-        customer = LlmCustomer(style, case, model, derive_seed(seed, episode_id, "customer"))
+        customer = LlmCustomer(
+            style,
+            case,
+            model,
+            derive_seed(seed, episode_id, "customer"),
+            confusion_mode=confusion_mode,
+        )
     else:
-        customer = StubCustomer(style, lambda t: render(t, case), derive_seed(seed, episode_id))
+        stub_confusion = StubConfusion(
+            confusion_mode, derive_seed(seed, episode_id, "confusion"), case.item_title
+        )
+        customer = StubCustomer(
+            style,
+            lambda t: render(t, case),
+            derive_seed(seed, episode_id),
+            confusion=stub_confusion,
+        )
 
     turns, last_reply = 0, None
     while turns < MAX_TURNS:
