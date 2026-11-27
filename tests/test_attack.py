@@ -1,9 +1,12 @@
+import json
+
 import pytest
 
 from lab import world as lab_world
 from services.attack import episode as attack_episode
 from services.attack.attacker import build_system_prompt
 from services.attack.tactics import load_tactics, method_prompt
+from services.shop.repro import hash_obj
 from services.traffic.style import load_styles
 
 ATTACKER_MODEL = {
@@ -57,9 +60,17 @@ def test_methods_registry_from_corpus():
         "staged_injection",
         "third_party_emergency",
         "authority_impersonation",
+        # каталог v3 (dvarp-lab#52): приоритетные семьи — пин метода входит в ось
+        "price_confusion",
+        "order_note_override",
+        "refusal_loop",
     }
+    assert len(methods) == 70  # 8 базовых + 62 каталога v3
     ids = [e for m in methods.values() for e in m["entries"]]
-    assert sorted(ids) == [f"atk-{i:02d}" for i in range(1, 29)]  # старый корпус — иллюстрации
+    assert sorted(int(i.split("-")[1]) for i in ids) == list(
+        range(1, 153)
+    )  # 28 базовых + 124 каталога
+    assert len(set(ids)) == 152
     goals = set(lab_world.load_goals())
     for m in methods.values():
         assert m["description"] and len(m["illustrations"]) == len(m["entries"]) > 0
@@ -67,6 +78,31 @@ def test_methods_registry_from_corpus():
         text = method_prompt(m)
         assert text.startswith(m["description"]) and "Example: " in text
         assert "{" not in text  # плейсхолдеры корпуса заменены на [факты претензии]
+
+
+def test_catalog_v3_manifest_matches_jsonl():
+    """Корпус каталога v3 (#52): хеши манифеста совпадают с файлом (fail-closed артефакт)."""
+    import hashlib
+
+    import services.attack.tactics as tactics_mod
+
+    root = tactics_mod.TACTICS_PATH.parent
+    data = (root / "darp_corpus_v3.jsonl").read_bytes()
+    manifest = json.loads((root / "MANIFEST_v3.json").read_text(encoding="utf-8"))
+    assert hashlib.sha256(data).hexdigest() == manifest["sha256"]
+    records = [json.loads(line) for line in data.decode().splitlines() if line.strip()]
+    hashes = {r["id"]: hash_obj(r) for r in records}
+    assert hashes == manifest["entry_hashes"]
+    # каждая иллюстрация каталога — запись v3: текст совпадает 1:1
+    entries = {r["id"]: r for r in records}
+    methods = load_tactics()
+    for name, m in methods.items():
+        for eid, text in zip(m["entries"], m["illustrations"]):
+            if int(eid.split("-")[1]) < 29:
+                continue  # базовый корпус atk-01..28
+            assert entries[eid]["turns"][0] == text.split(" / next turn: ")[0], name
+            assert entries[eid]["axes"]["mechanism"] == name
+            assert int(entries[eid]["id"].split("-")[1]) >= 29
 
 
 def test_goals_registry_bound_to_world():
