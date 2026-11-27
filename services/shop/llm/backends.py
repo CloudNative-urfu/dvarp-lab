@@ -83,6 +83,8 @@ def _parse_tool_calls(raw: Any) -> tuple[ToolCall, ...]:
                 args = json.loads(args or "{}")
             except json.JSONDecodeError:
                 raise LLMResponseError(f"tool_calls[{i}] {name}: аргументы не JSON") from None
+        if args is None:  # Groq и др. шлют "null" у инструмента без параметров
+            args = {}
         if not isinstance(args, dict):
             raise LLMResponseError(f"tool_calls[{i}] {name}: аргументы не объект")
         calls.append(ToolCall(str(tc.get("id") or f"call_{i}"), name, args))
